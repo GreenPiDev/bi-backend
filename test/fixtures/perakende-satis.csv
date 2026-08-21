@@ -1,0 +1,9 @@
+Müşteri Adı,Şehir,Ürün,Adet,Birim Fiyat,Toplam Tutar,Satış Tarihi,İade mi
+Ahmet Yılmaz,İstanbul,Kahve Makinesi,2,"1.234,50","2.469,00",01.01.2026,Hayır
+Ayşe Şahin,Ankara,Blender,1,"899,90","899,90",03.01.2026,Hayır
+Mehmet Öztürk,İzmir,Tost Makinesi,3,"349,00","1.047,00",05.01.2026,Evet
+Fatma Çelik,Bursa,Su Isıtıcı,5,"199,99","999,95",10.01.2026,Hayır
+Ali Demir,Antalya,Kahve Makinesi,1,"1.234,50","1.234,50",15.01.2026,Hayır
+Zeynep Kaya,İstanbul,Blender,4,"899,90","3.599,60",20.01.2026,Hayır
+Mustafa Aydın,Ankara,Tost Makinesi,2,"349,00","698,00",22.01.2026,Evet
+Emine Arslan,İzmir,Su Isıtıcı,10,"199,99","1.999,90",28.01.2026,Hayır
