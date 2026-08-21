@@ -14,6 +14,7 @@ export interface SafeUser {
   email: string;
   name: string;
   role: User['role'];
+  isPlatformAdmin: boolean;
 }
 
 export interface AuthResult {
@@ -145,6 +146,7 @@ export class AuthService {
       sub: user.id,
       tenantId: user.tenantId,
       role: user.role,
+      isPlatformAdmin: user.isPlatformAdmin,
     });
     const refreshToken = this.tokens.signRefreshToken({
       sub: user.id,
@@ -160,6 +162,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      isPlatformAdmin: user.isPlatformAdmin,
     };
   }
 }

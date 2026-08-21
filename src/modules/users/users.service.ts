@@ -211,6 +211,7 @@ export class UsersService {
       email: user.email,
       name: user.name,
       role: user.role,
+      isPlatformAdmin: user.isPlatformAdmin,
     };
   }
 }

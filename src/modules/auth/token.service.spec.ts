@@ -20,6 +20,7 @@ describe('TokenService', () => {
       sub: 'u1',
       tenantId: 't1',
       role: 'OWNER',
+      isPlatformAdmin: false,
     });
     const payload = tokens.verifyAccessToken(token);
     expect(payload).toMatchObject({
@@ -45,6 +46,7 @@ describe('TokenService', () => {
       sub: 'u1',
       tenantId: 't1',
       role: 'OWNER',
+      isPlatformAdmin: false,
     });
     expect(() => tokens.verifyRefreshToken(token)).toThrow();
   });
@@ -58,6 +60,7 @@ describe('TokenService', () => {
       sub: 'u1',
       tenantId: 't1',
       role: 'OWNER',
+      isPlatformAdmin: false,
     });
     expect(() => tokens.verifyAccessToken(token)).toThrow();
   });

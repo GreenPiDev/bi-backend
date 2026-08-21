@@ -4,9 +4,11 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CoreModule } from './core/core.module';
 import { JwtAuthGuard } from './core/guards/jwt-auth.guard';
+import { ModuleGuard } from './core/guards/module.guard';
 import { RolesGuard } from './core/guards/roles.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
 import { AuthModule } from './modules/auth/auth.module';
+import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -21,10 +23,12 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     TenantsModule,
     UsersModule,
+    PlatformAdminModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: ModuleGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
   ],
 })

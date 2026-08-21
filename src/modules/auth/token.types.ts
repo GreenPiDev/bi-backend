@@ -4,6 +4,7 @@ export interface AccessTokenPayload {
   sub: string;
   tenantId: string;
   role: UserRole;
+  isPlatformAdmin: boolean;
   type: 'access';
 }
 

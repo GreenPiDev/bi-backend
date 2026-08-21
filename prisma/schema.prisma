@@ -54,25 +54,41 @@ model Tenant {
   scheduledReports ScheduledReport[]
   alerts           Alert[]
   auditLogs        AuditLog[]
+  modules          TenantModule[]
 
   @@map("tenants")
 }
 
 model User {
-  id           String    @id @default(uuid())
-  tenantId     String
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         UserRole  @default(VIEWER)
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
+  id              String    @id @default(uuid())
+  tenantId        String
+  email           String    @unique
+  passwordHash    String
+  name            String
+  role            UserRole  @default(VIEWER)
+  isActive        Boolean   @default(true)
+  isPlatformAdmin Boolean   @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@map("users")
+}
+
+model TenantModule {
+  id         String    @id @default(uuid())
+  tenantId   String
+  moduleKey  String
+  enabledAt  DateTime  @default(now())
+  disabledAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, moduleKey])
+  @@index([tenantId])
+  @@map("tenant_modules")
 }
 
 model Invitation {

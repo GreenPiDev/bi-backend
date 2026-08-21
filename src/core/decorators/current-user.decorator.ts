@@ -5,6 +5,7 @@ export interface RequestUser {
   id: string;
   tenantId: string;
   role: UserRole;
+  isPlatformAdmin: boolean;
 }
 
 export const CurrentUser = createParamDecorator(
