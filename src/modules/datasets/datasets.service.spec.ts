@@ -49,12 +49,19 @@ function createRawSql() {
   };
 }
 
+function createQueryCache() {
+  return {
+    invalidateDataset: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('DatasetsService', () => {
   it('getById: bulunamayan dataset icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
     const service = new DatasetsService(
       prisma as never,
       createRawSql() as never,
+      createQueryCache() as never,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -64,7 +71,11 @@ describe('DatasetsService', () => {
   it('updateFields: bilinmeyen kolon id icin FIELD_NOT_FOUND firlatir', async () => {
     const prisma = createPrisma();
     const rawSql = createRawSql();
-    const service = new DatasetsService(prisma as never, rawSql as never);
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+    );
     await expect(
       service.updateFields(DATASET_ID, TENANT_ID, [
         { id: 'baska-bir-id' } as never,
@@ -78,7 +89,12 @@ describe('DatasetsService', () => {
   it('updateFields: kolon adi degisince fiziksel tabloda RENAME COLUMN calisir', async () => {
     const prisma = createPrisma();
     const rawSql = createRawSql();
-    const service = new DatasetsService(prisma as never, rawSql as never);
+    const queryCache = createQueryCache();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      queryCache as never,
+    );
     await service.updateFields(DATASET_ID, TENANT_ID, [
       { id: FIELD_ID, name: 'yeni_ad' },
     ]);
@@ -92,12 +108,20 @@ describe('DatasetsService', () => {
       where: { id: FIELD_ID },
       data: expect.objectContaining({ name: 'yeni_ad' }),
     });
+    expect(queryCache.invalidateDataset).toHaveBeenCalledWith(
+      TENANT_ID,
+      DATASET_ID,
+    );
   });
 
   it('updateFields: tip degisince ALTER COLUMN TYPE calisir', async () => {
     const prisma = createPrisma();
     const rawSql = createRawSql();
-    const service = new DatasetsService(prisma as never, rawSql as never);
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+    );
     await service.updateFields(DATASET_ID, TENANT_ID, [
       { id: FIELD_ID, type: 'STRING' },
     ]);
@@ -113,7 +137,11 @@ describe('DatasetsService', () => {
     const prisma = createPrisma();
     const rawSql = createRawSql();
     rawSql.renameColumn.mockRejectedValue(new Error('duplicate column'));
-    const service = new DatasetsService(prisma as never, rawSql as never);
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+    );
     await expect(
       service.updateFields(DATASET_ID, TENANT_ID, [
         { id: FIELD_ID, name: 'cakisan_ad' },
@@ -126,7 +154,11 @@ describe('DatasetsService', () => {
   it('preview: dataset sahiplik kontrolunden sonra rawSql.previewRows cagirir', async () => {
     const prisma = createPrisma();
     const rawSql = createRawSql();
-    const service = new DatasetsService(prisma as never, rawSql as never);
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+    );
     await service.preview(DATASET_ID, TENANT_ID);
     expect(rawSql.previewRows).toHaveBeenCalledWith(TENANT_ID, DATASET_ID, 50);
   });
