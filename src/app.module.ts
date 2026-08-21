@@ -8,6 +8,7 @@ import { RolesGuard } from './core/guards/roles.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     CoreModule,
     AuthModule,
     TenantsModule,
+    UsersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

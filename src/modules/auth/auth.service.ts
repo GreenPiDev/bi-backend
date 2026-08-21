@@ -140,7 +140,7 @@ export class AuthService {
     return this.toSafeUser(user);
   }
 
-  private issueTokens(user: User): AuthResult {
+  issueTokens(user: User): AuthResult {
     const accessToken = this.tokens.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,
