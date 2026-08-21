@@ -61,7 +61,7 @@ model Tenant {
 model User {
   id           String    @id @default(uuid())
   tenantId     String
-  email        String
+  email        String    @unique
   passwordHash String
   name         String
   role         UserRole  @default(VIEWER)
@@ -71,7 +71,6 @@ model User {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
-  @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
 }
