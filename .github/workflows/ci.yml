@@ -17,11 +17,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install bi-shared
-        run: |
-          cd ..
-          git clone --depth 1 https://github.com/${{ github.repository_owner }}/bi-shared.git bi-shared || true
-
       - name: Install dependencies
         run: npm ci
 

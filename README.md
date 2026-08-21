@@ -29,7 +29,8 @@ npm run test:e2e      # entegrasyon testleri (gercek Postgres gerektirir)
 npm run build
 ```
 
-## `@pusula-bi/shared` bagimliligi
+## Zod semalari
 
-Bu repo, ortak Zod semalarini yerel `bi-shared/` paketinden `file:` protokolu ile tuketir
-(bkz. `docs/VARSAYIMLAR.md` V2). GitHub'a tasindiktan sonra git bagimliligina cevrilecek.
+Bu repo kendi Zod semalarini tutar, `bi-frontend` ile paylasilan bir paket yoktur
+(bkz. `docs/VARSAYIMLAR.md` V2 — revize). `QuerySpec` semasi `src/modules/query/dto/query-spec.dto.ts`
+altindadir.
