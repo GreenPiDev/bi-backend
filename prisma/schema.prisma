@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum DataSourceType {
+  CSV
+  XLSX
+}
+
+enum DataSourceStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum DatasetFieldType {
+  STRING
+  NUMBER
+  DATE
+  BOOLEAN
+}
+
+enum DatasetFieldRole {
+  DIMENSION
+  MEASURE
+  DATE
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("trial")
+  createdAt DateTime @default(now())
+
+  users            User[]
+  invitations      Invitation[]
+  dataSources      DataSource[]
+  datasets         Dataset[]
+  dashboards       Dashboard[]
+  scheduledReports ScheduledReport[]
+  alerts           Alert[]
+  auditLogs        AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String
+  email        String
+  passwordHash String
+  name         String
+  role         UserRole  @default(VIEWER)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Invitation {
+  id         String    @id @default(uuid())
+  tenantId   String
+  email      String
+  role       UserRole
+  token      String    @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("invitations")
+}
+
+model DataSource {
+  id               String            @id @default(uuid())
+  tenantId         String
+  name             String
+  type             DataSourceType
+  originalFileName String
+  sizeBytes        Int
+  status           DataSourceStatus  @default(PENDING)
+  errorMessage     String?
+  createdById      String
+  createdAt        DateTime          @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  datasets Dataset[]
+
+  @@index([tenantId])
+  @@map("data_sources")
+}
+
+model Dataset {
+  id             String    @id @default(uuid())
+  tenantId       String
+  dataSourceId   String
+  name           String
+  physicalTable  String
+  rowCount       Int       @default(0)
+  lastIngestedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  dataSource DataSource     @relation(fields: [dataSourceId], references: [id])
+  fields     DatasetField[]
+
+  @@index([tenantId])
+  @@map("datasets")
+}
+
+model DatasetField {
+  id         String           @id @default(uuid())
+  datasetId  String
+  sourceName String
+  name       String
+  label      String
+  type       DatasetFieldType
+  role       DatasetFieldRole
+  format     String?
+  isVisible  Boolean          @default(true)
+  ordinal    Int              @default(0)
+
+  dataset Dataset @relation(fields: [datasetId], references: [id])
+
+  @@index([datasetId])
+  @@map("dataset_fields")
+}
+
+model Dashboard {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  layout      Json     @default("[]")
+  filters     Json     @default("[]")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  widgets          Widget[]
+  scheduledReports ScheduledReport[]
+
+  @@index([tenantId])
+  @@map("dashboards")
+}
+
+model Widget {
+  id          String   @id @default(uuid())
+  dashboardId String
+  type        String
+  title       String
+  querySpec   Json
+  vizOptions  Json     @default("{}")
+  position    Json
+  createdAt   DateTime @default(now())
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id])
+  alerts    Alert[]
+
+  @@index([dashboardId])
+  @@map("widgets")
+}
+
+model ScheduledReport {
+  id          String   @id @default(uuid())
+  tenantId    String
+  dashboardId String
+  cron        String
+  recipients  String[]
+  isActive    Boolean  @default(true)
+  lastRunAt   DateTime?
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id])
+
+  @@index([tenantId])
+  @@map("scheduled_reports")
+}
+
+model Alert {
+  id              String    @id @default(uuid())
+  tenantId        String
+  widgetId        String
+  operator        String
+  threshold       Float
+  recipients      String[]
+  lastTriggeredAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  widget Widget @relation(fields: [widgetId], references: [id])
+
+  @@index([tenantId])
+  @@map("alerts")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("audit_logs")
+}
