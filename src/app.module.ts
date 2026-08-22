@@ -16,6 +16,7 @@ import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { QueryModule } from './modules/query/query.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -42,6 +43,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     QueryModule,
     DashboardsModule,
     WidgetsModule,
+    OnboardingModule,
     ExportsModule,
     ReportsModule,
     AlertsModule,

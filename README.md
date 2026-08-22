@@ -19,6 +19,16 @@ npm run start:dev                 # http://localhost:3001/api/v1
 Port 3001 baskasi tarafindan kullaniliyorsa `PORT=3002 npm run start:dev` gibi farkli bir port
 sec ve `bi-frontend/.env` icindeki `VITE_API_BASE_URL`'i buna gore guncelle.
 
+### Demo verisi (satis sunumu icin)
+
+```bash
+npm run seed:demo
+```
+
+`demo@pusulabi.com` / `DemoPusula2026!` girisiyle, 3 sektorden (perakende satis, kargo/
+lojistik, klinik randevu) ornek veri + hazir panolarla dolu bir "Demo Sirket" kiracisi
+olusturur. Idempotenttir — tekrar calistirinca onceki demo kiraciyi silip yeniden kurar.
+
 ## Komutlar
 
 ```bash
@@ -26,6 +36,7 @@ npm run lint
 npm run typecheck
 npm test              # birim testler (vitest)
 npm run test:e2e      # entegrasyon testleri (gercek Postgres gerektirir)
+npm run seed:demo     # demo kiraci + ornek veri + hazir panolar
 npm run build
 ```
 

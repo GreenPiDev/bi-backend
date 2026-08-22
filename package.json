@@ -22,7 +22,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "seed:demo": "ts-node -r tsconfig-paths/register src/scripts/seed-demo.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.5",

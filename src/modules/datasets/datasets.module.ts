@@ -7,5 +7,6 @@ import { DatasetsService } from './datasets.service';
   imports: [QueryModule],
   controllers: [DatasetsController],
   providers: [DatasetsService],
+  exports: [DatasetsService],
 })
 export class DatasetsModule {}

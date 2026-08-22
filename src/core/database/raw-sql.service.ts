@@ -167,4 +167,11 @@ export class RawSqlService implements OnModuleDestroy {
       `DROP TABLE IF EXISTS ${qualifiedTableName(schema, table)}`,
     );
   }
+
+  async dropTenantSchema(tenantId: string): Promise<void> {
+    const schema = tenantSchemaName(tenantId);
+    await this.pool.query(
+      `DROP SCHEMA IF EXISTS ${quoteIdent(schema)} CASCADE`,
+    );
+  }
 }
