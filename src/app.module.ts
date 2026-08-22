@@ -17,6 +17,7 @@ import { PlatformAdminModule } from './modules/platform-admin/platform-admin.mod
 import { QueryModule } from './modules/query/query.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
+import { WidgetsModule } from './modules/widgets/widgets.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UsersModule } from './modules/users/users.module';
     DatasetsModule,
     QueryModule,
     DashboardsModule,
+    WidgetsModule,
     JobsModule,
   ],
   providers: [
