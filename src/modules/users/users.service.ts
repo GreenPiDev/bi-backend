@@ -10,6 +10,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
+import { AuditService } from '../audit/audit.service';
 import {
   AuthService,
   type AuthResult,
@@ -26,6 +27,7 @@ export class UsersService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly rawPrisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(): Promise<SafeUser[]> {
@@ -70,6 +72,13 @@ export class UsersService {
       },
     });
 
+    await this.audit.log({
+      action: 'INVITE',
+      entity: 'Invitation',
+      entityId: token,
+      meta: { email: dto.email, role: dto.role },
+    });
+
     return { token, expiresAt };
   }
 
@@ -111,6 +120,12 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id: targetUserId },
       data: { role: newRole },
+    });
+    await this.audit.log({
+      action: 'UPDATE_ROLE',
+      entity: 'User',
+      entityId: targetUserId,
+      meta: { previousRole: target.role, newRole },
     });
     return this.toSafeUser(updated);
   }

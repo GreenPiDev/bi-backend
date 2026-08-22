@@ -9,6 +9,7 @@ import { RolesGuard } from './core/guards/roles.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
@@ -28,6 +29,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
     CoreModule,
     RedisModule,
+    AuditModule,
     AuthModule,
     TenantsModule,
     UsersModule,

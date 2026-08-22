@@ -5,6 +5,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { AuditService } from '../audit/audit.service';
 import type {
   UpdateDashboardDto,
   CreateDashboardDto,
@@ -16,6 +17,7 @@ export type DashboardWithWidgets = Dashboard & { widgets: Widget[] };
 export class DashboardsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
+    private readonly audit: AuditService,
   ) {}
 
   async list(): Promise<Dashboard[]> {
@@ -31,7 +33,7 @@ export class DashboardsService {
     createdById: string,
     dto: CreateDashboardDto,
   ): Promise<Dashboard> {
-    return this.prisma.dashboard.create({
+    const dashboard = await this.prisma.dashboard.create({
       data: {
         tenantId,
         createdById,
@@ -39,6 +41,13 @@ export class DashboardsService {
         description: dto.description,
       },
     });
+    await this.audit.log({
+      action: 'CREATE',
+      entity: 'Dashboard',
+      entityId: dashboard.id,
+      meta: { name: dashboard.name },
+    });
+    return dashboard;
   }
 
   async update(
@@ -55,12 +64,22 @@ export class DashboardsService {
         filters: dto.filters,
       },
     });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Dashboard',
+      entityId: id,
+    });
     return this.requireDashboard(id);
   }
 
   async remove(id: string): Promise<void> {
     await this.requireDashboard(id);
     await this.prisma.dashboard.delete({ where: { id } });
+    await this.audit.log({
+      action: 'DELETE',
+      entity: 'Dashboard',
+      entityId: id,
+    });
   }
 
   async requireDashboard(id: string): Promise<DashboardWithWidgets> {

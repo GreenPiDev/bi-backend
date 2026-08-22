@@ -12,6 +12,7 @@ import {
   INGEST_QUEUE,
   type IngestJobPayload,
 } from '../../jobs/ingest-queue.constants';
+import { AuditService } from '../audit/audit.service';
 import { detectDataSourceType } from './file-signature';
 
 export interface DataSourceStatusView {
@@ -27,6 +28,7 @@ export class DatasourcesService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     @InjectQueue(INGEST_QUEUE)
     private readonly ingestQueue: Queue<IngestJobPayload>,
+    private readonly audit: AuditService,
   ) {}
 
   async upload(
@@ -68,6 +70,13 @@ export class DatasourcesService {
       filePath: file.path,
       dataSourceType: type,
       datasetName,
+    });
+
+    await this.audit.log({
+      action: 'UPLOAD',
+      entity: 'DataSource',
+      entityId: dataSource.id,
+      meta: { fileName: file.originalname, sizeBytes: file.size },
     });
 
     return { id: dataSource.id };

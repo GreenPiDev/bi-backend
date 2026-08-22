@@ -6,6 +6,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { AuditService } from '../audit/audit.service';
 import { QueryCacheService } from '../query/query-cache.service';
 import type { UpdateDatasetFieldDto } from './dto/update-dataset-fields.dto';
 
@@ -22,6 +23,7 @@ export class DatasetsService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly rawSql: RawSqlService,
     private readonly queryCache: QueryCacheService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(): Promise<Dataset[]> {
@@ -95,6 +97,12 @@ export class DatasetsService {
     }
 
     await this.queryCache.invalidateDataset(tenantId, id);
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Dataset',
+      entityId: id,
+      meta: { fieldCount: updates.length },
+    });
 
     return this.requireDataset(id);
   }

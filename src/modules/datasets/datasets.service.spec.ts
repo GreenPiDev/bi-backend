@@ -1,6 +1,8 @@
 import { AppException } from '../../core/errors/app.exception';
 import { DatasetsService } from './datasets.service';
 
+const fakeAudit = { log: vi.fn() } as never;
+
 const DATASET_ID = '11111111-1111-1111-1111-111111111111';
 const FIELD_ID = '22222222-2222-2222-2222-222222222222';
 const TENANT_ID = 't1';
@@ -62,6 +64,7 @@ describe('DatasetsService', () => {
       prisma as never,
       createRawSql() as never,
       createQueryCache() as never,
+      fakeAudit,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -75,6 +78,7 @@ describe('DatasetsService', () => {
       prisma as never,
       rawSql as never,
       createQueryCache() as never,
+      fakeAudit,
     );
     await expect(
       service.updateFields(DATASET_ID, TENANT_ID, [
@@ -94,6 +98,7 @@ describe('DatasetsService', () => {
       prisma as never,
       rawSql as never,
       queryCache as never,
+      fakeAudit,
     );
     await service.updateFields(DATASET_ID, TENANT_ID, [
       { id: FIELD_ID, name: 'yeni_ad' },
@@ -121,6 +126,7 @@ describe('DatasetsService', () => {
       prisma as never,
       rawSql as never,
       createQueryCache() as never,
+      fakeAudit,
     );
     await service.updateFields(DATASET_ID, TENANT_ID, [
       { id: FIELD_ID, type: 'STRING' },
@@ -141,6 +147,7 @@ describe('DatasetsService', () => {
       prisma as never,
       rawSql as never,
       createQueryCache() as never,
+      fakeAudit,
     );
     await expect(
       service.updateFields(DATASET_ID, TENANT_ID, [
@@ -158,6 +165,7 @@ describe('DatasetsService', () => {
       prisma as never,
       rawSql as never,
       createQueryCache() as never,
+      fakeAudit,
     );
     await service.preview(DATASET_ID, TENANT_ID);
     expect(rawSql.previewRows).toHaveBeenCalledWith(TENANT_ID, DATASET_ID, 50);
