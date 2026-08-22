@@ -9,6 +9,7 @@ import { RolesGuard } from './core/guards/roles.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
@@ -43,6 +44,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     WidgetsModule,
     ExportsModule,
     ReportsModule,
+    AlertsModule,
     JobsModule,
   ],
   providers: [
