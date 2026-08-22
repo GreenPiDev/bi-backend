@@ -12,6 +12,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
@@ -47,6 +48,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ExportsModule,
     ReportsModule,
     AlertsModule,
+    ChatbotModule,
     JobsModule,
   ],
   providers: [
