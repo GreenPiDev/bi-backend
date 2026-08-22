@@ -82,6 +82,24 @@ export class WidgetsService {
     });
   }
 
+  /** Sadece widgetId biliniyorken (ornegin export uclarinda) tenant izolasyonunu
+   * dashboard sahipligi uzerinden dogrular - Widget modeli kendi basina tenant-scoped
+   * degil (bkz. core/prisma/tenant-scoped.extension.ts). */
+  async findByIdAcrossDashboards(widgetId: string): Promise<Widget> {
+    const widget = await this.prisma.widget.findFirst({
+      where: { id: widgetId },
+    });
+    if (!widget) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Widget bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    await this.dashboards.requireDashboard(widget.dashboardId);
+    return widget;
+  }
+
   private async requireWidget(
     dashboardId: string,
     widgetId: string,

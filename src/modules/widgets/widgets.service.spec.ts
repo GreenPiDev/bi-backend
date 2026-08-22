@@ -129,4 +129,49 @@ describe('WidgetsService', () => {
     );
     expect(prisma.widget.delete).not.toHaveBeenCalled();
   });
+
+  it('findByIdAcrossDashboards: bulunamayan widget icin NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma(null);
+    const dashboards = createDashboardsService(true);
+    const service = new WidgetsService(
+      prisma as never,
+      dashboards as never,
+      fakeAudit,
+    );
+    await expect(
+      service.findByIdAcrossDashboards(WIDGET_ID),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(dashboards.requireDashboard).not.toHaveBeenCalled();
+  });
+
+  it('findByIdAcrossDashboards: baska tenantin panosuna aitse NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma();
+    const dashboards = createDashboardsService(false);
+    const service = new WidgetsService(
+      prisma as never,
+      dashboards as never,
+      fakeAudit,
+    );
+    await expect(
+      service.findByIdAcrossDashboards(WIDGET_ID),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(dashboards.requireDashboard).toHaveBeenCalledWith(DASHBOARD_ID);
+  });
+
+  it('findByIdAcrossDashboards: dashboardId uzerinden tenant dogrulanip widget doner', async () => {
+    const prisma = createPrisma();
+    const dashboards = createDashboardsService(true);
+    const service = new WidgetsService(
+      prisma as never,
+      dashboards as never,
+      fakeAudit,
+    );
+    const widget = await service.findByIdAcrossDashboards(WIDGET_ID);
+    expect(widget.id).toBe(WIDGET_ID);
+    expect(dashboards.requireDashboard).toHaveBeenCalledWith(DASHBOARD_ID);
+  });
 });

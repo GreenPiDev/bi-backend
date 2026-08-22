@@ -7,5 +7,6 @@ import { WidgetsService } from './widgets.service';
   imports: [DashboardsModule],
   controllers: [WidgetsController],
   providers: [WidgetsService],
+  exports: [WidgetsService],
 })
 export class WidgetsModule {}

@@ -7,6 +7,6 @@ import { QueryService } from './query.service';
 @Module({
   controllers: [QueryController],
   providers: [QueryService, QuerySqlService, QueryCacheService],
-  exports: [QueryCacheService],
+  exports: [QueryCacheService, QueryService],
 })
 export class QueryModule {}
