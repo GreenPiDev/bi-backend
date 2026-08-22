@@ -140,6 +140,26 @@ describe('Query (e2e)', () => {
     expect(res.body.truncated).toBe(false);
   });
 
+  it('tarih boyutu + granularity ile aylik gruplama ve o boyuta gore siralama calisir', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/query')
+      .set('Cookie', cookiesA)
+      .send({
+        datasetId,
+        measures: [{ field: 'toplam_tutar', agg: 'sum', alias: 'toplam' }],
+        dimensions: [{ field: 'satis_tarihi', granularity: 'month' }],
+        filters: [],
+        orderBy: [{ field: 'satis_tarihi', dir: 'asc' }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.columns).toEqual([
+      { name: 'satis_tarihi', type: 'DATE', label: 'Satış Tarihi' },
+      { name: 'toplam', type: 'NUMBER', label: 'toplam' },
+    ]);
+    expect((res.body.rows as unknown[]).length).toBeGreaterThan(0);
+  });
+
   it('between tarih filtresi dogru satirlari doner', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/query')

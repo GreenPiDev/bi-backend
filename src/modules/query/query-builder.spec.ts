@@ -132,9 +132,50 @@ describe('buildAggregationQuery', () => {
       TENANT_ID,
     );
     const compiled = compile(raw);
-    expect(compiled.sql).toContain('date_trunc($');
-    expect(compiled.parameters).toContain('month');
+    // granularity literal olarak gomulur (bind parametresi degil); boylece
+    // SELECT ve GROUP BY'daki ayni ifade, Postgres tarafindan ayni ifade
+    // olarak taninir (bkz. asagidaki "select/group by/order by ayni
+    // date_trunc ifadesini uretir" testi).
+    expect(compiled.sql).toContain('date_trunc(\'month\', "tarih")');
+    expect(compiled.parameters).not.toContain('month');
     expect(columns[0]).toEqual({ name: 'tarih', type: 'DATE', label: 'Tarih' });
+  });
+
+  it('granularity ile aynı boyuta gore siralama, select pozisyonuna gore siralar (raw kolona degil)', () => {
+    const spec = baseSpec({
+      dimensions: [{ field: 'tarih', granularity: 'month' }],
+      orderBy: [{ field: 'tarih', dir: 'asc' }],
+    });
+    const { raw } = buildAggregationQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+    );
+    const compiled = compile(raw);
+    // ORDER BY, date_trunc(...) ifadesini parametreleyerek tekrar gomerse
+    // Postgres bunu GROUP BY ifadesiyle ayni kabul etmez (farkli parametre
+    // dugumleri olusur). Bunun yerine select listesindeki 1-tabanli
+    // pozisyona (burada 1. kolon) gore siralamali.
+    expect(compiled.sql).toMatch(/order by 1 asc/);
+    expect(compiled.sql).not.toMatch(/order by date_trunc/);
+  });
+
+  it('olcu aliasina gore siralama select pozisyonuna gore siralar', () => {
+    const spec = baseSpec({
+      dimensions: [{ field: 'sehir' }],
+      measures: [{ field: 'tutar', agg: 'sum', alias: 'toplam' }],
+      orderBy: [{ field: 'toplam', dir: 'desc' }],
+    });
+    const { raw } = buildAggregationQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+    );
+    const compiled = compile(raw);
+    // sehir 1. kolon, toplam 2. kolon.
+    expect(compiled.sql).toMatch(/order by 2 desc/);
   });
 
   it('filtreler AND ile birlestirilir', () => {
@@ -246,7 +287,7 @@ describe('buildAggregationQuery', () => {
       FIELDS,
       TENANT_ID,
     );
-    expect(compile(raw).sql).toContain('order by "sehir" desc');
+    expect(compile(raw).sql).toContain('order by 1 desc');
   });
 
   it('bos measures+dimensions gorunur alanlarla ham satir listesine duser', () => {
@@ -287,7 +328,9 @@ describe('buildAggregationQuery', () => {
       TENANT_ID,
     );
     const compiled = compile(raw);
-    expect(compiled.sql).toContain('group by "sehir", date_trunc($2, "tarih")');
+    expect(compiled.sql).toContain(
+      'group by "sehir", date_trunc(\'year\', "tarih")',
+    );
   });
 });
 
