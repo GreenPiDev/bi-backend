@@ -11,5 +11,6 @@ import { ExportsService } from './exports.service';
   imports: [AuthModule, DashboardsModule, WidgetsModule, QueryModule],
   controllers: [ExportsController],
   providers: [ExportsService, DashboardPdfService],
+  exports: [DashboardPdfService],
 })
 export class ExportsModule {}

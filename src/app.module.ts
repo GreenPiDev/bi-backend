@@ -17,6 +17,7 @@ import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { QueryModule } from './modules/query/query.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { WidgetsModule } from './modules/widgets/widgets.module';
@@ -41,6 +42,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     DashboardsModule,
     WidgetsModule,
     ExportsModule,
+    ReportsModule,
     JobsModule,
   ],
   providers: [

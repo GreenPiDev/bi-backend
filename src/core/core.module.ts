@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { HealthController } from './health/health.controller';
+import { MailModule } from './mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, MailModule],
   controllers: [HealthController],
 })
 export class CoreModule {}
