@@ -44,7 +44,7 @@ export class DatasourcesController {
         filename: (_req, file, cb) =>
           cb(
             null,
-            `pusula-upload-${randomUUID()}${path.extname(file.originalname)}`,
+            `pilens-upload-${randomUUID()}${path.extname(file.originalname)}`,
           ),
       }),
     }),

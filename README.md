@@ -1,4 +1,4 @@
-# bi-backend — Pusula BI API
+# bi-backend — PiLens API
 
 NestJS 10 tabanlı API. Bkz. kok dizindeki `docs/MIMARI.md` ve `docs/VARSAYIMLAR.md`.
 
@@ -9,7 +9,7 @@ asamasinda dockerize edilecek. Makinende zaten calisan yerel Postgres 16 ve Redi
 
 ```bash
 npm install
-createdb pusula_bi                # yerel Postgres'te bir kere
+createdb pilens_bi                # yerel Postgres'te bir kere
 cp .env.example .env              # DATABASE_URL'i yerel kullanicina gore duzenle
 npm run db:generate
 npm run db:migrate
@@ -25,7 +25,7 @@ sec ve `bi-frontend/.env` icindeki `VITE_API_BASE_URL`'i buna gore guncelle.
 npm run seed:demo
 ```
 
-`demo@pusulabi.com` / `DemoPusula2026!` girisiyle, 3 sektorden (perakende satis, kargo/
+`demo@pilens.com` / `DemoPiLens2026!` girisiyle, 3 sektorden (perakende satis, kargo/
 lojistik, klinik randevu) ornek veri + hazir panolarla dolu bir "Demo Sirket" kiracisi
 olusturur. Idempotenttir — tekrar calistirinca onceki demo kiraciyi silip yeniden kurar.
 

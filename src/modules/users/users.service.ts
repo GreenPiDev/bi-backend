@@ -17,9 +17,17 @@ import {
   type SafeUser,
 } from '../auth/auth.service';
 import type { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { InviteUserDto } from './dto/invite-user.dto';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface UserProfile extends SafeUser {
+  isActive: boolean;
+  createdAt: Date;
+  lastLoginAt: Date | null;
+}
 
 @Injectable()
 export class UsersService {
@@ -35,6 +43,20 @@ export class UsersService {
       orderBy: { createdAt: 'asc' },
     });
     return users.map((u) => this.toSafeUser(u));
+  }
+
+  async getProfile(actingUser: RequestUser): Promise<UserProfile> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: actingUser.id },
+    });
+    if (!user) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.toProfile(user);
   }
 
   async invite(
@@ -128,6 +150,82 @@ export class UsersService {
       meta: { previousRole: target.role, newRole },
     });
     return this.toSafeUser(updated);
+  }
+
+  async updateProfile(
+    actingUser: RequestUser,
+    dto: UpdateProfileDto,
+  ): Promise<UserProfile> {
+    if (dto.email) {
+      const existing = await this.rawPrisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (existing && existing.id !== actingUser.id) {
+        throw new AppException(
+          'EMAIL_TAKEN',
+          'Bu e-posta adresi zaten bir kullaniciya ait.',
+          HttpStatus.CONFLICT,
+        );
+      }
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: actingUser.id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+      },
+    });
+
+    await this.audit.log({
+      action: 'UPDATE_PROFILE',
+      entity: 'User',
+      entityId: actingUser.id,
+      meta: { name: dto.name, email: dto.email },
+    });
+
+    return this.toProfile(updated);
+  }
+
+  async changePassword(
+    actingUser: RequestUser,
+    dto: ChangePasswordDto,
+  ): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: actingUser.id },
+    });
+    if (!user) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const isValid = await argon2.verify(user.passwordHash, dto.currentPassword);
+    if (!isValid) {
+      throw new AppException(
+        'INVALID_CREDENTIALS',
+        'Mevcut sifre hatali.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const passwordHash = await argon2.hash(dto.newPassword, {
+      type: argon2.argon2id,
+    });
+    await this.prisma.user.update({
+      where: { id: actingUser.id },
+      data: { passwordHash },
+    });
+
+    await this.audit.log({
+      action: 'CHANGE_PASSWORD',
+      entity: 'User',
+      entityId: actingUser.id,
+    });
+
+    return { ok: true };
   }
 
   async getInvitationInfo(token: string): Promise<{
@@ -227,6 +325,15 @@ export class UsersService {
       name: user.name,
       role: user.role,
       isPlatformAdmin: user.isPlatformAdmin,
+    };
+  }
+
+  private toProfile(user: User): UserProfile {
+    return {
+      ...this.toSafeUser(user),
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
     };
   }
 }

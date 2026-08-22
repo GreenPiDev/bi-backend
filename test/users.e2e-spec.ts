@@ -202,3 +202,107 @@ describe('Users & Invitations (e2e)', () => {
     expect(allowedRes.status).toBe(201);
   });
 });
+
+describe('Kullanici profili (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  const testRunId = randomUUID();
+  const emailSuffix = `-${testRunId}@test.com`;
+  const email = `e2e-profile${emailSuffix}`;
+  const otherEmail = `e2e-profile-other${emailSuffix}`;
+  let cookies: string[];
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.use(cookieParser());
+    app.setGlobalPrefix('api/v1');
+    app.useGlobalFilters(new HttpExceptionFilter());
+    await app.init();
+    prisma = app.get(PrismaService);
+
+    const registerRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        tenantName: 'Profil E2E Firma',
+        name: 'Profil Kisi',
+        email,
+        password: 'sifre1234',
+      });
+    cookies = registerRes.headers['set-cookie'] as unknown as string[];
+
+    await request(app.getHttpServer()).post('/api/v1/auth/register').send({
+      tenantName: 'Profil E2E Diger Firma',
+      name: 'Baska Kisi',
+      email: otherEmail,
+      password: 'sifre1234',
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.user.deleteMany({
+      where: { email: { endsWith: emailSuffix } },
+    });
+    await app.close();
+  });
+
+  it('kullanici kendi profilini goruntuler', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', cookies);
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe(email);
+    expect(res.body.role).toBe('OWNER');
+    expect(res.body.createdAt).toBeDefined();
+  });
+
+  it('kullanici kendi adini ve e-postasini gunceller', async () => {
+    const newEmail = `e2e-profile-updated${emailSuffix}`;
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookies)
+      .send({ name: 'Guncel Isim', email: newEmail });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Guncel Isim');
+    expect(res.body.email).toBe(newEmail);
+  });
+
+  it('baskasina ait e-postaya gecemez (EMAIL_TAKEN)', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookies)
+      .send({ email: otherEmail });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('EMAIL_TAKEN');
+  });
+
+  it('yanlis mevcut sifreyle sifre degistirilemez (INVALID_CREDENTIALS)', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me/password')
+      .set('Cookie', cookies)
+      .send({ currentPassword: 'yanlis-sifre', newPassword: 'yenisifre1234' });
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('INVALID_CREDENTIALS');
+  });
+
+  it('dogru mevcut sifreyle sifre degistirilir ve yeni sifreyle giris yapilir', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me/password')
+      .set('Cookie', cookies)
+      .send({ currentPassword: 'sifre1234', newPassword: 'yenisifre1234' });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: `e2e-profile-updated${emailSuffix}`,
+        password: 'yenisifre1234',
+      });
+    expect(loginRes.status).toBe(201);
+  });
+});

@@ -32,8 +32,8 @@ import {
 } from '../modules/onboarding/demo-datasets';
 
 const DEMO_TENANT_SLUG = 'demo-sirket';
-const DEMO_EMAIL = 'demo@pusulabi.com';
-const DEMO_PASSWORD = 'DemoPusula2026!';
+const DEMO_EMAIL = 'demo@pilens.com';
+const DEMO_PASSWORD = 'DemoPiLens2026!';
 const DEMO_NAME = 'Demo Kullanici';
 const DEMO_TENANT_NAME = 'Demo Sirket';
 

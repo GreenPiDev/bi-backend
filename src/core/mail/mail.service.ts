@@ -29,7 +29,7 @@ export class MailService {
 
   async send(input: SendMailInput): Promise<void> {
     await this.transporter.sendMail({
-      from: 'Pusula BI <bildirim@pusula-bi.local>',
+      from: 'PiLens <bildirim@pilens.local>',
       to: input.to,
       subject: input.subject,
       text: input.text,

@@ -6,9 +6,17 @@ import {
 import { Roles } from '../../core/decorators/roles.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { SafeUser } from '../auth/auth.service';
+import {
+  ChangePasswordDto,
+  ChangePasswordSchema,
+} from './dto/change-password.dto';
 import { InviteUserDto, InviteUserSchema } from './dto/invite-user.dto';
+import {
+  UpdateProfileDto,
+  UpdateProfileSchema,
+} from './dto/update-profile.dto';
 import { UpdateRoleDto, UpdateRoleSchema } from './dto/update-role.dto';
-import { UsersService } from './users.service';
+import { type UserProfile, UsersService } from './users.service';
 
 @Controller('users')
 export class UsersController {
@@ -17,6 +25,27 @@ export class UsersController {
   @Get()
   list(): Promise<SafeUser[]> {
     return this.users.list();
+  }
+
+  @Get('me')
+  getProfile(@CurrentUser() user: RequestUser): Promise<UserProfile> {
+    return this.users.getProfile(user);
+  }
+
+  @Patch('me')
+  updateProfile(
+    @CurrentUser() user: RequestUser,
+    @Body(new ZodValidationPipe(UpdateProfileSchema)) dto: UpdateProfileDto,
+  ): Promise<UserProfile> {
+    return this.users.updateProfile(user, dto);
+  }
+
+  @Patch('me/password')
+  changePassword(
+    @CurrentUser() user: RequestUser,
+    @Body(new ZodValidationPipe(ChangePasswordSchema)) dto: ChangePasswordDto,
+  ): Promise<{ ok: true }> {
+    return this.users.changePassword(user, dto);
   }
 
   @Roles('OWNER', 'ADMIN')

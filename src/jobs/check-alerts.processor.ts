@@ -90,7 +90,7 @@ export class CheckAlertsProcessor extends WorkerHost {
 
     await this.mail.send({
       to: alert.recipients,
-      subject: `Pusula BI - Eşik alarmı tetiklendi`,
+      subject: `PiLens - Eşik alarmı tetiklendi`,
       text: `Değer (${value}) ${OPERATOR_LABELS[operator]} ${alert.threshold} oldu.`,
     });
 

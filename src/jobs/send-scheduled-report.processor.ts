@@ -55,7 +55,7 @@ export class SendScheduledReportProcessor extends WorkerHost {
 
     await this.mail.send({
       to: report.recipients,
-      subject: `Pusula BI - ${report.dashboard.name} raporu`,
+      subject: `PiLens - ${report.dashboard.name} raporu`,
       text: `${report.dashboard.name} panosunun zamanlanmis raporu ektedir.`,
       attachments: [
         {

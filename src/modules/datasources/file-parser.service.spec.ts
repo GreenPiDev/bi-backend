@@ -19,7 +19,7 @@ describe('FileParserService', () => {
 
   beforeAll(async () => {
     service = new FileParserService();
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pusula-file-parser-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pilens-file-parser-'));
   });
 
   afterAll(async () => {

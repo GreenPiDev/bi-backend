@@ -3,15 +3,15 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: pusula
-      POSTGRES_PASSWORD: pusula
-      POSTGRES_DB: pusula_bi
+      POSTGRES_USER: pilens
+      POSTGRES_PASSWORD: pilens
+      POSTGRES_DB: pilens_bi
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pusula']
+      test: ['CMD-SHELL', 'pg_isready -U pilens']
       interval: 5s
       timeout: 5s
       retries: 10
