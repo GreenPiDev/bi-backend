@@ -10,6 +10,7 @@ import { TenantContextInterceptor } from './core/interceptors/tenant-context.int
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
@@ -33,6 +34,7 @@ import { UsersModule } from './modules/users/users.module';
     DatasourcesModule,
     DatasetsModule,
     QueryModule,
+    DashboardsModule,
     JobsModule,
   ],
   providers: [
