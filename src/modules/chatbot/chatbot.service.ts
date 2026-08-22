@@ -10,7 +10,11 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { QuerySpec } from '../query/dto/query-spec.dto';
 import { QueryService } from '../query/query.service';
-import { buildDatasetSummaries, buildSystemPrompt } from './chatbot-context';
+import {
+  buildDatasetSummaries,
+  buildSystemPrompt,
+  type DatasetSummaryForChat,
+} from './chatbot-context';
 import {
   NAVIGATION_INTENTS,
   resolveNavigation,
@@ -20,7 +24,7 @@ import { CHATBOT_TOOLS } from './chatbot-tools';
 import type { ChatRequest, ChatResponse } from './dto/chat-message.dto';
 import { OPENAI_CLIENT, type OpenAiClient } from './openai-client.token';
 
-const MAX_TOOL_ROUNDS = 3;
+const MAX_TOOL_ROUNDS = 5;
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const FALLBACK_REPLY =
   'Şu an bu soruya yardımcı olamıyorum. Lütfen sorunuzu daha basit şekilde tekrar sorun.';
@@ -28,6 +32,10 @@ const FALLBACK_REPLY =
 const NavigateArgs = z.object({
   intent: z.enum(NAVIGATION_INTENTS),
   targetName: z.string().optional(),
+});
+
+const DescribeDatasetArgs = z.object({
+  datasetId: z.string(),
 });
 
 interface ToolExecutionResult {
@@ -50,10 +58,6 @@ export class ChatbotService {
       this.prisma.dashboard.findMany({ select: { id: true, name: true } }),
     ]);
     const datasetSummaries = buildDatasetSummaries(datasets);
-    const datasetEntities: NamedEntity[] = datasetSummaries.map((d) => ({
-      id: d.id,
-      name: d.name,
-    }));
 
     const messages: ChatCompletionMessageParam[] = [
       {
@@ -91,7 +95,7 @@ export class ChatbotService {
           toolCall.function.name,
           toolCall.function.arguments,
           user,
-          datasetEntities,
+          datasetSummaries,
           dashboards,
         );
         if (result.navigateTo !== undefined) {
@@ -112,16 +116,58 @@ export class ChatbotService {
     name: string,
     rawArguments: string,
     user: RequestUser,
-    datasets: NamedEntity[],
+    datasets: DatasetSummaryForChat[],
     dashboards: NamedEntity[],
   ): Promise<ToolExecutionResult> {
+    if (name === 'describe_dataset') {
+      return this.executeDescribeDataset(rawArguments, datasets);
+    }
     if (name === 'run_query') {
       return this.executeRunQuery(rawArguments, user.tenantId);
     }
     if (name === 'navigate') {
-      return this.executeNavigate(rawArguments, user, datasets, dashboards);
+      const datasetEntities: NamedEntity[] = datasets.map((d) => ({
+        id: d.id,
+        name: d.name,
+      }));
+      return this.executeNavigate(
+        rawArguments,
+        user,
+        datasetEntities,
+        dashboards,
+      );
     }
     return { content: JSON.stringify({ error: 'Bilinmeyen arac.' }) };
+  }
+
+  private executeDescribeDataset(
+    rawArguments: string,
+    datasets: DatasetSummaryForChat[],
+  ): ToolExecutionResult {
+    try {
+      const parsed = DescribeDatasetArgs.parse(JSON.parse(rawArguments));
+      const dataset = datasets.find((d) => d.id === parsed.datasetId);
+      if (!dataset) {
+        return {
+          content: JSON.stringify({
+            error: 'Boyle bir veri kumesi bulunamadi.',
+          }),
+        };
+      }
+      return {
+        content: JSON.stringify({
+          datasetId: dataset.id,
+          fields: dataset.fields.map((f) => ({
+            field: f.name,
+            gorunenAdi: f.label,
+            tur: f.type.toLowerCase(),
+            rol: f.role.toLowerCase(),
+          })),
+        }),
+      };
+    } catch {
+      return { content: JSON.stringify({ error: 'Gecersiz istek.' }) };
+    }
   }
 
   private async executeRunQuery(

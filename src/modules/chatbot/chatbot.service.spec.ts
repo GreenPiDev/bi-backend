@@ -173,7 +173,7 @@ describe('ChatbotService', () => {
       USER,
     );
 
-    expect(create).toHaveBeenCalledTimes(3);
+    expect(create).toHaveBeenCalledTimes(5);
     expect(result.reply).toMatch(/yardımcı olamıyorum/i);
     expect(result.navigateTo).toBeNull();
   });
@@ -200,6 +200,66 @@ describe('ChatbotService', () => {
     );
 
     expect(result.navigateTo).toBeNull();
+  });
+
+  it('describe_dataset gecerli id icin alan listesini gercek adlarla doner', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(
+        toolCallCompletion('describe_dataset', {
+          datasetId: '11111111-1111-4111-8111-111111111111',
+        }),
+      )
+      .mockResolvedValueOnce(
+        textCompletion('Bu veri kumesinde tutar alani var.'),
+      );
+
+    const service = new ChatbotService(
+      { chat: { completions: { create } } },
+      createPrisma() as never,
+      { runQuery: vi.fn() } as never,
+      createConfig() as never,
+    );
+
+    const result = await service.chat(
+      { message: 'satis veri kumesinde neler var?', history: [] },
+      USER,
+    );
+
+    const secondCallMessages = create.mock.calls[1][0].messages;
+    const toolMessage = secondCallMessages.at(-2);
+    const parsed = JSON.parse(toolMessage.content);
+    expect(parsed.fields).toEqual([
+      { field: 'tutar', gorunenAdi: 'Tutar', tur: 'number', rol: 'measure' },
+    ]);
+    expect(result.reply).toBe('Bu veri kumesinde tutar alani var.');
+  });
+
+  it('describe_dataset bilinmeyen id icin hata doner, cokmez', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(
+        toolCallCompletion('describe_dataset', {
+          datasetId: 'yok-boyle-bir-id',
+        }),
+      )
+      .mockResolvedValueOnce(
+        textCompletion('Boyle bir veri kumesi bulamadim.'),
+      );
+
+    const service = new ChatbotService(
+      { chat: { completions: { create } } },
+      createPrisma() as never,
+      { runQuery: vi.fn() } as never,
+      createConfig() as never,
+    );
+
+    const result = await service.chat(
+      { message: 'olmayan veri kumesi', history: [] },
+      USER,
+    );
+
+    expect(result.reply).toBe('Boyle bir veri kumesi bulamadim.');
   });
 
   it('navigate tool u izinli intent te dogru pathi navigateTo olarak doner', async () => {

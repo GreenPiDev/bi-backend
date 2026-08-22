@@ -2,11 +2,31 @@ import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { NAVIGATION_INTENTS } from './chatbot-navigation';
 
 /**
- * LLM'e verilen iki arac: run_query (mevcut QuerySpec seklini birebir
- * yansitir, CLAUDE.md SS6) ve navigate (sabit intent listesi, SS ilkesi:
- * path asla serbest metinden gelmez).
+ * LLM'e verilen uc arac: describe_dataset (tembel kesif - alan listesini
+ * sadece istendiginde doner, prompt boyutu dataset sayisiyla degil sorgu
+ * basina TEK dataset'in alan sayisiyla olcekleniyor), run_query (mevcut
+ * QuerySpec seklini birebir yansitir, CLAUDE.md SS6) ve navigate (sabit
+ * intent listesi, SS ilkesi: path asla serbest metinden gelmez).
  */
 export const CHATBOT_TOOLS: ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'describe_dataset',
+      description:
+        'Bir veri kumesinin alanlarini (gercek ad, gorunen ad, tur, rol) getirir. run_query cagirmadan once, o dataset icin MUTLAKA once bunu cagir.',
+      parameters: {
+        type: 'object',
+        properties: {
+          datasetId: {
+            type: 'string',
+            description: 'Sistem promptundaki dataset id (uuid).',
+          },
+        },
+        required: ['datasetId'],
+      },
+    },
+  },
   {
     type: 'function',
     function: {
