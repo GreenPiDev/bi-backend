@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
+import { cleanupTestTenants } from './support/cleanup-tenants';
 
 describe('Platform admin (e2e)', () => {
   let app: INestApplication;
@@ -66,9 +67,7 @@ describe('Platform admin (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({
-      where: { email: { endsWith: emailSuffix } },
-    });
+    await cleanupTestTenants(prisma, emailSuffix);
     await app.close();
   });
 

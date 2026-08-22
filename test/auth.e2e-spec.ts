@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
+import { cleanupTestTenants } from './support/cleanup-tenants';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -27,7 +28,7 @@ describe('Auth (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } });
+    await cleanupTestTenants(prisma, email);
     await app.close();
   });
 

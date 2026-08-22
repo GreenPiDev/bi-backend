@@ -6,6 +6,8 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
+import { PrismaService } from '../src/core/prisma/prisma.service';
+import { cleanupTestTenants } from './support/cleanup-tenants';
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 
@@ -35,6 +37,7 @@ async function waitForReady(
 
 describe('Onboarding (e2e)', () => {
   let app: INestApplication;
+  let prisma: PrismaService;
 
   const emailSuffix = `-${randomUUID()}@test.com`;
   const ownerEmail = `owner${emailSuffix}`;
@@ -51,6 +54,7 @@ describe('Onboarding (e2e)', () => {
     app.setGlobalPrefix('api/v1');
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
+    prisma = app.get(PrismaService);
 
     const register = await request(app.getHttpServer())
       .post('/api/v1/auth/register')
@@ -64,6 +68,7 @@ describe('Onboarding (e2e)', () => {
   });
 
   afterAll(async () => {
+    await cleanupTestTenants(prisma, emailSuffix);
     await app.close();
   });
 

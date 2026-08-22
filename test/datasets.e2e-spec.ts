@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { RawSqlService } from '../src/core/database/raw-sql.service';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
+import { cleanupTestTenants } from './support/cleanup-tenants';
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 
@@ -97,9 +98,7 @@ describe('Datasets (e2e)', () => {
     if (datasetId) {
       await rawSql.dropTable(tenantAId, datasetId).catch(() => undefined);
     }
-    await prisma.user.deleteMany({
-      where: { email: { endsWith: emailSuffix } },
-    });
+    await cleanupTestTenants(prisma, emailSuffix);
     await app.close();
   });
 

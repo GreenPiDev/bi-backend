@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { RawSqlService } from '../src/core/database/raw-sql.service';
+import { cleanupTestTenants } from './support/cleanup-tenants';
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 
@@ -93,18 +94,7 @@ describe('Datasources (e2e)', () => {
   });
 
   afterAll(async () => {
-    const tenants = await prisma.tenant.findMany({
-      where: { users: { some: { email: { endsWith: emailSuffix } } } },
-      include: { datasets: true },
-    });
-    for (const tenant of tenants) {
-      for (const dataset of tenant.datasets) {
-        await rawSql.dropTable(tenant.id, dataset.id).catch(() => undefined);
-      }
-    }
-    await prisma.user.deleteMany({
-      where: { email: { endsWith: emailSuffix } },
-    });
+    await cleanupTestTenants(prisma, emailSuffix);
     await app.close();
   });
 
@@ -180,5 +170,9 @@ describe('Datasources (e2e)', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+
+    // Ingest'in arka planda bitmesini bekle; aksi halde afterAll'daki temizlik
+    // hala yazan BullMQ worker'i ile yarisa girip FK ihlaline yol acabilir.
+    await waitForStatus(app, cookiesA, dataSourceId, 'READY');
   });
 });
