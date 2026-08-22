@@ -26,7 +26,10 @@ export class DashboardPdfService {
         },
       ]);
       const page = await context.newPage();
-      await page.goto(`${frontendUrl}/dashboards/${dashboardId}`, {
+      // ?print=1 -> DashboardViewPage/AppShell navigasyonu, aksiyon butonlarini,
+      // filtre cubugunu ve chatbot widget'ini gizleyip sade bir rapor gorunumune
+      // gecer (bkz. bi-frontend app-shell.tsx / dashboard-view-page.tsx).
+      await page.goto(`${frontendUrl}/dashboards/${dashboardId}?print=1`, {
         waitUntil: 'networkidle',
       });
       await page.waitForTimeout(RENDER_SETTLE_MS);
