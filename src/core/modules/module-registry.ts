@@ -11,6 +11,7 @@ export interface ModuleDefinition {
  */
 export const MODULE_REGISTRY: readonly ModuleDefinition[] = [
   { key: 'core', label: 'Cekirdek', alwaysOn: true },
+  { key: 'crm', label: 'Satis (CRM)', alwaysOn: false },
 ];
 
 export function findModuleDefinition(

@@ -11,6 +11,7 @@ enum UserRole {
   OWNER
   ADMIN
   EDITOR
+  SALES
   VIEWER
 }
 
@@ -55,6 +56,8 @@ model Tenant {
   alerts           Alert[]
   auditLogs        AuditLog[]
   modules          TenantModule[]
+  accounts         Account[]
+  contacts         Contact[]
 
   @@map("tenants")
 }
@@ -244,4 +247,55 @@ model AuditLog {
 
   @@index([tenantId])
   @@map("audit_logs")
+}
+
+// CRM (satis) modulu -- bkz. core/modules/module-registry.ts 'crm' anahtari
+model Account {
+  id           String    @id @default(uuid())
+  tenantId     String
+  name         String
+  taxNumber    String?
+  taxOffice    String?
+  sector       String?
+  website      String?
+  phone        String?
+  email        String?
+  address      String?
+  city         String?
+  ownerId      String?
+  customFields Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  contacts Contact[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, deletedAt])
+  @@map("crm_accounts")
+}
+
+model Contact {
+  id           String    @id @default(uuid())
+  tenantId     String
+  accountId    String?
+  firstName    String
+  lastName     String
+  title        String?
+  email        String?
+  phone        String?
+  ownerId      String?
+  customFields Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([tenantId, lastName])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, accountId])
+  @@map("crm_contacts")
 }

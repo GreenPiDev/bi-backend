@@ -9,14 +9,17 @@ import { RolesGuard } from './core/guards/roles.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { ImportsModule } from './modules/imports/imports.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { QueryModule } from './modules/query/query.module';
@@ -49,6 +52,9 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ReportsModule,
     AlertsModule,
     ChatbotModule,
+    AccountsModule,
+    ContactsModule,
+    ImportsModule,
     JobsModule,
   ],
   providers: [

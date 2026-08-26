@@ -98,6 +98,7 @@ describe('Platform admin (e2e)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
       { key: 'core', label: 'Cekirdek', alwaysOn: true, enabled: true },
+      { key: 'crm', label: 'Satis (CRM)', alwaysOn: false, enabled: false },
     ]);
   });
 

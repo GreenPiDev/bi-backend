@@ -17,6 +17,7 @@ describe('TenantsService modulleri', () => {
     const modules = await service.listModules('t1');
     expect(modules).toEqual([
       { key: 'core', label: 'Cekirdek', alwaysOn: true, enabled: true },
+      { key: 'crm', label: 'Satis (CRM)', alwaysOn: false, enabled: false },
     ]);
   });
 

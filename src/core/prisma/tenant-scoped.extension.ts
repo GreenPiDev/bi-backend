@@ -14,20 +14,36 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'ScheduledReport',
   'Alert',
   'AuditLog',
+  'Account',
+  'Contact',
 ]);
 
-const SCOPED_OPERATIONS = new Set([
+/**
+ * deletedAt alani olan modeller: okuma sorgularinda silinmisler otomatik
+ * gizlenir, delete/deleteMany yumusak silmeye (deletedAt=now()) donusturulur.
+ */
+const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>(['Account', 'Contact']);
+
+const READ_OPERATIONS = new Set([
   'findMany',
   'findFirst',
   'findFirstOrThrow',
   'count',
   'aggregate',
   'groupBy',
+]);
+
+const SCOPED_OPERATIONS = new Set([
+  ...READ_OPERATIONS,
   'update',
   'updateMany',
   'delete',
   'deleteMany',
 ]);
+
+function toClientProperty(model: string): string {
+  return model.charAt(0).toLowerCase() + model.slice(1);
+}
 
 /**
  * findUnique/findUniqueOrThrow bilerek desteklenmiyor: Prisma'nin unique-where kisiti
@@ -72,6 +88,35 @@ export function tenantScopedExtension<T extends PrismaClient>(client: T) {
             const tenantId = TenantContext.getOrThrow().tenantId;
             const scopedArgs = args as { where?: Record<string, unknown> };
             scopedArgs.where = { ...(scopedArgs.where ?? {}), tenantId };
+
+            if (
+              SOFT_DELETE_MODELS.has(model) &&
+              READ_OPERATIONS.has(operation) &&
+              scopedArgs.where.deletedAt === undefined
+            ) {
+              scopedArgs.where.deletedAt = null;
+            }
+
+            if (
+              SOFT_DELETE_MODELS.has(model) &&
+              (operation === 'delete' || operation === 'deleteMany')
+            ) {
+              const delegate = client[
+                toClientProperty(model) as keyof T
+              ] as unknown as {
+                update: (args: unknown) => unknown;
+                updateMany: (args: unknown) => unknown;
+              };
+              return operation === 'delete'
+                ? delegate.update({
+                    where: scopedArgs.where,
+                    data: { deletedAt: new Date() },
+                  })
+                : delegate.updateMany({
+                    where: scopedArgs.where,
+                    data: { deletedAt: new Date() },
+                  });
+            }
           }
 
           return query(args);

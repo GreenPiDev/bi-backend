@@ -34,6 +34,8 @@ export async function cleanupTestTenants(
   await prisma.dataSource.deleteMany({ where: tenantFilter });
   await prisma.invitation.deleteMany({ where: tenantFilter });
   await prisma.auditLog.deleteMany({ where: tenantFilter });
+  await prisma.contact.deleteMany({ where: tenantFilter });
+  await prisma.account.deleteMany({ where: tenantFilter });
   await prisma.user.deleteMany({ where: tenantFilter });
   await prisma.tenantModule.deleteMany({ where: tenantFilter });
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
