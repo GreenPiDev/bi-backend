@@ -4,7 +4,10 @@ import type { PermissionAction } from '@prisma/client';
 export interface RequiredPermission {
   pageKey: string;
   action: PermissionAction;
-  tabKey?: string;
+  /** Tek tabKey verilirse tam eslesme aranir. Bir dizi verilirse (OR) listedeki
+   * tab'lardan HERHANGI birinde izin olmasi yeterlidir - orn. ayni GET ucu hem
+   * "roles" hem "pageAccess" sekmesinden cagrilabiliyorsa. */
+  tabKey?: string | string[];
 }
 
 export const PERMISSION_KEY = 'requiresPermission';
@@ -19,7 +22,7 @@ export const PERMISSION_KEY = 'requiresPermission';
 export const RequiresPermission = (
   pageKey: string,
   action: PermissionAction,
-  tabKey?: string,
+  tabKey?: string | string[],
 ) =>
   SetMetadata(PERMISSION_KEY, {
     pageKey,

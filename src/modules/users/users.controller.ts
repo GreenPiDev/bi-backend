@@ -11,6 +11,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { CompanyAdminGuard } from '../../core/guards/company-admin.guard';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { SafeUser } from '../auth/auth.service';
@@ -31,6 +32,7 @@ export class UsersController {
   constructor(private readonly users: UsersService) {}
 
   @Get()
+  @RequiresPermission('settings', 'VIEW', 'users')
   list(): Promise<SafeUser[]> {
     return this.users.list();
   }

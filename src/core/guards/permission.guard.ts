@@ -53,14 +53,14 @@ export class PermissionGuard implements CanActivate {
       user.roleIds,
     );
 
-    if (
-      !hasPermission(
-        effective,
-        required.pageKey,
-        required.action,
-        required.tabKey,
-      )
-    ) {
+    const tabKeys = Array.isArray(required.tabKey)
+      ? required.tabKey
+      : [required.tabKey];
+    const granted = tabKeys.some((tabKey) =>
+      hasPermission(effective, required.pageKey, required.action, tabKey),
+    );
+
+    if (!granted) {
       throw new AppException(
         'FORBIDDEN',
         'Bu islem icin yetkin yok.',

@@ -24,7 +24,18 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   { key: 'accounts', label: 'Firmalar', requiresModule: 'crm' },
   { key: 'contacts', label: 'Kisiler', requiresModule: 'crm' },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
-  { key: 'settings', label: 'Ayarlar' },
+  {
+    key: 'settings',
+    label: 'Ayarlar',
+    tabs: [
+      { key: 'general', label: 'Genel' },
+      { key: 'crm', label: 'CRM Ayarlari' },
+      { key: 'audit', label: 'Kullanici Aktiviteleri' },
+      { key: 'roles', label: 'Roller' },
+      { key: 'pageAccess', label: 'Sayfa Erisimleri' },
+      { key: 'users', label: 'Kullanicilar' },
+    ],
+  },
 ];
 
 export function findPageDefinition(key: string): PageDefinition | undefined {
