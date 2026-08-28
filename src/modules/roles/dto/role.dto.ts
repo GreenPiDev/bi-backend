@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-const PermissionActionSchema = z.enum(['VIEW', 'CREATE', 'UPDATE', 'DELETE']);
+const PermissionActionSchema = z.enum([
+  'VIEW',
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'IMPORT',
+  'EXPORT',
+]);
 
 const RolePermissionInputSchema = z.object({
   pageKey: z.string().min(1),

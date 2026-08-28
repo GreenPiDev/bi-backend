@@ -21,9 +21,9 @@ import type { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { RolesService, type RoleView } from './roles.service';
 
 /**
- * Okuma (GET) uclari "settings/roles" veya "settings/pageAccess" tab'larindan
- * herhangi birine VIEW izni olan herkese acik - boylece Roller ve Sayfa Erisimleri
- * sekmeleri normal RBAC ile gorunur/gizlenir tutarli sekilde. Yazma islemleri
+ * Okuma (GET) uclari "settings/roles", "settings/pageAccess" veya "settings/actionPermissions"
+ * tab'larindan herhangi birine VIEW izni olan herkese acik - boylece Roller, Sayfa Erisimleri
+ * ve Islem Izinleri sekmeleri normal RBAC ile gorunur/gizlenir tutarli sekilde. Yazma islemleri
  * (POST/PATCH/DELETE) ise kasitli olarak Permission sisteminin DISINDA, sabit
  * CompanyAdminGuard'da kalir - bir role sadece VIEW izni verilerek rol/izin
  * yonetimine yetki yukseltmesi yapamaz (bkz. company-admin.guard.ts, SS6).
@@ -33,13 +33,21 @@ export class RolesController {
   constructor(private readonly roles: RolesService) {}
 
   @Get('page-registry')
-  @RequiresPermission('settings', 'VIEW', ['roles', 'pageAccess'])
+  @RequiresPermission('settings', 'VIEW', [
+    'roles',
+    'pageAccess',
+    'actionPermissions',
+  ])
   pageRegistry(): readonly PageDefinition[] {
     return PAGE_REGISTRY;
   }
 
   @Get('roles')
-  @RequiresPermission('settings', 'VIEW', ['roles', 'pageAccess'])
+  @RequiresPermission('settings', 'VIEW', [
+    'roles',
+    'pageAccess',
+    'actionPermissions',
+  ])
   list(): Promise<RoleView[]> {
     return this.roles.list();
   }

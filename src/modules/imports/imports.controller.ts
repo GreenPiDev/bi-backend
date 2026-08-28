@@ -71,7 +71,7 @@ export class ImportsController {
   constructor(private readonly imports: ImportsService) {}
 
   @Post('preview')
-  @RequiresPermission('accounts', 'CREATE')
+  @RequiresPermission('accounts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async preview(
     @UploadedFile() file: Express.Multer.File,
@@ -82,7 +82,7 @@ export class ImportsController {
   }
 
   @Post('accounts')
-  @RequiresPermission('accounts', 'CREATE')
+  @RequiresPermission('accounts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importAccounts(
     @UploadedFile() file: Express.Multer.File,
@@ -95,7 +95,7 @@ export class ImportsController {
   }
 
   @Post('contacts')
-  @RequiresPermission('contacts', 'CREATE')
+  @RequiresPermission('contacts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importContacts(
     @UploadedFile() file: Express.Multer.File,
@@ -108,6 +108,7 @@ export class ImportsController {
   }
 
   @Get('accounts/export')
+  @RequiresPermission('accounts', 'EXPORT')
   async exportAccounts(@Res() res: Response): Promise<void> {
     const buffer = await this.imports.exportAccounts();
     res
@@ -120,6 +121,7 @@ export class ImportsController {
   }
 
   @Get('contacts/export')
+  @RequiresPermission('contacts', 'EXPORT')
   async exportContacts(@Res() res: Response): Promise<void> {
     const buffer = await this.imports.exportContacts();
     res

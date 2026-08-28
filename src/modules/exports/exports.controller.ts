@@ -12,6 +12,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { ExportsService } from './exports.service';
 
@@ -20,6 +21,7 @@ export class ExportsController {
   constructor(private readonly exports: ExportsService) {}
 
   @Post('widget/:id')
+  @RequiresPermission('dashboards', 'EXPORT')
   @HttpCode(HttpStatus.OK)
   async exportWidget(
     @Param('id') id: string,
@@ -43,6 +45,7 @@ export class ExportsController {
   }
 
   @Post('dashboard/:id/pdf')
+  @RequiresPermission('dashboards', 'EXPORT')
   @HttpCode(HttpStatus.OK)
   async exportDashboardPdf(
     @Param('id') id: string,

@@ -12,6 +12,8 @@ enum PermissionAction {
   CREATE
   UPDATE
   DELETE
+  IMPORT
+  EXPORT
 }
 
 enum AccountType {
