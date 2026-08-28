@@ -38,7 +38,7 @@ describe('tenantScopedExtension (gercek Postgres)', () => {
 
   it('create sirasinda context tenantId payload tenantId yerine gecer', async () => {
     const user = await TenantContext.run(
-      { tenantId: tenantA, userId: 'system', role: 'OWNER' },
+      { tenantId: tenantA, userId: 'system', roleIds: [] },
       async () =>
         scoped.user.create({
           data: {
@@ -54,7 +54,7 @@ describe('tenantScopedExtension (gercek Postgres)', () => {
 
   it("A tenant'in kullanicisi B tenant'in kullanicisini findFirst ile goremez", async () => {
     const bUser = await TenantContext.run(
-      { tenantId: tenantB, userId: 'system', role: 'OWNER' },
+      { tenantId: tenantB, userId: 'system', roleIds: [] },
       async () =>
         scoped.user.create({
           data: {
@@ -67,14 +67,14 @@ describe('tenantScopedExtension (gercek Postgres)', () => {
     );
 
     const foundFromA = await TenantContext.run(
-      { tenantId: tenantA, userId: 'system', role: 'OWNER' },
+      { tenantId: tenantA, userId: 'system', roleIds: [] },
       async () => scoped.user.findFirst({ where: { id: bUser.id } }),
     );
 
     expect(foundFromA).toBeNull();
 
     const foundFromB = await TenantContext.run(
-      { tenantId: tenantB, userId: 'system', role: 'OWNER' },
+      { tenantId: tenantB, userId: 'system', roleIds: [] },
       async () => scoped.user.findFirst({ where: { id: bUser.id } }),
     );
 
@@ -83,7 +83,7 @@ describe('tenantScopedExtension (gercek Postgres)', () => {
 
   it("findMany sadece o tenant'in kayitlarini doner", async () => {
     await TenantContext.run(
-      { tenantId: tenantA, userId: 'system', role: 'OWNER' },
+      { tenantId: tenantA, userId: 'system', roleIds: [] },
       async () =>
         scoped.user.create({
           data: {
@@ -96,7 +96,7 @@ describe('tenantScopedExtension (gercek Postgres)', () => {
     );
 
     const usersInA = await TenantContext.run(
-      { tenantId: tenantA, userId: 'system', role: 'OWNER' },
+      { tenantId: tenantA, userId: 'system', roleIds: [] },
       async () => scoped.user.findMany(),
     );
 

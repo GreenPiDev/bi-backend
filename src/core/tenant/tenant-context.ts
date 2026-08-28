@@ -1,10 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { UserRole } from '@prisma/client';
 
 export interface TenantStore {
   tenantId: string;
   userId: string;
-  role: UserRole;
+  roleIds: string[];
 }
 
 const storage = new AsyncLocalStorage<TenantStore>();

@@ -37,6 +37,7 @@ export class SendScheduledReportProcessor extends WorkerHost {
      * bunu belirtmiyor, en yakin dogal sahiplik iliskisi bu (bkz. docs/VARSAYIMLAR.md). */
     const renderer = await this.prisma.user.findUnique({
       where: { id: report.dashboard.createdById },
+      include: { roles: { select: { roleId: true } } },
     });
     if (!renderer) {
       this.logger.warn(
@@ -48,7 +49,7 @@ export class SendScheduledReportProcessor extends WorkerHost {
     const accessToken = this.tokenService.signAccessToken({
       sub: renderer.id,
       tenantId: renderer.tenantId,
-      role: renderer.role,
+      roleIds: renderer.roles.map((r) => r.roleId),
       isPlatformAdmin: renderer.isPlatformAdmin,
     });
     const pdf = await this.dashboardPdf.render(report.dashboardId, accessToken);

@@ -1,10 +1,9 @@
 import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
-import type { UserRole } from '@prisma/client';
 import type { Response } from 'express';
 import { Public } from '../../core/decorators/public.decorator';
 import { setAuthCookies } from '../../core/http/set-auth-cookies';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
-import type { SafeUser } from '../auth/auth.service';
+import type { AuthenticatedUser } from '../auth/auth.service';
 import {
   AcceptInvitationDto,
   AcceptInvitationSchema,
@@ -20,7 +19,8 @@ export class InvitationsController {
   getInvitation(@Param('token') token: string): Promise<{
     tenantName: string;
     email: string;
-    role: UserRole;
+    roleIds: string[];
+    roleNames: string[];
     expired: boolean;
   }> {
     return this.users.getInvitationInfo(token);
@@ -33,7 +33,7 @@ export class InvitationsController {
     @Body(new ZodValidationPipe(AcceptInvitationSchema))
     dto: AcceptInvitationDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: SafeUser }> {
+  ): Promise<{ user: AuthenticatedUser }> {
     const result = await this.users.acceptInvitation(token, dto);
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user };

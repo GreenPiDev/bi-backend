@@ -69,7 +69,7 @@ describe('Tenant izolasyonu (e2e)', () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/users/${tenantBOwnerId}/role`)
       .set('Cookie', tenantACookies)
-      .send({ role: 'VIEWER' });
+      .send({ roleIds: [randomUUID()] });
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -91,6 +91,8 @@ describe('Tenant izolasyonu (e2e)', () => {
       .send({ email: tenantBOwnerEmail, password: 'sifre1234' });
 
     expect(loginRes.status).toBe(201);
-    expect(loginRes.body.user.role).toBe('OWNER');
+    expect(loginRes.body.user.roles).toEqual([
+      expect.objectContaining({ name: 'COMPANYADMIN' }),
+    ]);
   });
 });

@@ -74,7 +74,7 @@ export class CheckAlertsProcessor extends WorkerHost {
 
     const querySpec = alert.widget.querySpec as unknown as QuerySpec;
     const result = await TenantContext.run(
-      { tenantId: alert.tenantId, userId: 'system-alerts', role: 'OWNER' },
+      { tenantId: alert.tenantId, userId: 'system-alerts', roleIds: [] },
       () => this.query.runQuery(querySpec, alert.tenantId),
     );
 

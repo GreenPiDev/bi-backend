@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import type { SectorOption } from '@prisma/client';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateSectorOptionSchema,
@@ -28,7 +28,7 @@ export class SectorOptionsController {
   }
 
   @Post()
-  @Roles('OWNER', 'ADMIN')
+  @RequiresPermission('settings', 'UPDATE')
   create(
     @Body(new ZodValidationPipe(CreateSectorOptionSchema))
     dto: CreateSectorOptionDto,
@@ -37,7 +37,7 @@ export class SectorOptionsController {
   }
 
   @Delete(':id')
-  @Roles('OWNER', 'ADMIN')
+  @RequiresPermission('settings', 'UPDATE')
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {
     return this.sectorOptions.remove(id);

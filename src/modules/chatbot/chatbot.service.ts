@@ -8,6 +8,8 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { hasPermission } from '../../core/permissions/permission.types';
+import { PermissionsService } from '../../core/permissions/permissions.service';
 import { QuerySpec } from '../query/dto/query-spec.dto';
 import { QueryService } from '../query/query.service';
 import {
@@ -50,6 +52,7 @@ export class ChatbotService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly queryService: QueryService,
     private readonly configService: ConfigService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   async chat(request: ChatRequest, user: RequestUser): Promise<ChatResponse> {
@@ -203,18 +206,22 @@ export class ChatbotService {
     }
   }
 
-  private executeNavigate(
+  private async executeNavigate(
     rawArguments: string,
     user: RequestUser,
     datasets: NamedEntity[],
     dashboards: NamedEntity[],
-  ): ToolExecutionResult {
+  ): Promise<ToolExecutionResult> {
     try {
       const parsed = NavigateArgs.parse(JSON.parse(rawArguments));
+      const effective = await this.permissions.getEffectivePermissions(
+        user.tenantId,
+        user.roleIds,
+      );
       const result = resolveNavigation(
         parsed.intent,
         parsed.targetName,
-        user.role,
+        hasPermission(effective, 'settings', 'VIEW'),
         dashboards,
         datasets,
       );

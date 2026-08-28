@@ -5,8 +5,9 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { CoreModule } from './core/core.module';
 import { JwtAuthGuard } from './core/guards/jwt-auth.guard';
 import { ModuleGuard } from './core/guards/module.guard';
-import { RolesGuard } from './core/guards/roles.guard';
+import { PermissionGuard } from './core/guards/permission.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
+import { PermissionsModule } from './core/permissions/permissions.module';
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
@@ -24,6 +25,7 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { QueryModule } from './modules/query/query.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
 import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -39,10 +41,12 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
     CoreModule,
     RedisModule,
+    PermissionsModule,
     AuditModule,
     AuthModule,
     TenantsModule,
     UsersModule,
+    RolesModule,
     PlatformAdminModule,
     DatasourcesModule,
     DatasetsModule,
@@ -63,7 +67,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: ModuleGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
   ],

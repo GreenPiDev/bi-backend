@@ -13,7 +13,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateAlertSchema,
@@ -24,16 +24,17 @@ import {
 import { AlertsService } from './alerts.service';
 
 @Controller('alerts')
-@Roles('OWNER', 'ADMIN')
 export class AlertsController {
   constructor(private readonly alerts: AlertsService) {}
 
   @Get()
+  @RequiresPermission('settings', 'VIEW')
   list(): Promise<Alert[]> {
     return this.alerts.list();
   }
 
   @Post()
+  @RequiresPermission('settings', 'CREATE')
   create(
     @Body(new ZodValidationPipe(CreateAlertSchema)) dto: CreateAlertDto,
     @CurrentUser() user: RequestUser,
@@ -42,6 +43,7 @@ export class AlertsController {
   }
 
   @Patch(':id')
+  @RequiresPermission('settings', 'UPDATE')
   update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateAlertSchema)) dto: UpdateAlertDto,
@@ -50,6 +52,7 @@ export class AlertsController {
   }
 
   @Delete(':id')
+  @RequiresPermission('settings', 'DELETE')
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {
     return this.alerts.remove(id);

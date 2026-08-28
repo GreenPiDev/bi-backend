@@ -8,33 +8,22 @@ const DASHBOARDS = [
 const DATASETS = [{ id: 's1', name: 'Perakende Satış' }];
 
 describe('resolveNavigation', () => {
-  it('VIEWER icin ayarlar sayfasina izin vermez', () => {
+  it('settings izni yoksa ayarlar sayfasina izin vermez', () => {
     const result = resolveNavigation(
       'settings',
       undefined,
-      'VIEWER',
+      false,
       DASHBOARDS,
       DATASETS,
     );
     expect(result.path).toBeNull();
   });
 
-  it('OWNER icin ayarlar sayfasina izin verir', () => {
+  it('settings izni varsa ayarlar sayfasina izin verir', () => {
     const result = resolveNavigation(
       'settings',
       undefined,
-      'OWNER',
-      DASHBOARDS,
-      DATASETS,
-    );
-    expect(result.path).toBe('/settings');
-  });
-
-  it('ADMIN icin ayarlar sayfasina izin verir', () => {
-    const result = resolveNavigation(
-      'settings',
-      undefined,
-      'ADMIN',
+      true,
       DASHBOARDS,
       DATASETS,
     );
@@ -45,7 +34,7 @@ describe('resolveNavigation', () => {
     const result = resolveNavigation(
       'dashboard_view',
       'olmayan pano',
-      'EDITOR',
+      false,
       DASHBOARDS,
       DATASETS,
     );
@@ -56,7 +45,7 @@ describe('resolveNavigation', () => {
     const result = resolveNavigation(
       'dashboard_view',
       'satış',
-      'VIEWER',
+      false,
       DASHBOARDS,
       DATASETS,
     );
@@ -67,14 +56,14 @@ describe('resolveNavigation', () => {
     const result = resolveNavigation(
       'dataset_view',
       'Perakende',
-      'VIEWER',
+      false,
       DASHBOARDS,
       DATASETS,
     );
     expect(result.path).toBe('/datasets/s1');
   });
 
-  it('rol kisiti olmayan intent lerde her rol icin calisir', () => {
+  it('izin kisiti olmayan intent lerde her durumda calisir', () => {
     for (const intent of [
       'dashboards_list',
       'datasets_list',
@@ -83,7 +72,7 @@ describe('resolveNavigation', () => {
       const result = resolveNavigation(
         intent,
         undefined,
-        'VIEWER',
+        false,
         DASHBOARDS,
         DATASETS,
       );

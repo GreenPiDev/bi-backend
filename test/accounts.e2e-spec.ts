@@ -7,6 +7,11 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import {
+  createTestRole,
+  inviteAndAcceptWithRoles,
+  inviteUserWithNoPermissions,
+} from './support/roles';
 
 describe('Accounts (e2e)', () => {
   let app: INestApplication;
@@ -125,21 +130,13 @@ describe('Accounts (e2e)', () => {
     expect(res.body.city).toBe('Istanbul');
   });
 
-  it('VIEWER firma olusturamaz (403)', async () => {
-    const inviteRes = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', cookiesA)
-      .send({ email: `viewer${emailSuffix}`, role: 'VIEWER' });
-    const token = inviteRes.body.token as string;
-
-    const acceptRes = await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${token}/accept`)
-      .send({ name: 'Viewer A', password });
-    const viewerCookies = acceptRes.headers['set-cookie'] as unknown as
-      string[] | undefined;
-    if (!viewerCookies) {
-      throw new Error('Davet kabul edilemedi, cookie alinamadi.');
-    }
+  it('izinsiz kullanici firma olusturamaz (403)', async () => {
+    const viewerCookies = await inviteUserWithNoPermissions(
+      app,
+      cookiesA,
+      `viewer${emailSuffix}`,
+      password,
+    );
 
     const res = await request(app.getHttpServer())
       .post('/api/v1/accounts')
@@ -148,21 +145,17 @@ describe('Accounts (e2e)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('SALES firma olusturabilir ama silemez', async () => {
-    const inviteRes = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', cookiesA)
-      .send({ email: `sales${emailSuffix}`, role: 'SALES' });
-    const token = inviteRes.body.token as string;
-
-    const acceptRes = await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${token}/accept`)
-      .send({ name: 'Sales A', password });
-    const salesCookies = acceptRes.headers['set-cookie'] as unknown as
-      string[] | undefined;
-    if (!salesCookies) {
-      throw new Error('Davet kabul edilemedi, cookie alinamadi.');
-    }
+  it('sadece CREATE/UPDATE izni olan kullanici firma olusturabilir ama silemez', async () => {
+    const salesRoleId = await createTestRole(app, cookiesA, 'Satis', [
+      { pageKey: 'accounts', actions: ['VIEW', 'CREATE', 'UPDATE'] },
+    ]);
+    const salesCookies = await inviteAndAcceptWithRoles(
+      app,
+      cookiesA,
+      `sales${emailSuffix}`,
+      password,
+      [salesRoleId],
+    );
 
     const createRes = await request(app.getHttpServer())
       .post('/api/v1/accounts')

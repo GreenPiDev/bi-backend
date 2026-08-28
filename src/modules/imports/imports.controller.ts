@@ -16,7 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { diskStorage } from 'multer';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { MAX_UPLOAD_SIZE_BYTES } from '../datasources/datasources.constants';
 import { detectDataSourceType } from '../datasources/file-signature';
@@ -71,7 +71,7 @@ export class ImportsController {
   constructor(private readonly imports: ImportsService) {}
 
   @Post('preview')
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('accounts', 'CREATE')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async preview(
     @UploadedFile() file: Express.Multer.File,
@@ -82,7 +82,7 @@ export class ImportsController {
   }
 
   @Post('accounts')
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('accounts', 'CREATE')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importAccounts(
     @UploadedFile() file: Express.Multer.File,
@@ -95,7 +95,7 @@ export class ImportsController {
   }
 
   @Post('contacts')
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('contacts', 'CREATE')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importContacts(
     @UploadedFile() file: Express.Multer.File,

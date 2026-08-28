@@ -17,7 +17,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { MAX_UPLOAD_SIZE_BYTES } from './datasources.constants';
@@ -35,7 +35,7 @@ export class DatasourcesController {
   constructor(private readonly datasources: DatasourcesService) {}
 
   @Post('upload')
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('datasets', 'CREATE')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },

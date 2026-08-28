@@ -10,14 +10,14 @@ describe('TenantContext', () => {
   });
 
   it("run icinde get() dogru store'u doner", () => {
-    const store = { tenantId: 't1', userId: 'u1', role: 'OWNER' as const };
+    const store = { tenantId: 't1', userId: 'u1', roleIds: [] };
     const result = TenantContext.run(store, () => TenantContext.get());
     expect(result).toEqual(store);
   });
 
   it('ic ice run cagrilari birbirini etkilemez', () => {
-    const outer = { tenantId: 'outer', userId: 'u1', role: 'OWNER' as const };
-    const inner = { tenantId: 'inner', userId: 'u2', role: 'VIEWER' as const };
+    const outer = { tenantId: 'outer', userId: 'u1', roleIds: [] };
+    const inner = { tenantId: 'inner', userId: 'u2', roleIds: [] };
 
     TenantContext.run(outer, () => {
       expect(TenantContext.get()?.tenantId).toBe('outer');
@@ -29,7 +29,7 @@ describe('TenantContext', () => {
   });
 
   it('async callback boyunca context korunur', async () => {
-    const store = { tenantId: 't1', userId: 'u1', role: 'ADMIN' as const };
+    const store = { tenantId: 't1', userId: 'u1', roleIds: [] };
     const result = await TenantContext.run(store, async () => {
       await new Promise((resolve) => setTimeout(resolve, 1));
       return TenantContext.get()?.tenantId;

@@ -6,7 +6,7 @@ const TENANT_ID = 'tenant-1';
 const USER = {
   id: 'u1',
   tenantId: TENANT_ID,
-  role: 'EDITOR' as const,
+  roleIds: ['role-editor'],
   isPlatformAdmin: false,
 };
 
@@ -73,6 +73,17 @@ function createConfig(model = 'gpt-4o-mini') {
   return { get: vi.fn().mockReturnValue(model) };
 }
 
+function createPermissions(canViewSettings = true) {
+  return {
+    getEffectivePermissions: vi.fn().mockResolvedValue({
+      isCompanyAdmin: false,
+      permissions: canViewSettings
+        ? [{ pageKey: 'settings', tabKey: null, action: 'VIEW' }]
+        : [],
+    }),
+  };
+}
+
 describe('ChatbotService', () => {
   it('gecerli run_query tool-call ini dogru tenantId ile QueryService.runQuery e delege eder', async () => {
     const runQuery = vi.fn().mockResolvedValue({
@@ -100,6 +111,7 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery } as never,
       createConfig() as never,
+      createPermissions() as never,
     );
 
     const result = await service.chat(
@@ -141,6 +153,7 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery } as never,
       createConfig() as never,
+      createPermissions() as never,
     );
 
     const result = await service.chat(
@@ -166,6 +179,7 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery: vi.fn() } as never,
       createConfig() as never,
+      createPermissions() as never,
     );
 
     const result = await service.chat(
@@ -178,8 +192,7 @@ describe('ChatbotService', () => {
     expect(result.navigateTo).toBeNull();
   });
 
-  it('navigate tool u sadece resolveNavigation uzerinden path uretir - VIEWER ayarlara gidemez', async () => {
-    const viewer = { ...USER, role: 'VIEWER' as const };
+  it('navigate tool u sadece resolveNavigation uzerinden path uretir - settings izni yoksa ayarlara gidemez', async () => {
     const create = vi
       .fn()
       .mockResolvedValueOnce(
@@ -192,11 +205,12 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery: vi.fn() } as never,
       createConfig() as never,
+      createPermissions(false) as never,
     );
 
     const result = await service.chat(
       { message: 'ayarlara git', history: [] },
-      viewer,
+      USER,
     );
 
     expect(result.navigateTo).toBeNull();
@@ -219,6 +233,7 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery: vi.fn() } as never,
       createConfig() as never,
+      createPermissions() as never,
     );
 
     const result = await service.chat(
@@ -252,6 +267,7 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery: vi.fn() } as never,
       createConfig() as never,
+      createPermissions() as never,
     );
 
     const result = await service.chat(
@@ -275,6 +291,7 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery: vi.fn() } as never,
       createConfig() as never,
+      createPermissions() as never,
     );
 
     const result = await service.chat(

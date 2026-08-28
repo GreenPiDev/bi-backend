@@ -1,9 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { CompanyAdminGuard } from '../../core/guards/company-admin.guard';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { SafeUser } from '../auth/auth.service';
 import {
@@ -48,22 +56,21 @@ export class UsersController {
     return this.users.changePassword(user, dto);
   }
 
-  @Roles('OWNER', 'ADMIN')
+  @UseGuards(CompanyAdminGuard)
   @Post('invite')
   invite(
-    @CurrentUser() user: RequestUser,
     @Body(new ZodValidationPipe(InviteUserSchema)) dto: InviteUserDto,
   ): Promise<{ token: string; expiresAt: Date }> {
-    return this.users.invite(user.role, dto);
+    return this.users.invite(dto);
   }
 
-  @Roles('OWNER', 'ADMIN')
+  @UseGuards(CompanyAdminGuard)
   @Patch(':id/role')
   updateRole(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateRoleSchema)) dto: UpdateRoleDto,
   ): Promise<SafeUser> {
-    return this.users.updateRole(user, id, dto.role);
+    return this.users.updateRole(user, id, dto);
   }
 }

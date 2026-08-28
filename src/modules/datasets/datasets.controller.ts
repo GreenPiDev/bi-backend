@@ -4,7 +4,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   DatasetsService,
@@ -39,7 +39,7 @@ export class DatasetsController {
   }
 
   @Patch(':id/fields')
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('datasets', 'UPDATE')
   updateFields(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateDatasetFieldsSchema))

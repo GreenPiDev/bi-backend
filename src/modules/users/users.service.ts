@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { User, UserRole } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { type RequestUser } from '../../core/decorators/current-user.decorator';
 import { AppException } from '../../core/errors/app.exception';
@@ -13,13 +12,17 @@ import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import {
   AuthService,
+  toSafeUser,
+  USER_WITH_ROLES_INCLUDE,
   type AuthResult,
   type SafeUser,
+  type UserWithRoles,
 } from '../auth/auth.service';
 import type { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { InviteUserDto } from './dto/invite-user.dto';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
+import type { UpdateRoleDto } from './dto/update-role.dto';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -41,13 +44,15 @@ export class UsersService {
   async list(): Promise<SafeUser[]> {
     const users = await this.prisma.user.findMany({
       orderBy: { createdAt: 'asc' },
+      include: USER_WITH_ROLES_INCLUDE,
     });
-    return users.map((u) => this.toSafeUser(u));
+    return users.map((u) => toSafeUser(u as UserWithRoles));
   }
 
   async getProfile(actingUser: RequestUser): Promise<UserProfile> {
     const user = await this.prisma.user.findFirst({
       where: { id: actingUser.id },
+      include: USER_WITH_ROLES_INCLUDE,
     });
     if (!user) {
       throw new AppException(
@@ -56,20 +61,28 @@ export class UsersService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return this.toProfile(user);
+    return this.toProfile(user as UserWithRoles);
+  }
+
+  /** roleIds'in tenant'a ait gercek roller oldugunu dogrular - baska bir tenant'in
+   * roleId'si gonderilirse (404 yerine burada) sessizce filtrelenmez, hata firlatilir. */
+  private async assertRoleIdsBelongToTenant(roleIds: string[]): Promise<void> {
+    const count = await this.prisma.role.count({
+      where: { id: { in: roleIds } },
+    });
+    if (count !== roleIds.length) {
+      throw new AppException(
+        'UNKNOWN_ROLE',
+        'Belirtilen rollerden biri veya birden fazlasi bu tenant icinde bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   async invite(
-    inviterRole: UserRole,
     dto: InviteUserDto,
   ): Promise<{ token: string; expiresAt: Date }> {
-    if (dto.role === 'ADMIN' && inviterRole !== 'OWNER') {
-      throw new AppException(
-        'FORBIDDEN',
-        'ADMIN rolunde davet sadece OWNER tarafindan yapilabilir.',
-        HttpStatus.FORBIDDEN,
-      );
-    }
+    await this.assertRoleIdsBelongToTenant(dto.roleIds);
 
     const existingUser = await this.rawPrisma.user.findUnique({
       where: { email: dto.email },
@@ -88,7 +101,7 @@ export class UsersService {
       data: {
         tenantId: TenantContext.getOrThrow().tenantId,
         email: dto.email,
-        role: dto.role,
+        roleIds: dto.roleIds,
         token,
         expiresAt,
       },
@@ -98,7 +111,7 @@ export class UsersService {
       action: 'INVITE',
       entity: 'Invitation',
       entityId: token,
-      meta: { email: dto.email, role: dto.role },
+      meta: { email: dto.email, roleIds: dto.roleIds },
     });
 
     return { token, expiresAt };
@@ -107,7 +120,7 @@ export class UsersService {
   async updateRole(
     actingUser: RequestUser,
     targetUserId: string,
-    newRole: UserRole,
+    dto: UpdateRoleDto,
   ): Promise<SafeUser> {
     if (targetUserId === actingUser.id) {
       throw new AppException(
@@ -119,6 +132,7 @@ export class UsersService {
 
     const target = await this.prisma.user.findFirst({
       where: { id: targetUserId },
+      include: USER_WITH_ROLES_INCLUDE,
     });
     if (!target) {
       throw new AppException(
@@ -128,28 +142,29 @@ export class UsersService {
       );
     }
 
-    if (
-      (target.role === 'OWNER' || newRole === 'OWNER') &&
-      actingUser.role !== 'OWNER'
-    ) {
-      throw new AppException(
-        'FORBIDDEN',
-        'OWNER roluyle ilgili degisiklikleri sadece OWNER yapabilir.',
-        HttpStatus.FORBIDDEN,
-      );
-    }
+    await this.assertRoleIdsBelongToTenant(dto.roleIds);
 
-    const updated = await this.prisma.user.update({
+    const previousRoleIds = target.roles.map((r) => r.role.id);
+    await this.rawPrisma.$transaction([
+      this.rawPrisma.userRoleLink.deleteMany({
+        where: { userId: targetUserId },
+      }),
+      this.rawPrisma.userRoleLink.createMany({
+        data: dto.roleIds.map((roleId) => ({ userId: targetUserId, roleId })),
+      }),
+    ]);
+
+    const updated = await this.prisma.user.findFirst({
       where: { id: targetUserId },
-      data: { role: newRole },
+      include: USER_WITH_ROLES_INCLUDE,
     });
     await this.audit.log({
       action: 'UPDATE_ROLE',
       entity: 'User',
       entityId: targetUserId,
-      meta: { previousRole: target.role, newRole },
+      meta: { previousRoleIds, newRoleIds: dto.roleIds },
     });
-    return this.toSafeUser(updated);
+    return toSafeUser(updated as UserWithRoles);
   }
 
   async updateProfile(
@@ -175,6 +190,7 @@ export class UsersService {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
       },
+      include: USER_WITH_ROLES_INCLUDE,
     });
 
     await this.audit.log({
@@ -184,7 +200,7 @@ export class UsersService {
       meta: { name: dto.name, email: dto.email },
     });
 
-    return this.toProfile(updated);
+    return this.toProfile(updated as UserWithRoles);
   }
 
   async changePassword(
@@ -231,7 +247,8 @@ export class UsersService {
   async getInvitationInfo(token: string): Promise<{
     tenantName: string;
     email: string;
-    role: UserRole;
+    roleIds: string[];
+    roleNames: string[];
     expired: boolean;
   }> {
     const invitation = await this.rawPrisma.invitation.findUnique({
@@ -245,10 +262,15 @@ export class UsersService {
         HttpStatus.NOT_FOUND,
       );
     }
+    const roles = await this.rawPrisma.role.findMany({
+      where: { id: { in: invitation.roleIds } },
+      select: { name: true },
+    });
     return {
       tenantName: invitation.tenant.name,
       email: invitation.email,
-      role: invitation.role,
+      roleIds: invitation.roleIds,
+      roleNames: roles.map((r) => r.name),
       expired: invitation.expiresAt < new Date(),
     };
   }
@@ -304,8 +326,11 @@ export class UsersService {
           email: invitation.email,
           passwordHash,
           name: dto.name,
-          role: invitation.role,
+          roles: {
+            create: invitation.roleIds.map((roleId) => ({ roleId })),
+          },
         },
+        include: USER_WITH_ROLES_INCLUDE,
       });
       await tx.invitation.update({
         where: { id: invitation.id },
@@ -314,23 +339,12 @@ export class UsersService {
       return created;
     });
 
-    return this.authService.issueTokens(user);
+    return this.authService.issueTokens(user as UserWithRoles);
   }
 
-  private toSafeUser(user: User): SafeUser {
+  private toProfile(user: UserWithRoles): UserProfile {
     return {
-      id: user.id,
-      tenantId: user.tenantId,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      isPlatformAdmin: user.isPlatformAdmin,
-    };
-  }
-
-  private toProfile(user: User): UserProfile {
-    return {
-      ...this.toSafeUser(user),
+      ...toSafeUser(user),
       isActive: user.isActive,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,

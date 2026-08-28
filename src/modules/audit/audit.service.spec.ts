@@ -13,7 +13,7 @@ function createPrisma() {
   };
 }
 
-const store = { tenantId: 't1', userId: 'u1', role: 'OWNER' as const };
+const store = { tenantId: 't1', userId: 'u1', roleIds: [] };
 
 describe('AuditService', () => {
   it('log: TenantContext disindaysa sessizce hicbir sey yapmaz', async () => {

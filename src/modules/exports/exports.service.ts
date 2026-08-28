@@ -33,7 +33,7 @@ export class ExportsService {
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,
-      role: user.role,
+      roleIds: user.roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
     });
     return this.dashboardPdf.render(dashboardId, accessToken);

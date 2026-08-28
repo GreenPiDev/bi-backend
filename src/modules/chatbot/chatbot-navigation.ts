@@ -1,5 +1,3 @@
-import type { UserRole } from '@prisma/client';
-
 /**
  * Sabit navigasyon niyetleri. LLM asla serbest metin bir path uretmez -
  * sadece bu enum'dan birini secip (gerekirse) bir hedef ad soyler.
@@ -26,8 +24,6 @@ export interface NavigationResult {
   reason: string;
 }
 
-const ADMIN_ROLES: UserRole[] = ['OWNER', 'ADMIN'];
-
 function findByName(
   entities: NamedEntity[],
   targetName: string | undefined,
@@ -47,7 +43,7 @@ function findByName(
 export function resolveNavigation(
   intent: NavigationIntent,
   targetName: string | undefined,
-  role: UserRole,
+  canViewSettings: boolean,
   dashboards: NamedEntity[],
   datasets: NamedEntity[],
 ): NavigationResult {
@@ -65,7 +61,7 @@ export function resolveNavigation(
     case 'profile':
       return { path: '/profile', reason: 'Profil sayfasina yonlendirildi.' };
     case 'settings':
-      if (!ADMIN_ROLES.includes(role)) {
+      if (!canViewSettings) {
         return {
           path: null,
           reason:

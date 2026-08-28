@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const UpdateRoleSchema = z.object({
-  role: z.enum(['OWNER', 'ADMIN', 'EDITOR', 'SALES', 'VIEWER']),
+  roleIds: z.array(z.string().uuid()).min(1),
 });
 
 export type UpdateRoleDto = z.infer<typeof UpdateRoleSchema>;

@@ -19,14 +19,14 @@ describe('TokenService', () => {
     const token = tokens.signAccessToken({
       sub: 'u1',
       tenantId: 't1',
-      role: 'OWNER',
+      roleIds: ['r1'],
       isPlatformAdmin: false,
     });
     const payload = tokens.verifyAccessToken(token);
     expect(payload).toMatchObject({
       sub: 'u1',
       tenantId: 't1',
-      role: 'OWNER',
+      roleIds: ['r1'],
       type: 'access',
     });
   });
@@ -45,7 +45,7 @@ describe('TokenService', () => {
     const token = tokens.signAccessToken({
       sub: 'u1',
       tenantId: 't1',
-      role: 'OWNER',
+      roleIds: ['r1'],
       isPlatformAdmin: false,
     });
     expect(() => tokens.verifyRefreshToken(token)).toThrow();
@@ -59,7 +59,7 @@ describe('TokenService', () => {
     const token = other.signAccessToken({
       sub: 'u1',
       tenantId: 't1',
-      role: 'OWNER',
+      roleIds: ['r1'],
       isPlatformAdmin: false,
     });
     expect(() => tokens.verifyAccessToken(token)).toThrow();

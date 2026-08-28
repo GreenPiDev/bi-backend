@@ -39,6 +39,7 @@ export async function cleanupTestTenants(
   await prisma.sectorOption.deleteMany({ where: tenantFilter });
   await prisma.tenantSetting.deleteMany({ where: tenantFilter });
   await prisma.user.deleteMany({ where: tenantFilter });
+  await prisma.role.deleteMany({ where: tenantFilter });
   await prisma.tenantModule.deleteMany({ where: tenantFilter });
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
 

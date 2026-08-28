@@ -18,7 +18,7 @@ import { Public } from '../../core/decorators/public.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { setAuthCookies } from '../../core/http/set-auth-cookies';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
-import { AuthService, type SafeUser } from './auth.service';
+import { AuthService, type AuthenticatedUser } from './auth.service';
 import { LoginDto, LoginSchema } from './dto/login.dto';
 import { RegisterDto, RegisterSchema } from './dto/register.dto';
 import { LoginThrottlerGuard } from './login-throttler.guard';
@@ -33,7 +33,7 @@ export class AuthController {
   async register(
     @Body(new ZodValidationPipe(RegisterSchema)) dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: SafeUser }> {
+  ): Promise<{ user: AuthenticatedUser }> {
     const result = await this.auth.register(dto);
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user };
@@ -46,7 +46,7 @@ export class AuthController {
   async login(
     @Body(new ZodValidationPipe(LoginSchema)) dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: SafeUser }> {
+  ): Promise<{ user: AuthenticatedUser }> {
     const result = await this.auth.login(dto);
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user };
@@ -57,7 +57,7 @@ export class AuthController {
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: SafeUser }> {
+  ): Promise<{ user: AuthenticatedUser }> {
     const refreshToken = (req.cookies as Record<string, string> | undefined)?.[
       REFRESH_TOKEN_COOKIE
     ];
@@ -81,7 +81,7 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@CurrentUser() user: RequestUser): Promise<SafeUser> {
+  async me(@CurrentUser() user: RequestUser): Promise<AuthenticatedUser> {
     return this.auth.me(user.id);
   }
 }

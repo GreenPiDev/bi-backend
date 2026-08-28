@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   UpdateTenantSettingSchema,
@@ -25,7 +25,7 @@ export class TenantSettingsController {
   }
 
   @Patch(':key')
-  @Roles('OWNER', 'ADMIN')
+  @RequiresPermission('settings', 'UPDATE')
   update(
     @Param('key') key: string,
     @Body(new ZodValidationPipe(UpdateTenantSettingSchema))

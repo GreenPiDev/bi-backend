@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Account } from '@prisma/client';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { AccountsService, type AccountWithMeta } from './accounts.service';
@@ -42,7 +42,7 @@ export class AccountsController {
   }
 
   @Post()
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('accounts', 'CREATE')
   create(
     @Body(new ZodValidationPipe(CreateAccountSchema)) dto: CreateAccountDto,
   ): Promise<Account> {
@@ -50,7 +50,7 @@ export class AccountsController {
   }
 
   @Patch(':id')
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('accounts', 'UPDATE')
   update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateAccountSchema)) dto: UpdateAccountDto,
@@ -59,7 +59,7 @@ export class AccountsController {
   }
 
   @Delete(':id')
-  @Roles('OWNER', 'ADMIN')
+  @RequiresPermission('accounts', 'DELETE')
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {
     return this.accounts.remove(id);

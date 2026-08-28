@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { inviteUserWithNoPermissions } from './support/roles';
 import { REPORTS_QUEUE } from '../src/jobs/reports-queue.constants';
 
 describe('Reports (e2e)', () => {
@@ -60,14 +61,12 @@ describe('Reports (e2e)', () => {
       });
     cookiesB = registerB.headers['set-cookie'] as unknown as string[];
 
-    const inviteRes = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', cookiesA)
-      .send({ email: `viewer${emailSuffix}`, role: 'VIEWER' });
-    const acceptRes = await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${inviteRes.body.token as string}/accept`)
-      .send({ name: 'Viewer', password });
-    viewerCookies = acceptRes.headers['set-cookie'] as unknown as string[];
+    viewerCookies = await inviteUserWithNoPermissions(
+      app,
+      cookiesA,
+      `viewer${emailSuffix}`,
+      password,
+    );
 
     const dashboardRes = await request(app.getHttpServer())
       .post('/api/v1/dashboards')

@@ -9,7 +9,7 @@ import {
   Post,
 } from '@nestjs/common';
 import type { Widget } from '@prisma/client';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateWidgetSchema,
@@ -29,7 +29,7 @@ export class WidgetsController {
   }
 
   @Post()
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('dashboards', 'CREATE')
   create(
     @Param('dashboardId') dashboardId: string,
     @Body(new ZodValidationPipe(CreateWidgetSchema)) dto: CreateWidgetDto,
@@ -38,7 +38,7 @@ export class WidgetsController {
   }
 
   @Patch(':id')
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('dashboards', 'UPDATE')
   update(
     @Param('dashboardId') dashboardId: string,
     @Param('id') id: string,
@@ -48,7 +48,7 @@ export class WidgetsController {
   }
 
   @Delete(':id')
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('dashboards', 'DELETE')
   @HttpCode(204)
   remove(
     @Param('dashboardId') dashboardId: string,

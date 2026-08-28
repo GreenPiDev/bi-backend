@@ -378,7 +378,7 @@ async function main(): Promise<void> {
       );
 
       await TenantContext.run(
-        { tenantId: user.tenantId, userId: user.id, role: 'OWNER' },
+        { tenantId: user.tenantId, userId: user.id, roleIds: [] },
         async () => {
           const dashboard = await dashboards.create(user.tenantId, user.id, {
             name: dashboardName,

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Contact } from '@prisma/client';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ContactsService } from './contacts.service';
@@ -42,7 +42,7 @@ export class ContactsController {
   }
 
   @Post()
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('contacts', 'CREATE')
   create(
     @Body(new ZodValidationPipe(CreateContactSchema)) dto: CreateContactDto,
   ): Promise<Contact> {
@@ -50,7 +50,7 @@ export class ContactsController {
   }
 
   @Patch(':id')
-  @Roles('OWNER', 'ADMIN', 'SALES')
+  @RequiresPermission('contacts', 'UPDATE')
   update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateContactSchema)) dto: UpdateContactDto,
@@ -59,7 +59,7 @@ export class ContactsController {
   }
 
   @Delete(':id')
-  @Roles('OWNER', 'ADMIN')
+  @RequiresPermission('contacts', 'DELETE')
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {
     return this.contacts.remove(id);

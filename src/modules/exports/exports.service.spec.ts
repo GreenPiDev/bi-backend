@@ -78,7 +78,7 @@ describe('ExportsService', () => {
     const user = {
       id: 'u1',
       tenantId: TENANT_ID,
-      role: 'OWNER' as const,
+      roleIds: ['role-1'],
       isPlatformAdmin: false,
     };
     const pdf = await service.exportDashboardPdf(DASHBOARD_ID, user);
@@ -86,7 +86,7 @@ describe('ExportsService', () => {
     expect(tokenService.signAccessToken).toHaveBeenCalledWith({
       sub: 'u1',
       tenantId: TENANT_ID,
-      role: 'OWNER',
+      roleIds: ['role-1'],
       isPlatformAdmin: false,
     });
     expect(dashboardPdf.render).toHaveBeenCalledWith(

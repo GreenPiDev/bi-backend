@@ -43,7 +43,9 @@ describe('Auth (e2e)', () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.user.role).toBe('OWNER');
+    expect(res.body.user.roles).toEqual([
+      expect.objectContaining({ name: 'COMPANYADMIN' }),
+    ]);
     expect(res.headers['set-cookie']).toBeDefined();
     cookies = res.headers['set-cookie'] as unknown as string[];
   });

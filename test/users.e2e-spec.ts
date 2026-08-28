@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { createTestRole } from './support/roles';
 
 describe('Users & Invitations (e2e)', () => {
   let app: INestApplication;
@@ -20,6 +21,9 @@ describe('Users & Invitations (e2e)', () => {
   let viewerCookies: string[];
   let ownerId: string;
   let viewerId: string;
+  let viewerRoleId: string;
+  let editorRoleId: string;
+  let companyAdminRoleId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -39,7 +43,7 @@ describe('Users & Invitations (e2e)', () => {
     await app.close();
   });
 
-  it('OWNER kaydolur', async () => {
+  it('COMPANYADMIN kaydolur', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({
@@ -51,6 +55,17 @@ describe('Users & Invitations (e2e)', () => {
     expect(res.status).toBe(201);
     ownerCookies = res.headers['set-cookie'] as unknown as string[];
     ownerId = res.body.user.id;
+    companyAdminRoleId = res.body.user.roles[0].id as string;
+
+    viewerRoleId = await createTestRole(app, ownerCookies, 'Goruntuleyici', [
+      { pageKey: 'dashboards', actions: ['VIEW'] },
+    ]);
+    editorRoleId = await createTestRole(app, ownerCookies, 'Editor', [
+      {
+        pageKey: 'dashboards',
+        actions: ['VIEW', 'CREATE', 'UPDATE', 'DELETE'],
+      },
+    ]);
   });
 
   it('kimliksiz users listesi 401 doner', async () => {
@@ -58,11 +73,11 @@ describe('Users & Invitations (e2e)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('OWNER, VIEWER davet eder', async () => {
+  it('COMPANYADMIN, Goruntuleyici rolunde davet eder', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/users/invite')
       .set('Cookie', ownerCookies)
-      .send({ email: viewerEmail, role: 'VIEWER' });
+      .send({ email: viewerEmail, roleIds: [viewerRoleId] });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
 
@@ -74,7 +89,7 @@ describe('Users & Invitations (e2e)', () => {
     expect(infoRes.status).toBe(200);
     expect(infoRes.body).toMatchObject({
       email: viewerEmail,
-      role: 'VIEWER',
+      roleIds: [viewerRoleId],
       expired: false,
     });
 
@@ -82,7 +97,9 @@ describe('Users & Invitations (e2e)', () => {
       .post(`/api/v1/invitations/${invitationToken}/accept`)
       .send({ name: 'Viewer Kisi', password: 'sifre1234' });
     expect(acceptRes.status).toBe(201);
-    expect(acceptRes.body.user.role).toBe('VIEWER');
+    expect(acceptRes.body.user.roles).toEqual([
+      expect.objectContaining({ id: viewerRoleId, name: 'Goruntuleyici' }),
+    ]);
     viewerCookies = acceptRes.headers['set-cookie'] as unknown as string[];
     viewerId = acceptRes.body.user.id;
   });
@@ -91,7 +108,7 @@ describe('Users & Invitations (e2e)', () => {
     const invite = await request(app.getHttpServer())
       .post('/api/v1/users/invite')
       .set('Cookie', ownerCookies)
-      .send({ email: `retry${emailSuffix}`, role: 'VIEWER' });
+      .send({ email: `retry${emailSuffix}`, roleIds: [viewerRoleId] });
     const token = invite.body.token as string;
 
     await request(app.getHttpServer())
@@ -109,52 +126,58 @@ describe('Users & Invitations (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/users/invite')
       .set('Cookie', ownerCookies)
-      .send({ email: ownerEmail, role: 'VIEWER' });
+      .send({ email: ownerEmail, roleIds: [viewerRoleId] });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('EMAIL_TAKEN');
   });
 
-  it('VIEWER kendi rolunu degistiremez, 403 FORBIDDEN doner', async () => {
+  it('COMPANYADMIN olmayan kullanici rol degistiremez, 403 FORBIDDEN doner', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/users/${viewerId}/role`)
       .set('Cookie', viewerCookies)
-      .send({ role: 'ADMIN' });
+      .send({ roleIds: [editorRoleId] });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
-  it('OWNER, VIEWER rolunu EDITOR yapabilir', async () => {
+  it('COMPANYADMIN, Goruntuleyici rolunu Editor yapabilir', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/users/${viewerId}/role`)
       .set('Cookie', ownerCookies)
-      .send({ role: 'EDITOR' });
+      .send({ roleIds: [editorRoleId] });
     expect(res.status).toBe(200);
-    expect(res.body.role).toBe('EDITOR');
+    expect(res.body.roles).toEqual([
+      expect.objectContaining({ id: editorRoleId, name: 'Editor' }),
+    ]);
   });
 
-  it('OWNER kendi rolunu degistiremez (CANNOT_CHANGE_OWN_ROLE)', async () => {
+  it('COMPANYADMIN kendi rolunu degistiremez (CANNOT_CHANGE_OWN_ROLE)', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/users/${ownerId}/role`)
       .set('Cookie', ownerCookies)
-      .send({ role: 'ADMIN' });
+      .send({ roleIds: [editorRoleId] });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('CANNOT_CHANGE_OWN_ROLE');
   });
 
-  it('OWNER baska bir kullaniciyi OWNER yapabilir ve geri alabilir', async () => {
+  it('COMPANYADMIN baska bir kullaniciya birden fazla rol atayabilir', async () => {
     const promoteRes = await request(app.getHttpServer())
       .patch(`/api/v1/users/${viewerId}/role`)
       .set('Cookie', ownerCookies)
-      .send({ role: 'OWNER' });
+      .send({ roleIds: [companyAdminRoleId, editorRoleId] });
     expect(promoteRes.status).toBe(200);
-    expect(promoteRes.body.role).toBe('OWNER');
+    expect(
+      (promoteRes.body.roles as { name: string }[]).map((r) => r.name).sort(),
+    ).toEqual(['COMPANYADMIN', 'Editor']);
 
     const demoteRes = await request(app.getHttpServer())
       .patch(`/api/v1/users/${viewerId}/role`)
       .set('Cookie', ownerCookies)
-      .send({ role: 'EDITOR' });
+      .send({ roleIds: [editorRoleId] });
     expect(demoteRes.status).toBe(200);
-    expect(demoteRes.body.role).toBe('EDITOR');
+    expect(demoteRes.body.roles).toEqual([
+      expect.objectContaining({ id: editorRoleId, name: 'Editor' }),
+    ]);
   });
 
   it('users listesi tum tenant kullanicilarini doner', async () => {
@@ -174,30 +197,25 @@ describe('Users & Invitations (e2e)', () => {
     expect(res.body.error.code).toBe('INVITATION_NOT_FOUND');
   });
 
-  it('ADMIN, ADMIN rolunde davet edemez (sadece OWNER edebilir)', async () => {
-    const adminEmail = `e2e-admin${emailSuffix}`;
-    const promoteRes = await request(app.getHttpServer())
-      .patch(`/api/v1/users/${viewerId}/role`)
-      .set('Cookie', ownerCookies)
-      .send({ role: 'ADMIN' });
-    expect(promoteRes.status).toBe(200);
+  it('COMPANYADMIN olmayan kullanici davet gonderemez (sadece COMPANYADMIN edebilir)', async () => {
+    const editorEmail = `e2e-editor${emailSuffix}`;
 
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email: viewerEmail, password: 'sifre1234' });
-    const adminCookies = loginRes.headers['set-cookie'] as unknown as string[];
+    const editorCookies = loginRes.headers['set-cookie'] as unknown as string[];
 
     const forbiddenRes = await request(app.getHttpServer())
       .post('/api/v1/users/invite')
-      .set('Cookie', adminCookies)
-      .send({ email: adminEmail, role: 'ADMIN' });
+      .set('Cookie', editorCookies)
+      .send({ email: editorEmail, roleIds: [viewerRoleId] });
     expect(forbiddenRes.status).toBe(403);
     expect(forbiddenRes.body.error.code).toBe('FORBIDDEN');
 
     const allowedRes = await request(app.getHttpServer())
       .post('/api/v1/users/invite')
-      .set('Cookie', adminCookies)
-      .send({ email: adminEmail, role: 'VIEWER' });
+      .set('Cookie', ownerCookies)
+      .send({ email: editorEmail, roleIds: [viewerRoleId] });
     expect(allowedRes.status).toBe(201);
   });
 });
@@ -253,7 +271,9 @@ describe('Kullanici profili (e2e)', () => {
       .set('Cookie', cookies);
     expect(res.status).toBe(200);
     expect(res.body.email).toBe(email);
-    expect(res.body.role).toBe('OWNER');
+    expect(res.body.roles).toEqual([
+      expect.objectContaining({ name: 'COMPANYADMIN' }),
+    ]);
     expect(res.body.createdAt).toBeDefined();
   });
 

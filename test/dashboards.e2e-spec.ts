@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { inviteUserWithNoPermissions } from './support/roles';
 
 describe('Dashboards (e2e)', () => {
   let app: INestApplication;
@@ -97,23 +98,13 @@ describe('Dashboards (e2e)', () => {
     expect(res.body.layout).toEqual(layout);
   });
 
-  it('VIEWER pano olusturamaz (403)', async () => {
-    const inviteRes = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', cookiesA)
-      .send({ email: `viewer${emailSuffix}`, role: 'VIEWER' });
-    expect(inviteRes.status).toBe(201);
-    const token = inviteRes.body.token as string;
-
-    const acceptRes = await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${token}/accept`)
-      .send({ name: 'Viewer A', password });
-    const viewerCookies = acceptRes.headers['set-cookie'] as unknown as
-      string[] | undefined;
-
-    if (!viewerCookies) {
-      throw new Error('Davet kabul edilemedi, cookie alinamadi.');
-    }
+  it('izinsiz kullanici pano olusturamaz (403)', async () => {
+    const viewerCookies = await inviteUserWithNoPermissions(
+      app,
+      cookiesA,
+      `viewer${emailSuffix}`,
+      password,
+    );
 
     const res = await request(app.getHttpServer())
       .post('/api/v1/dashboards')

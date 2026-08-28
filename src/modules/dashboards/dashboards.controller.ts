@@ -13,7 +13,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import { Roles } from '../../core/decorators/roles.decorator';
+import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   DashboardsService,
@@ -41,7 +41,7 @@ export class DashboardsController {
   }
 
   @Post()
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('dashboards', 'CREATE')
   create(
     @Body(new ZodValidationPipe(CreateDashboardSchema)) dto: CreateDashboardDto,
     @CurrentUser() user: RequestUser,
@@ -50,7 +50,7 @@ export class DashboardsController {
   }
 
   @Patch(':id')
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('dashboards', 'UPDATE')
   update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateDashboardSchema)) dto: UpdateDashboardDto,
@@ -59,7 +59,7 @@ export class DashboardsController {
   }
 
   @Delete(':id')
-  @Roles('OWNER', 'ADMIN', 'EDITOR')
+  @RequiresPermission('dashboards', 'DELETE')
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {
     return this.dashboards.remove(id);

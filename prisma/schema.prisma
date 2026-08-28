@@ -7,12 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  OWNER
-  ADMIN
-  EDITOR
-  SALES
-  VIEWER
+enum PermissionAction {
+  VIEW
+  CREATE
+  UPDATE
+  DELETE
 }
 
 enum AccountType {
@@ -70,6 +69,7 @@ model Tenant {
   contacts         Contact[]
   sectorOptions    SectorOption[]
   settings         TenantSetting[]
+  roles            Role[]
 
   @@map("tenants")
 }
@@ -80,16 +80,72 @@ model User {
   email           String    @unique
   passwordHash    String
   name            String
-  role            UserRole  @default(VIEWER)
   isActive        Boolean   @default(true)
   isPlatformAdmin Boolean   @default(false)
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant         @relation(fields: [tenantId], references: [id])
+  roles  UserRoleLink[]
 
   @@index([tenantId])
   @@map("users")
+}
+
+/** SUPERADMIN ve COMPANYADMIN sabit/koda gomulu roller olarak isSystem=true ile temsil
+ * edilir (COMPANYADMIN her tenant'ta kayit sirasinda otomatik olusur). isBasic=true olan
+ * rol, bir rol silindiginde o role sahip kullanicilarin dusecegi, tenant basina tam 1 adet
+ * bulunan silinemez rol("Temel Kullanici")dir. Bunlarin disindaki roller COMPANYADMIN
+ * tarafindan serbestce olusturulan/silinen dinamik rollerdir - isimleri kod icinde asla
+ * gecmez (bkz. CLAUDE.md SS0/SS5, docs/PLAN_ROL_YONETIMI.md SS0). */
+model Role {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  isSystem       Boolean  @default(false)
+  isBasic        Boolean  @default(false)
+  /** true ise guard bu rolu tasiyan kullaniciyi Page Registry'deki TUM sayfa/aksiyonlara
+   * (gelecekte eklenecekler dahil) yetkili sayar - RolePermission satiri gerektirmez.
+   * Sadece tenant kaydi sirasinda otomatik olusturulan COMPANYADMIN rolunde true'dur. */
+  isCompanyAdmin Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  permissions RolePermission[]
+  users       UserRoleLink[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("roles")
+}
+
+/** pageKey, core/modules/page-registry.ts'teki PAGE_REGISTRY key'lerine karsi whitelist
+ * dogrulanir (sorgu motorunun UNKNOWN_FIELD desenine paralel). tabKey null ise izin sayfanin
+ * tamami icin gecerlidir. */
+model RolePermission {
+  id      String            @id @default(uuid())
+  roleId  String
+  pageKey String
+  tabKey  String?
+  action  PermissionAction
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, pageKey, tabKey, action])
+  @@index([roleId])
+  @@map("role_permissions")
+}
+
+model UserRoleLink {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
 }
 
 model TenantModule {
@@ -110,7 +166,7 @@ model Invitation {
   id         String    @id @default(uuid())
   tenantId   String
   email      String
-  role       UserRole
+  roleIds    String[]  @default([])
   token      String    @unique
   expiresAt  DateTime
   acceptedAt DateTime?

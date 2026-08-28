@@ -92,7 +92,11 @@ export class CheckContactInactivityProcessor extends WorkerHost {
       }
     }
     const admins = await this.prisma.user.findMany({
-      where: { tenantId, role: { in: ['OWNER', 'ADMIN'] }, isActive: true },
+      where: {
+        tenantId,
+        isActive: true,
+        roles: { some: { role: { isCompanyAdmin: true } } },
+      },
     });
     return admins.map((admin) => admin.email);
   }
