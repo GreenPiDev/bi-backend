@@ -85,4 +85,40 @@ describe('ContactsService', () => {
       where: { id: CONTACT_ID },
     });
   });
+
+  it('update: lastContactedAt gonderilirse inactivityNotifiedAt sifirlanir', async () => {
+    const prisma = createPrisma();
+    const service = new ContactsService(prisma as never, fakeAudit);
+    const date = new Date('2026-08-28T00:00:00.000Z');
+    await service.update(CONTACT_ID, { lastContactedAt: date } as never);
+    expect(prisma.contact.update).toHaveBeenCalledWith({
+      where: { id: CONTACT_ID },
+      data: { lastContactedAt: date, inactivityNotifiedAt: null },
+    });
+  });
+
+  it('update: lastContactedAt gonderilmezse inactivityNotifiedAt dokunulmaz', async () => {
+    const prisma = createPrisma();
+    const service = new ContactsService(prisma as never, fakeAudit);
+    await service.update(CONTACT_ID, { title: 'Satis Muduru' } as never);
+    expect(prisma.contact.update).toHaveBeenCalledWith({
+      where: { id: CONTACT_ID },
+      data: { title: 'Satis Muduru' },
+    });
+  });
+
+  it('list: status filtresi where kosuluna eklenir', async () => {
+    const prisma = createPrisma();
+    const service = new ContactsService(prisma as never, fakeAudit);
+    await service.list({
+      page: 1,
+      pageSize: 25,
+      status: 'INACTIVE',
+    } as never);
+    expect(prisma.contact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'INACTIVE' }),
+      }),
+    );
+  });
 });

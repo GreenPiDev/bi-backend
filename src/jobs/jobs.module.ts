@@ -8,6 +8,9 @@ import { QueryModule } from '../modules/query/query.module';
 import { ALERTS_QUEUE } from './alerts-queue.constants';
 import { AlertsSchedulerBootstrap } from './alerts-scheduler.bootstrap';
 import { CheckAlertsProcessor } from './check-alerts.processor';
+import { CheckContactInactivityProcessor } from './check-contact-inactivity.processor';
+import { CONTACT_INACTIVITY_QUEUE } from './contact-inactivity-queue.constants';
+import { ContactInactivitySchedulerBootstrap } from './contact-inactivity-scheduler.bootstrap';
 import { IngestDatasourceProcessor } from './ingest-datasource.processor';
 import { INGEST_QUEUE } from './ingest-queue.constants';
 import { REPORTS_QUEUE } from './reports-queue.constants';
@@ -25,6 +28,7 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     BullModule.registerQueue({ name: INGEST_QUEUE }),
     BullModule.registerQueue({ name: REPORTS_QUEUE }),
     BullModule.registerQueue({ name: ALERTS_QUEUE }),
+    BullModule.registerQueue({ name: CONTACT_INACTIVITY_QUEUE }),
     DatasourcesModule,
     AuthModule,
     ExportsModule,
@@ -35,6 +39,8 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     SendScheduledReportProcessor,
     CheckAlertsProcessor,
     AlertsSchedulerBootstrap,
+    CheckContactInactivityProcessor,
+    ContactInactivitySchedulerBootstrap,
   ],
 })
 export class JobsModule {}

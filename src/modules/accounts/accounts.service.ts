@@ -15,6 +15,28 @@ import type {
 
 const SORTABLE_FIELDS = ['name', 'city', 'createdAt'] as const;
 
+/**
+ * A5: "kesin bilmek istedigimiz" alanlar (bkz. VARSAYIMLAR V18) - bu alanlardan
+ * biri bossa firma listesinde uyari ikonu gosterilir.
+ */
+const CRITICAL_FIELDS = [
+  'taxNumber',
+  'phone',
+  'email',
+  'sector',
+  'city',
+] as const;
+
+export type AccountWithMeta = Account & { missingCriticalFields: string[] };
+
+function withMissingCriticalFields(account: Account): AccountWithMeta {
+  const missing = CRITICAL_FIELDS.filter((field) => {
+    const value = account[field as keyof Account];
+    return value === null || value === undefined || value === '';
+  });
+  return { ...account, missingCriticalFields: missing };
+}
+
 function normalize<T extends object>(dto: T): T {
   const result = { ...dto } as Record<string, unknown>;
   for (const key of ['website', 'email', 'taxNumber']) {
@@ -32,7 +54,7 @@ export class AccountsService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(query: AccountQueryDto): Promise<PagedResult<Account>> {
+  async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
     const { page, pageSize, q, city, sector, ownerId } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
@@ -65,12 +87,12 @@ export class AccountsService {
     ]);
 
     return {
-      data,
+      data: data.map(withMissingCriticalFields),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
   }
 
-  async getById(id: string) {
+  async getById(id: string): Promise<AccountWithMeta> {
     const account = await this.prisma.account.findFirst({
       where: { id },
       include: { contacts: true },
@@ -82,10 +104,30 @@ export class AccountsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return account;
+    return withMissingCriticalFields(account);
+  }
+
+  /** A2: sektor, tenant'in tanimladigi listeye karsi dogrulanir; tenant henuz
+   * hic sektor tanimlamadiysa (bkz. VARSAYIMLAR V18) serbest metin kabul edilir. */
+  private async assertValidSector(sector: string | undefined): Promise<void> {
+    if (!sector) {
+      return;
+    }
+    const options = await this.prisma.sectorOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === sector)) {
+      throw new AppException(
+        'INVALID_SECTOR',
+        'Belirtilen sektor tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   async create(dto: CreateAccountDto): Promise<Account> {
+    await this.assertValidSector(dto.sector);
     const account = await this.prisma.account.create({
       // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
       data: normalize(dto) as never,
@@ -101,6 +143,7 @@ export class AccountsService {
 
   async update(id: string, dto: UpdateAccountDto): Promise<Account> {
     await this.getById(id);
+    await this.assertValidSector(dto.sector);
     const account = await this.prisma.account.update({
       where: { id },
       data: normalize(dto) as never,

@@ -27,6 +27,9 @@ function createPrisma(accountRow: unknown = createAccountRow()) {
       update: vi.fn().mockResolvedValue(accountRow),
       delete: vi.fn().mockResolvedValue(accountRow),
     },
+    sectorOption: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   };
 }
 
@@ -90,5 +93,63 @@ describe('AccountsService', () => {
       total: 30,
       totalPages: 3,
     });
+  });
+
+  it('getById: kritik alanlar bossa missingCriticalFields listeler', async () => {
+    const prisma = createPrisma(
+      createAccountRow({ taxNumber: null, phone: null, email: null }),
+    );
+    const service = new AccountsService(prisma as never, fakeAudit);
+    const result = await service.getById(ACCOUNT_ID);
+    expect(result.missingCriticalFields).toEqual(
+      expect.arrayContaining(['taxNumber', 'phone', 'email', 'sector']),
+    );
+  });
+
+  it('getById: tum kritik alanlar doluysa missingCriticalFields bos doner', async () => {
+    const prisma = createPrisma(
+      createAccountRow({
+        taxNumber: '1234567890',
+        phone: '+90 555 000 0000',
+        email: 'a@b.com',
+        sector: 'Yazilim',
+        city: 'Istanbul',
+      }),
+    );
+    const service = new AccountsService(prisma as never, fakeAudit);
+    const result = await service.getById(ACCOUNT_ID);
+    expect(result.missingCriticalFields).toEqual([]);
+  });
+
+  it('create: tenant sektor tanimlamamissa herhangi bir sektor kabul edilir', async () => {
+    const prisma = createPrisma();
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await expect(
+      service.create({ name: 'Acme', sector: 'Herhangi' } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it('create: tenant sektor tanimliysa listede olmayan sektor icin INVALID_SECTOR firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.sectorOption.findMany.mockResolvedValue([
+      { id: 's1', label: 'Yazilim' },
+    ]);
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await expect(
+      service.create({ name: 'Acme', sector: 'Tarim' } as never),
+    ).rejects.toMatchObject({
+      code: 'INVALID_SECTOR',
+    } satisfies Partial<AppException>);
+  });
+
+  it('create: tenant sektor tanimliysa listedeki sektoru kabul eder', async () => {
+    const prisma = createPrisma();
+    prisma.sectorOption.findMany.mockResolvedValue([
+      { id: 's1', label: 'Yazilim' },
+    ]);
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await expect(
+      service.create({ name: 'Acme', sector: 'Yazilim' } as never),
+    ).resolves.toBeDefined();
   });
 });

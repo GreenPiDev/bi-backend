@@ -14,7 +14,7 @@ import { RequiresModule } from '../../core/decorators/requires-module.decorator'
 import { Roles } from '../../core/decorators/roles.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
-import { AccountsService } from './accounts.service';
+import { AccountsService, type AccountWithMeta } from './accounts.service';
 import {
   AccountQuerySchema,
   CreateAccountSchema,
@@ -32,7 +32,7 @@ export class AccountsController {
   @Get()
   list(
     @Query(new ZodValidationPipe(AccountQuerySchema)) query: AccountQueryDto,
-  ): Promise<PagedResult<Account>> {
+  ): Promise<PagedResult<AccountWithMeta>> {
     return this.accounts.list(query);
   }
 

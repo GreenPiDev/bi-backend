@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { isValidTaxNumber } from '../../../core/validators/tax';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 
+export const AccountTypeSchema = z.enum(['CUSTOMER', 'SUPPLIER']);
+
 export const CreateAccountSchema = z.object({
   name: z.string().trim().min(2, 'Firma adi en az 2 karakter olmalidir.'),
   taxNumber: z
@@ -11,6 +13,7 @@ export const CreateAccountSchema = z.object({
     .optional(),
   taxOffice: z.string().trim().max(200).optional(),
   sector: z.string().trim().max(200).optional(),
+  accountTypes: z.array(AccountTypeSchema).max(2).optional(),
   website: z
     .string()
     .trim()

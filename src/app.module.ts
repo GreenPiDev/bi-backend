@@ -24,6 +24,8 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { QueryModule } from './modules/query/query.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
+import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { WidgetsModule } from './modules/widgets/widgets.module';
@@ -55,6 +57,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     AccountsModule,
     ContactsModule,
     ImportsModule,
+    SectorOptionsModule,
+    TenantSettingsModule,
     JobsModule,
   ],
   providers: [

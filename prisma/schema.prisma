@@ -15,6 +15,16 @@ enum UserRole {
   VIEWER
 }
 
+enum AccountType {
+  CUSTOMER
+  SUPPLIER
+}
+
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum DataSourceType {
   CSV
   XLSX
@@ -58,6 +68,8 @@ model Tenant {
   modules          TenantModule[]
   accounts         Account[]
   contacts         Contact[]
+  sectorOptions    SectorOption[]
+  settings         TenantSetting[]
 
   @@map("tenants")
 }
@@ -251,21 +263,22 @@ model AuditLog {
 
 // CRM (satis) modulu -- bkz. core/modules/module-registry.ts 'crm' anahtari
 model Account {
-  id           String    @id @default(uuid())
+  id           String        @id @default(uuid())
   tenantId     String
   name         String
   taxNumber    String?
   taxOffice    String?
   sector       String?
+  accountTypes AccountType[] @default([])
   website      String?
   phone        String?
   email        String?
   address      String?
   city         String?
   ownerId      String?
-  customFields Json      @default("{}")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  customFields Json          @default("{}")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   deletedAt    DateTime?
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
@@ -277,19 +290,22 @@ model Account {
 }
 
 model Contact {
-  id           String    @id @default(uuid())
-  tenantId     String
-  accountId    String?
-  firstName    String
-  lastName     String
-  title        String?
-  email        String?
-  phone        String?
-  ownerId      String?
-  customFields Json      @default("{}")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id                  String        @id @default(uuid())
+  tenantId            String
+  accountId           String?
+  firstName           String
+  lastName            String
+  title               String?
+  email               String?
+  phone               String?
+  ownerId             String?
+  status              ContactStatus @default(ACTIVE)
+  lastContactedAt     DateTime?
+  inactivityNotifiedAt DateTime?
+  customFields        Json          @default("{}")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
   account Account? @relation(fields: [accountId], references: [id])
@@ -297,5 +313,33 @@ model Contact {
   @@index([tenantId, lastName])
   @@index([tenantId, deletedAt])
   @@index([tenantId, accountId])
+  @@index([tenantId, status])
   @@map("crm_contacts")
+}
+
+/** A2: tenant kendi sektor listesini ADMIN/OWNER uzerinden yonetir (bkz. VARSAYIMLAR V18) */
+model SectorOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_sector_options")
+}
+
+/** Genel amacli tenant bazli anahtar-deger ayar deposu (K2 esigi buradan okunur). */
+model TenantSetting {
+  id        String   @id @default(uuid())
+  tenantId  String
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@map("tenant_settings")
 }

@@ -31,7 +31,7 @@ export class ContactsService {
   ) {}
 
   async list(query: ContactQueryDto): Promise<PagedResult<Contact>> {
-    const { page, pageSize, q, accountId, ownerId } = query;
+    const { page, pageSize, q, accountId, ownerId, status } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'lastName',
       direction: 'asc',
@@ -40,6 +40,7 @@ export class ContactsService {
     const where = {
       ...(accountId ? { accountId } : {}),
       ...(ownerId ? { ownerId } : {}),
+      ...(status ? { status } : {}),
       ...(q
         ? {
             OR: [
@@ -118,9 +119,15 @@ export class ContactsService {
   async update(id: string, dto: UpdateContactDto): Promise<Contact> {
     await this.getById(id);
     await this.assertAccountExists(dto.accountId);
+    const data = normalize(dto) as Record<string, unknown>;
+    // K2: iletisim tarihi elle guncellenince inaktivite bildirimi sifirlanir,
+    // esik tekrar asilirsa yeni bir bildirim gonderilebilsin.
+    if (dto.lastContactedAt !== undefined) {
+      data.inactivityNotifiedAt = null;
+    }
     const contact = await this.prisma.contact.update({
       where: { id },
-      data: normalize(dto) as never,
+      data: data as never,
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Contact', entityId: id });
     return contact;
