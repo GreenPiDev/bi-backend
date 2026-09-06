@@ -25,45 +25,44 @@ export async function createTestRole(
   return res.body.id as string;
 }
 
-/** roleIds ile bir kullanici davet eder, daveti kabul eder ve oturum cookie'lerini doner. */
+/** roleIds ile dogrudan bir kullanici olusturur (POST /users, sistemin uretttigi gecici
+ * sifreyle giris yapar) ve oturum cookie'lerini doner. */
 export async function inviteAndAcceptWithRoles(
   app: INestApplication,
   ownerCookies: string[],
   email: string,
-  password: string,
   roleIds: string[],
   name = 'Test Kullanici',
 ): Promise<string[]> {
-  const inviteRes = await request(app.getHttpServer())
-    .post('/api/v1/users/invite')
+  const createRes = await request(app.getHttpServer())
+    .post('/api/v1/users')
     .set('Cookie', ownerCookies)
-    .send({ email, roleIds });
-  if (inviteRes.status !== 201) {
+    .send({ email, name, roleIds });
+  if (createRes.status !== 201) {
     throw new Error(
-      `Davet olusturulamadi (${inviteRes.status}): ${JSON.stringify(inviteRes.body)}`,
+      `Kullanici olusturulamadi (${createRes.status}): ${JSON.stringify(createRes.body)}`,
     );
   }
-  const token = inviteRes.body.token as string;
+  const temporaryPassword = createRes.body.temporaryPassword as string;
 
-  const acceptRes = await request(app.getHttpServer())
-    .post(`/api/v1/invitations/${token}/accept`)
-    .send({ name, password });
-  const cookies = acceptRes.headers['set-cookie'] as unknown as
+  const loginRes = await request(app.getHttpServer())
+    .post('/api/v1/auth/login')
+    .send({ email, password: temporaryPassword });
+  const cookies = loginRes.headers['set-cookie'] as unknown as
     string[] | undefined;
   if (!cookies) {
-    throw new Error('Davet kabul edilemedi, cookie alinamadi.');
+    throw new Error('Giris yapilamadi, cookie alinamadi.');
   }
   return cookies;
 }
 
-/** Sik kullanilan senaryo: izin verilmeyen (bos) bir rol olusturup davet+kabul eder. */
+/** Sik kullanilan senaryo: izin verilmeyen (bos) bir rol olusturup kullaniciyi olusturur. */
 export async function inviteUserWithNoPermissions(
   app: INestApplication,
   ownerCookies: string[],
   email: string,
-  password: string,
   roleName = `Yetkisiz-${Math.random().toString(36).slice(2, 8)}`,
 ): Promise<string[]> {
   const roleId = await createTestRole(app, ownerCookies, roleName, []);
-  return inviteAndAcceptWithRoles(app, ownerCookies, email, password, [roleId]);
+  return inviteAndAcceptWithRoles(app, ownerCookies, email, [roleId]);
 }

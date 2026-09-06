@@ -59,7 +59,6 @@ model Tenant {
   createdAt DateTime @default(now())
 
   users            User[]
-  invitations      Invitation[]
   dataSources      DataSource[]
   datasets         Dataset[]
   dashboards       Dashboard[]
@@ -180,21 +179,6 @@ model PageModuleAssignment {
   @@map("page_module_assignments")
 }
 
-model Invitation {
-  id         String    @id @default(uuid())
-  tenantId   String
-  email      String
-  roleIds    String[]  @default([])
-  token      String    @unique
-  expiresAt  DateTime
-  acceptedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-
-  @@index([tenantId])
-  @@map("invitations")
-}
 
 model DataSource {
   id               String            @id @default(uuid())

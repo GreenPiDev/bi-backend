@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { type RequestUser } from '../../core/decorators/current-user.decorator';
@@ -11,20 +11,21 @@ import {
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import {
-  AuthService,
   toSafeUser,
   USER_WITH_ROLES_INCLUDE,
-  type AuthResult,
   type SafeUser,
   type UserWithRoles,
 } from '../auth/auth.service';
-import type { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import type { ChangePasswordDto } from './dto/change-password.dto';
-import type { InviteUserDto } from './dto/invite-user.dto';
+import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 import type { UpdateRoleDto } from './dto/update-role.dto';
 
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Admin panelinde gosterilen tek kullanimlik gecici sifre - 6 haneli, sifirla
+ * baslayabilen sayisal string (ornegin "048213"). */
+export function generateTemporaryPassword(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
 
 export interface UserProfile extends SafeUser {
   isActive: boolean;
@@ -37,7 +38,6 @@ export class UsersService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly rawPrisma: PrismaService,
-    private readonly authService: AuthService,
     private readonly audit: AuditService,
   ) {}
 
@@ -79,9 +79,9 @@ export class UsersService {
     }
   }
 
-  async invite(
-    dto: InviteUserDto,
-  ): Promise<{ token: string; expiresAt: Date }> {
+  async createUser(
+    dto: CreateUserDto,
+  ): Promise<{ user: SafeUser; temporaryPassword: string }> {
     await this.assertRoleIdsBelongToTenant(dto.roleIds);
 
     const existingUser = await this.rawPrisma.user.findUnique({
@@ -95,26 +95,73 @@ export class UsersService {
       );
     }
 
-    const token = randomUUID();
-    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
-    await this.prisma.invitation.create({
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await argon2.hash(temporaryPassword, {
+      type: argon2.argon2id,
+    });
+
+    const user = await this.prisma.user.create({
       data: {
         tenantId: TenantContext.getOrThrow().tenantId,
         email: dto.email,
-        roleIds: dto.roleIds,
-        token,
-        expiresAt,
+        name: dto.name,
+        passwordHash,
+        roles: {
+          create: dto.roleIds.map((roleId) => ({ roleId })),
+        },
       },
+      include: USER_WITH_ROLES_INCLUDE,
     });
 
     await this.audit.log({
-      action: 'INVITE',
-      entity: 'Invitation',
-      entityId: token,
+      action: 'CREATE_USER',
+      entity: 'User',
+      entityId: user.id,
       meta: { email: dto.email, roleIds: dto.roleIds },
     });
 
-    return { token, expiresAt };
+    return { user: toSafeUser(user as UserWithRoles), temporaryPassword };
+  }
+
+  async resetPassword(
+    actingUser: RequestUser,
+    targetUserId: string,
+  ): Promise<{ temporaryPassword: string }> {
+    if (targetUserId === actingUser.id) {
+      throw new AppException(
+        'CANNOT_RESET_OWN_PASSWORD',
+        'Kendi sifreni bu ekrandan sifirlayamazsin, "Sifremi Degistir" ekranini kullan.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetUserId },
+    });
+    if (!target) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await argon2.hash(temporaryPassword, {
+      type: argon2.argon2id,
+    });
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { passwordHash },
+    });
+
+    await this.audit.log({
+      action: 'RESET_PASSWORD',
+      entity: 'User',
+      entityId: targetUserId,
+    });
+
+    return { temporaryPassword };
   }
 
   async updateRole(
@@ -242,104 +289,6 @@ export class UsersService {
     });
 
     return { ok: true };
-  }
-
-  async getInvitationInfo(token: string): Promise<{
-    tenantName: string;
-    email: string;
-    roleIds: string[];
-    roleNames: string[];
-    expired: boolean;
-  }> {
-    const invitation = await this.rawPrisma.invitation.findUnique({
-      where: { token },
-      include: { tenant: true },
-    });
-    if (!invitation || invitation.acceptedAt) {
-      throw new AppException(
-        'INVITATION_NOT_FOUND',
-        'Davet bulunamadi.',
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    const roles = await this.rawPrisma.role.findMany({
-      where: { id: { in: invitation.roleIds } },
-      select: { name: true },
-    });
-    return {
-      tenantName: invitation.tenant.name,
-      email: invitation.email,
-      roleIds: invitation.roleIds,
-      roleNames: roles.map((r) => r.name),
-      expired: invitation.expiresAt < new Date(),
-    };
-  }
-
-  async acceptInvitation(
-    token: string,
-    dto: AcceptInvitationDto,
-  ): Promise<AuthResult> {
-    const invitation = await this.rawPrisma.invitation.findUnique({
-      where: { token },
-    });
-    if (!invitation) {
-      throw new AppException(
-        'INVITATION_NOT_FOUND',
-        'Davet bulunamadi.',
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    if (invitation.acceptedAt) {
-      throw new AppException(
-        'INVITATION_ALREADY_ACCEPTED',
-        'Bu davet zaten kabul edilmis.',
-        HttpStatus.CONFLICT,
-      );
-    }
-    if (invitation.expiresAt < new Date()) {
-      throw new AppException(
-        'INVITATION_EXPIRED',
-        'Davetin suresi dolmus.',
-        HttpStatus.GONE,
-      );
-    }
-
-    const existingUser = await this.rawPrisma.user.findUnique({
-      where: { email: invitation.email },
-    });
-    if (existingUser) {
-      throw new AppException(
-        'EMAIL_TAKEN',
-        'Bu e-posta adresi zaten bir kullaniciya ait.',
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    const passwordHash = await argon2.hash(dto.password, {
-      type: argon2.argon2id,
-    });
-
-    const user = await this.rawPrisma.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          tenantId: invitation.tenantId,
-          email: invitation.email,
-          passwordHash,
-          name: dto.name,
-          roles: {
-            create: invitation.roleIds.map((roleId) => ({ roleId })),
-          },
-        },
-        include: USER_WITH_ROLES_INCLUDE,
-      });
-      await tx.invitation.update({
-        where: { id: invitation.id },
-        data: { acceptedAt: new Date() },
-      });
-      return created;
-    });
-
-    return this.authService.issueTokens(user as UserWithRoles);
   }
 
   private toProfile(user: UserWithRoles): UserProfile {

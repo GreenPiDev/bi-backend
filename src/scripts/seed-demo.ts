@@ -281,7 +281,6 @@ async function cleanupExistingDemoTenant(
   });
   await prisma.dataset.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.dataSource.deleteMany({ where: { tenantId: tenant.id } });
-  await prisma.invitation.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.tenantModule.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.user.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.tenant.delete({ where: { id: tenant.id } });

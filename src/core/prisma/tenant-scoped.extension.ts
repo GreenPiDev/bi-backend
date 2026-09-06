@@ -7,7 +7,6 @@ import { TenantContext } from '../tenant/tenant-context';
  */
 const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'User',
-  'Invitation',
   'DataSource',
   'Dataset',
   'Dashboard',

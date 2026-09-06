@@ -9,7 +9,7 @@ import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
 import { createTestRole } from './support/roles';
 
-describe('Users & Invitations (e2e)', () => {
+describe('Users (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
@@ -21,6 +21,7 @@ describe('Users & Invitations (e2e)', () => {
   let viewerCookies: string[];
   let ownerId: string;
   let viewerId: string;
+  let viewerTemporaryPassword: string;
   let viewerRoleId: string;
   let editorRoleId: string;
   let companyAdminRoleId: string;
@@ -73,62 +74,50 @@ describe('Users & Invitations (e2e)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('COMPANYADMIN, Goruntuleyici rolunde davet eder', async () => {
+  it('COMPANYADMIN, Goruntuleyici rolunde kullanici olusturur', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
+      .post('/api/v1/users')
       .set('Cookie', ownerCookies)
-      .send({ email: viewerEmail, roleIds: [viewerRoleId] });
+      .send({
+        email: viewerEmail,
+        name: 'Viewer Kisi',
+        roleIds: [viewerRoleId],
+      });
     expect(res.status).toBe(201);
-    expect(res.body.token).toBeDefined();
-
-    const invitationToken = res.body.token as string;
-
-    const infoRes = await request(app.getHttpServer()).get(
-      `/api/v1/invitations/${invitationToken}`,
-    );
-    expect(infoRes.status).toBe(200);
-    expect(infoRes.body).toMatchObject({
-      email: viewerEmail,
-      roleIds: [viewerRoleId],
-      expired: false,
-    });
-
-    const acceptRes = await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${invitationToken}/accept`)
-      .send({ name: 'Viewer Kisi', password: 'sifre1234' });
-    expect(acceptRes.status).toBe(201);
-    expect(acceptRes.body.user.roles).toEqual([
+    expect(res.body.temporaryPassword).toMatch(/^\d{6}$/);
+    expect(res.body.user.roles).toEqual([
       expect.objectContaining({ id: viewerRoleId, name: 'Goruntuleyici' }),
     ]);
-    viewerCookies = acceptRes.headers['set-cookie'] as unknown as string[];
-    viewerId = acceptRes.body.user.id;
+    viewerId = res.body.user.id;
+    viewerTemporaryPassword = res.body.temporaryPassword as string;
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: viewerEmail, password: viewerTemporaryPassword });
+    expect(loginRes.status).toBe(201);
+    viewerCookies = loginRes.headers['set-cookie'] as unknown as string[];
   });
 
-  it('ayni davet tekrar kabul edilemez (INVITATION_ALREADY_ACCEPTED)', async () => {
-    const invite = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', ownerCookies)
-      .send({ email: `retry${emailSuffix}`, roleIds: [viewerRoleId] });
-    const token = invite.body.token as string;
-
-    await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${token}/accept`)
-      .send({ name: 'X', password: 'sifre1234' });
-
-    const secondAttempt = await request(app.getHttpServer())
-      .post(`/api/v1/invitations/${token}/accept`)
-      .send({ name: 'Y', password: 'sifre1234' });
-    expect(secondAttempt.status).toBe(409);
-    expect(secondAttempt.body.error.code).toBe('INVITATION_ALREADY_ACCEPTED');
-  });
-
-  it('halihazirda kullanicisi olan email davet edilemez (EMAIL_TAKEN)', async () => {
+  it('halihazirda kullanicisi olan email icin EMAIL_TAKEN doner', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
+      .post('/api/v1/users')
       .set('Cookie', ownerCookies)
-      .send({ email: ownerEmail, roleIds: [viewerRoleId] });
+      .send({ email: ownerEmail, name: 'X', roleIds: [viewerRoleId] });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('EMAIL_TAKEN');
+  });
+
+  it('COMPANYADMIN olmayan kullanici yeni kullanici olusturamaz (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/users')
+      .set('Cookie', viewerCookies)
+      .send({
+        email: `baska${emailSuffix}`,
+        name: 'Y',
+        roleIds: [viewerRoleId],
+      });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
   it('COMPANYADMIN olmayan kullanici rol degistiremez, 403 FORBIDDEN doner', async () => {
@@ -189,34 +178,40 @@ describe('Users & Invitations (e2e)', () => {
     expect(res.body.every((u: { tenantId: string }) => u.tenantId)).toBe(true);
   });
 
-  it('gecersiz davet tokeni NOT_FOUND doner', async () => {
-    const res = await request(app.getHttpServer()).get(
-      '/api/v1/invitations/olmayan-token',
-    );
-    expect(res.status).toBe(404);
-    expect(res.body.error.code).toBe('INVITATION_NOT_FOUND');
+  it('COMPANYADMIN baska bir kullanicinin sifresini sifirlayabilir', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/users/${viewerId}/reset-password`)
+      .set('Cookie', ownerCookies);
+    expect(res.status).toBe(201);
+    const newPassword = res.body.temporaryPassword as string;
+    expect(newPassword).toMatch(/^\d{6}$/);
+    expect(newPassword).not.toBe(viewerTemporaryPassword);
+
+    const oldLoginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: viewerEmail, password: viewerTemporaryPassword });
+    expect(oldLoginRes.status).toBe(401);
+
+    const newLoginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: viewerEmail, password: newPassword });
+    expect(newLoginRes.status).toBe(201);
   });
 
-  it('COMPANYADMIN olmayan kullanici davet gonderemez (sadece COMPANYADMIN edebilir)', async () => {
-    const editorEmail = `e2e-editor${emailSuffix}`;
+  it('COMPANYADMIN kendi sifresini bu uctan sifirlayamaz (CANNOT_RESET_OWN_PASSWORD)', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/users/${ownerId}/reset-password`)
+      .set('Cookie', ownerCookies);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('CANNOT_RESET_OWN_PASSWORD');
+  });
 
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/v1/auth/login')
-      .send({ email: viewerEmail, password: 'sifre1234' });
-    const editorCookies = loginRes.headers['set-cookie'] as unknown as string[];
-
-    const forbiddenRes = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', editorCookies)
-      .send({ email: editorEmail, roleIds: [viewerRoleId] });
-    expect(forbiddenRes.status).toBe(403);
-    expect(forbiddenRes.body.error.code).toBe('FORBIDDEN');
-
-    const allowedRes = await request(app.getHttpServer())
-      .post('/api/v1/users/invite')
-      .set('Cookie', ownerCookies)
-      .send({ email: editorEmail, roleIds: [viewerRoleId] });
-    expect(allowedRes.status).toBe(201);
+  it('COMPANYADMIN olmayan kullanici baskasinin sifresini sifirlayamaz (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/users/${ownerId}/reset-password`)
+      .set('Cookie', viewerCookies);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
   });
 });
 

@@ -68,7 +68,6 @@ describe('Alerts (e2e)', () => {
       app,
       cookiesA,
       `viewer${emailSuffix}`,
-      password,
     );
 
     const dashboardRes = await request(app.getHttpServer())

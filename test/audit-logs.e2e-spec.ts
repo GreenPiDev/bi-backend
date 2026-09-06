@@ -53,7 +53,6 @@ describe('Audit Logs (e2e)', () => {
       app,
       ownerCookies,
       `viewer${emailSuffix}`,
-      password,
     );
   }, 30_000);
 

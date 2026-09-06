@@ -116,7 +116,6 @@ describe('Dashboards (e2e)', () => {
       app,
       cookiesA,
       `viewer${emailSuffix}`,
-      password,
     );
 
     const res = await request(app.getHttpServer())

@@ -19,7 +19,7 @@ import {
   ChangePasswordDto,
   ChangePasswordSchema,
 } from './dto/change-password.dto';
-import { InviteUserDto, InviteUserSchema } from './dto/invite-user.dto';
+import { CreateUserDto, CreateUserSchema } from './dto/create-user.dto';
 import {
   UpdateProfileDto,
   UpdateProfileSchema,
@@ -59,11 +59,20 @@ export class UsersController {
   }
 
   @UseGuards(CompanyAdminGuard)
-  @Post('invite')
-  invite(
-    @Body(new ZodValidationPipe(InviteUserSchema)) dto: InviteUserDto,
-  ): Promise<{ token: string; expiresAt: Date }> {
-    return this.users.invite(dto);
+  @Post()
+  createUser(
+    @Body(new ZodValidationPipe(CreateUserSchema)) dto: CreateUserDto,
+  ): Promise<{ user: SafeUser; temporaryPassword: string }> {
+    return this.users.createUser(dto);
+  }
+
+  @UseGuards(CompanyAdminGuard)
+  @Post(':id/reset-password')
+  resetPassword(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+  ): Promise<{ temporaryPassword: string }> {
+    return this.users.resetPassword(user, id);
   }
 
   @UseGuards(CompanyAdminGuard)

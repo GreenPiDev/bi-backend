@@ -135,7 +135,6 @@ describe('Accounts (e2e)', () => {
       app,
       cookiesA,
       `viewer${emailSuffix}`,
-      password,
     );
 
     const res = await request(app.getHttpServer())
@@ -153,7 +152,6 @@ describe('Accounts (e2e)', () => {
       app,
       cookiesA,
       `sales${emailSuffix}`,
-      password,
       [salesRoleId],
     );
 

@@ -96,7 +96,6 @@ describe('SectorOptions (e2e)', () => {
       app,
       cookies,
       `viewer${emailSuffix}`,
-      password,
     );
 
     const res = await request(app.getHttpServer())
