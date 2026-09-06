@@ -42,6 +42,13 @@ describe('Audit Logs (e2e)', () => {
       });
     ownerCookies = registerRes.headers['set-cookie'] as unknown as string[];
 
+    await prisma.tenantModule.create({
+      data: {
+        tenantId: registerRes.body.user.tenantId as string,
+        moduleKey: 'analytics',
+      },
+    });
+
     viewerCookies = await inviteUserWithNoPermissions(
       app,
       ownerCookies,

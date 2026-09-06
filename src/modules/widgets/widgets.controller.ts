@@ -9,6 +9,7 @@ import {
   Post,
 } from '@nestjs/common';
 import type { Widget } from '@prisma/client';
+import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
@@ -19,6 +20,7 @@ import {
 } from './dto/widget.dto';
 import { WidgetsService } from './widgets.service';
 
+@ModulePage('dashboards')
 @Controller('dashboards/:dashboardId/widgets')
 export class WidgetsController {
   constructor(private readonly widgets: WidgetsService) {}

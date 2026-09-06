@@ -51,6 +51,13 @@ describe('Reports (e2e)', () => {
       });
     cookiesA = registerA.headers['set-cookie'] as unknown as string[];
 
+    await prisma.tenantModule.create({
+      data: {
+        tenantId: registerA.body.user.tenantId as string,
+        moduleKey: 'analytics',
+      },
+    });
+
     const registerB = await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({

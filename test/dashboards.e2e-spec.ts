@@ -53,6 +53,19 @@ describe('Dashboards (e2e)', () => {
         password,
       });
     cookiesB = registerB.headers['set-cookie'] as unknown as string[];
+
+    await prisma.tenantModule.create({
+      data: {
+        tenantId: registerA.body.user.tenantId as string,
+        moduleKey: 'analytics',
+      },
+    });
+    await prisma.tenantModule.create({
+      data: {
+        tenantId: registerB.body.user.tenantId as string,
+        moduleKey: 'analytics',
+      },
+    });
   }, 30_000);
 
   afterAll(async () => {

@@ -3,7 +3,11 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import { TenantsService, type TenantModuleStatus } from './tenants.service';
+import {
+  TenantsService,
+  type PageAccessStatus,
+  type TenantModuleStatus,
+} from './tenants.service';
 
 @Controller('tenants')
 export class TenantsController {
@@ -14,5 +18,12 @@ export class TenantsController {
     @CurrentUser() user: RequestUser,
   ): Promise<TenantModuleStatus[]> {
     return this.tenants.listModules(user.tenantId);
+  }
+
+  @Get('me/page-modules')
+  listMyPageModules(
+    @CurrentUser() user: RequestUser,
+  ): Promise<PageAccessStatus[]> {
+    return this.tenants.listPageAccess(user.tenantId);
   }
 }

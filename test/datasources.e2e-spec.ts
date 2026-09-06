@@ -91,6 +91,16 @@ describe('Datasources (e2e)', () => {
         password,
       });
     cookiesB = registerB.headers['set-cookie'] as unknown as string[];
+
+    await prisma.tenantModule.create({
+      data: { tenantId: tenantAId, moduleKey: 'analytics' },
+    });
+    await prisma.tenantModule.create({
+      data: {
+        tenantId: registerB.body.user.tenantId as string,
+        moduleKey: 'analytics',
+      },
+    });
   });
 
   afterAll(async () => {

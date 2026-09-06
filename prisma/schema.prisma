@@ -72,6 +72,7 @@ model Tenant {
   sectorOptions    SectorOption[]
   settings         TenantSetting[]
   roles            Role[]
+  calendarEvents   CalendarEvent[]
 
   @@map("tenants")
 }
@@ -162,6 +163,21 @@ model TenantModule {
   @@unique([tenantId, moduleKey])
   @@index([tenantId])
   @@map("tenant_modules")
+}
+
+/// Hangi sayfanin (core/modules/page-registry.ts PAGE_REGISTRY) hangi modul(ler)e
+/// (core/modules/module-registry.ts MODULE_REGISTRY) ait oldugunu tutar. Global bir
+/// esleme - tenant'a bagli degil, tenantScopedExtension'a eklenmez. Bir sayfa birden
+/// fazla modulde olabilir (satir basina bir pageKey+moduleKey), tenant bunlardan
+/// HERHANGI birine sahipse sayfa erisilebilir sayilir (bkz. TenantsService.listPageAccess).
+/// Bir pageKey icin hic satir yoksa sayfa herhangi bir modul gerektirmez (core gibi davranir).
+model PageModuleAssignment {
+  pageKey   String
+  moduleKey String
+  updatedAt DateTime @updatedAt
+
+  @@id([pageKey, moduleKey])
+  @@map("page_module_assignments")
 }
 
 model Invitation {
@@ -400,4 +416,46 @@ model TenantSetting {
 
   @@unique([tenantId, key])
   @@map("tenant_settings")
+}
+
+/**
+ * Faz 11b (Ajanda/Takvim, T1-T4) - bkz. docs/VARSAYIMLAR.md V23. relatedEntityType
+ * bilincli olarak enum degil String: Interaction/Quote/Project modelleri henuz yok
+ * (Faz 11c/11d/11g), gecerli deger listesi uygulama katmaninda kontrol edilecek.
+ */
+model CalendarEvent {
+  id                String   @id @default(uuid())
+  tenantId          String
+  title             String
+  description       String?
+  startAt           DateTime
+  endAt             DateTime
+  allDay            Boolean  @default(false)
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdById       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id])
+  attendees CalendarEventAttendee[]
+
+  @@index([tenantId, startAt])
+  @@index([tenantId, deletedAt])
+  @@map("crm_calendar_events")
+}
+
+/** M6: her katilimciya kendi aciklamasi - "note" bu ihtiyaci karsilar. */
+model CalendarEventAttendee {
+  id        String   @id @default(uuid())
+  eventId   String
+  userId    String
+  note      String?
+  createdAt DateTime @default(now())
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("crm_calendar_event_attendees")
 }

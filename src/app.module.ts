@@ -7,6 +7,7 @@ import { JwtAuthGuard } from './core/guards/jwt-auth.guard';
 import { ModuleGuard } from './core/guards/module.guard';
 import { PermissionGuard } from './core/guards/permission.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
+import { PageModulesModule } from './core/modules/page-modules.module';
 import { PermissionsModule } from './core/permissions/permissions.module';
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -14,6 +15,7 @@ import { AccountsModule } from './modules/accounts/accounts.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CalendarEventsModule } from './modules/calendar-events/calendar-events.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
@@ -42,6 +44,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     CoreModule,
     RedisModule,
     PermissionsModule,
+    PageModulesModule,
     AuditModule,
     AuthModule,
     TenantsModule,
@@ -63,6 +66,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ImportsModule,
     SectorOptionsModule,
     TenantSettingsModule,
+    CalendarEventsModule,
     JobsModule,
   ],
   providers: [

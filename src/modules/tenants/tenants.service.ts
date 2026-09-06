@@ -5,8 +5,15 @@ import {
   MODULE_REGISTRY,
   findModuleDefinition,
 } from '../../core/modules/module-registry';
+import { PageModulesService } from '../../core/modules/page-modules.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { slugify } from './slugify';
+
+export interface PageAccessStatus {
+  pageKey: string;
+  moduleKeys: string[];
+  accessible: boolean;
+}
 
 export interface TenantModuleStatus {
   key: string;
@@ -17,7 +24,10 @@ export interface TenantModuleStatus {
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pageModules: PageModulesService,
+  ) {}
 
   async createTenantWithUniqueSlug(
     name: string,
@@ -44,6 +54,23 @@ export class TenantsService {
       label: module.label,
       alwaysOn: module.alwaysOn,
       enabled: module.alwaysOn || enabledKeys.has(module.key),
+    }));
+  }
+
+  async listPageAccess(tenantId: string): Promise<PageAccessStatus[]> {
+    const [assignments, modules] = await Promise.all([
+      this.pageModules.listAssignments(),
+      this.listModules(tenantId),
+    ]);
+    const enabledByKey = new Map(modules.map((m) => [m.key, m.enabled]));
+    return assignments.map((assignment) => ({
+      pageKey: assignment.pageKey,
+      moduleKeys: assignment.moduleKeys,
+      accessible:
+        assignment.moduleKeys.length === 0 ||
+        assignment.moduleKeys.some(
+          (moduleKey) => enabledByKey.get(moduleKey) ?? false,
+        ),
     }));
   }
 

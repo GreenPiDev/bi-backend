@@ -89,6 +89,10 @@ describe('Query (e2e)', () => {
       });
     cookiesB = registerB.headers['set-cookie'] as unknown as string[];
 
+    await prisma.tenantModule.create({
+      data: { tenantId: tenantAId, moduleKey: 'analytics' },
+    });
+
     const uploadRes = await request(app.getHttpServer())
       .post('/api/v1/datasources/upload')
       .set('Cookie', cookiesA)

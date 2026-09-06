@@ -176,6 +176,22 @@ describe('Accounts (e2e)', () => {
     expect(res.status).toBe(403);
   });
 
+  it('accounts sayfasinin modul eslemesi kaldirilinca crm kapali tenant da erisebilir', async () => {
+    await prisma.pageModuleAssignment.deleteMany({
+      where: { pageKey: 'accounts' },
+    });
+    try {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/accounts')
+        .set('Cookie', cookiesB);
+      expect(res.status).toBe(200);
+    } finally {
+      await prisma.pageModuleAssignment.create({
+        data: { pageKey: 'accounts', moduleKey: 'crm' },
+      });
+    }
+  });
+
   it('B tenanti A tenantinin firmasina erisemez (404)', async () => {
     await prisma.tenantModule.create({
       data: { tenantId: tenantIdB, moduleKey: 'crm' },

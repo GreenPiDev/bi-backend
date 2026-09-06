@@ -67,6 +67,9 @@ describe('Platform admin (e2e)', () => {
   });
 
   afterAll(async () => {
+    await prisma.pageModuleAssignment.deleteMany({
+      where: { pageKey: 'profile' },
+    });
     await cleanupTestTenants(prisma, emailSuffix);
     await app.close();
   });
@@ -98,6 +101,12 @@ describe('Platform admin (e2e)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
       { key: 'core', label: 'Cekirdek', alwaysOn: true, enabled: true },
+      {
+        key: 'analytics',
+        label: 'Veri Analitigi',
+        alwaysOn: false,
+        enabled: false,
+      },
       { key: 'crm', label: 'Satis (CRM)', alwaysOn: false, enabled: false },
     ]);
   });
@@ -129,5 +138,92 @@ describe('Platform admin (e2e)', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('platform-admin modul tanimlarini gorur', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/platform-admin/modules')
+      .set('Cookie', adminCookies);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      { key: 'core', label: 'Cekirdek', alwaysOn: true },
+      { key: 'analytics', label: 'Veri Analitigi', alwaysOn: false },
+      { key: 'crm', label: 'Satis (CRM)', alwaysOn: false },
+    ]);
+  });
+
+  it('platform-admin olmayan kullanici sayfa-modul eslemesine erisemez (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/platform-admin/page-modules')
+      .set('Cookie', normalCookies);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('platform-admin sayfa-modul eslemesini gorur, migration seed degerlerini icerir', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/platform-admin/page-modules')
+      .set('Cookie', adminCookies);
+
+    expect(res.status).toBe(200);
+    const byPageKey = new Map(
+      (res.body as { pageKey: string; moduleKeys: string[] }[]).map((row) => [
+        row.pageKey,
+        row.moduleKeys,
+      ]),
+    );
+    expect(byPageKey.get('accounts')).toEqual(['crm']);
+    expect(byPageKey.get('contacts')).toEqual(['crm']);
+    expect(byPageKey.get('dashboards')).toEqual(['analytics']);
+    expect(byPageKey.get('datasets')).toEqual(['analytics']);
+    expect(byPageKey.get('profile')).toEqual([]);
+  });
+
+  it('platform-admin bir sayfayi birden fazla modulle eslestirebilir', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/platform-admin/page-modules/profile')
+      .set('Cookie', adminCookies)
+      .send({ moduleKeys: ['crm', 'core'] });
+
+    expect(res.status).toBe(200);
+    const profile = (
+      res.body as { pageKey: string; moduleKeys: string[] }[]
+    ).find((row) => row.pageKey === 'profile');
+    expect(profile?.moduleKeys).toEqual(['crm', 'core']);
+  });
+
+  it('platform-admin bir sayfanin eslemesini kaldirabilir (moduleKeys: [])', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/platform-admin/page-modules/profile')
+      .set('Cookie', adminCookies)
+      .send({ moduleKeys: [] });
+
+    expect(res.status).toBe(200);
+    const profile = (
+      res.body as { pageKey: string; moduleKeys: string[] }[]
+    ).find((row) => row.pageKey === 'profile');
+    expect(profile?.moduleKeys).toEqual([]);
+  });
+
+  it('bilinmeyen pageKey icin UNKNOWN_PAGE doner', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/platform-admin/page-modules/yok-boyle-sayfa')
+      .set('Cookie', adminCookies)
+      .send({ moduleKeys: ['crm'] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('UNKNOWN_PAGE');
+  });
+
+  it('bilinmeyen moduleKey icin UNKNOWN_MODULE doner', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/platform-admin/page-modules/profile')
+      .set('Cookie', adminCookies)
+      .send({ moduleKeys: ['yok-boyle-modul'] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('UNKNOWN_MODULE');
   });
 });

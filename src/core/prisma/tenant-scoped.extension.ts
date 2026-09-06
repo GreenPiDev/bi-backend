@@ -19,13 +19,18 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'SectorOption',
   'TenantSetting',
   'Role',
+  'CalendarEvent',
 ]);
 
 /**
  * deletedAt alani olan modeller: okuma sorgularinda silinmisler otomatik
  * gizlenir, delete/deleteMany yumusak silmeye (deletedAt=now()) donusturulur.
  */
-const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>(['Account', 'Contact']);
+const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
+  'Account',
+  'Contact',
+  'CalendarEvent',
+]);
 
 const READ_OPERATIONS = new Set([
   'findMany',

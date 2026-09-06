@@ -17,6 +17,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
+import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
@@ -30,6 +31,7 @@ import {
   type UploadDatasourceDto,
 } from './dto/upload-datasource.dto';
 
+@ModulePage('datasets')
 @Controller('datasources')
 export class DatasourcesController {
   constructor(private readonly datasources: DatasourcesService) {}

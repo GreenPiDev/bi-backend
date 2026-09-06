@@ -10,7 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import type { Contact } from '@prisma/client';
-import { RequiresModule } from '../../core/decorators/requires-module.decorator';
+import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
@@ -24,7 +24,7 @@ import {
   type UpdateContactDto,
 } from './dto/contact.dto';
 
-@RequiresModule('crm')
+@ModulePage('contacts')
 @Controller('contacts')
 export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}

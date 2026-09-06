@@ -360,6 +360,13 @@ async function main(): Promise<void> {
       data: { slug: DEMO_TENANT_SLUG },
     });
 
+    // 'analytics' (Panolar/Veri Kumeleri) artik kapatilabilir gercek bir modul -
+    // demo tenant'ta acik olmazsa satis demosu (F13, "atlanamaz") calismaz, bkz.
+    // docs/VARSAYIMLAR.md V21.
+    await prisma.tenantModule.create({
+      data: { tenantId: user.tenantId, moduleKey: 'analytics' },
+    });
+
     for (const plan of sectorPlans()) {
       console.log(`Yukleniyor: ${plan.datasetName}...`);
       const datasetId = await ingestSector(

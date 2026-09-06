@@ -1,5 +1,13 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  MODULE_REGISTRY,
+  type ModuleDefinition,
+} from '../../core/modules/module-registry';
+import {
+  PageModulesService,
+  type PageModuleAssignment,
+} from '../../core/modules/page-modules.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import {
   TenantsService,
@@ -19,6 +27,7 @@ export class PlatformAdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenants: TenantsService,
+    private readonly pageModules: PageModulesService,
   ) {}
 
   listTenants(): Promise<TenantSummary[]> {
@@ -45,6 +54,21 @@ export class PlatformAdminService {
       await this.tenants.disableModule(tenantId, moduleKey);
     }
     return this.tenants.listModules(tenantId);
+  }
+
+  listModuleDefinitions(): readonly ModuleDefinition[] {
+    return MODULE_REGISTRY;
+  }
+
+  listPageModules(): Promise<PageModuleAssignment[]> {
+    return this.pageModules.listAssignments();
+  }
+
+  setPageModule(
+    pageKey: string,
+    moduleKeys: string[],
+  ): Promise<PageModuleAssignment[]> {
+    return this.pageModules.setAssignment(pageKey, moduleKeys);
   }
 
   private async requireTenant(tenantId: string): Promise<void> {

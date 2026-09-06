@@ -15,7 +15,6 @@ import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { diskStorage } from 'multer';
-import { RequiresModule } from '../../core/decorators/requires-module.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { MAX_UPLOAD_SIZE_BYTES } from '../datasources/datasources.constants';
@@ -65,7 +64,6 @@ function parseMapping(raw: string | undefined): Record<string, string> {
   return result.data;
 }
 
-@RequiresModule('crm')
 @Controller('imports')
 export class ImportsController {
   constructor(private readonly imports: ImportsService) {}

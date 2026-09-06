@@ -65,6 +65,13 @@ describe('Onboarding (e2e)', () => {
         password,
       });
     cookies = register.headers['set-cookie'] as unknown as string[];
+
+    await prisma.tenantModule.create({
+      data: {
+        tenantId: register.body.user.tenantId as string,
+        moduleKey: 'analytics',
+      },
+    });
   });
 
   afterAll(async () => {

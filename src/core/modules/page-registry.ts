@@ -17,8 +17,6 @@ export interface PageDefinition {
   tabs?: readonly PageTabDefinition[];
   /** true ise sayfa Permission kontrolune tabi degildir, herkes gorur (orn. /profile). */
   alwaysVisible?: boolean;
-  /** dolu ise sayfa ayrica ModuleGuard/RequiresModule ile de korunur (bkz. module-registry.ts). */
-  requiresModule?: string;
   /** bkz. PageTabDefinition.supportedActions - tab'i olmayan sayfalar icin. */
   supportedActions?: readonly CrudPermissionAction[];
 }
@@ -42,14 +40,17 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'accounts',
     label: 'Firmalar',
-    requiresModule: 'crm',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT', 'EXPORT'],
   },
   {
     key: 'contacts',
     label: 'Kisiler',
-    requiresModule: 'crm',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT', 'EXPORT'],
+  },
+  {
+    key: 'calendar',
+    label: 'Ajanda',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
