@@ -10,12 +10,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CompanyAdminGuard } from '../../core/guards/company-admin.guard';
+import {
+  CurrentUser,
+  type RequestUser,
+} from '../../core/decorators/current-user.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import {
   PAGE_REGISTRY,
   type PageDefinition,
 } from '../../core/modules/page-registry';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
+import { TenantsService } from '../tenants/tenants.service';
 import { CreateRoleSchema, UpdateRoleSchema } from './dto/role.dto';
 import type { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { RolesService, type RoleView } from './roles.service';
@@ -30,16 +35,31 @@ import { RolesService, type RoleView } from './roles.service';
  */
 @Controller()
 export class RolesController {
-  constructor(private readonly roles: RolesService) {}
+  constructor(
+    private readonly roles: RolesService,
+    private readonly tenants: TenantsService,
+  ) {}
 
+  /** Tenant'in platform-admin tarafindan kapatilmis oldugu bir module bagli sayfalari
+   * (orn. crm/analytics kapaliysa Firmalar/Kisiler/Panolar/Veri Kumeleri) listeden
+   * cikarir - aksi halde COMPANYADMIN, erisimi zaten kapali sayfalara rol/izin
+   * atayabiliyormus gibi gorunurdu (bkz. TenantsService.listPageAccess). */
   @Get('page-registry')
   @RequiresPermission('settings', 'VIEW', [
     'roles',
     'pageAccess',
     'actionPermissions',
   ])
-  pageRegistry(): readonly PageDefinition[] {
-    return PAGE_REGISTRY;
+  async pageRegistry(
+    @CurrentUser() user: RequestUser,
+  ): Promise<readonly PageDefinition[]> {
+    const access = await this.tenants.listPageAccess(user.tenantId);
+    const accessibleKeys = new Set(
+      access.filter((a) => a.accessible).map((a) => a.pageKey),
+    );
+    return PAGE_REGISTRY.filter(
+      (page) => page.alwaysVisible || accessibleKeys.has(page.key),
+    );
   }
 
   @Get('roles')
