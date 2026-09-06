@@ -3,16 +3,20 @@ import { QuotesService } from './quotes.service';
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
+const surveyQueueAdd = vi.fn();
+const fakeSurveyQueue = { add: surveyQueueAdd } as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'quote-1',
     quoteNumber: 'TEK-2026-09-06-001',
     accountId: 'account-1',
+    contactId: null,
     priceListId: 'price-list-1',
     status: 'APPROVED',
     items: [],
     account: {},
+    contact: null,
     priceList: {},
     opportunity: null,
     ...overrides,
@@ -32,12 +36,34 @@ interface Setup {
   quoteRow: unknown;
   products: unknown[];
   priceListItems: unknown[];
+  contact?: unknown;
+  postSaleCase?: unknown;
 }
 
-function createPrisma({ quoteRow, products, priceListItems }: Setup) {
+function createPrisma({
+  quoteRow,
+  products,
+  priceListItems,
+  contact,
+  postSaleCase,
+}: Setup) {
   const tx = {
     product: { findMany: vi.fn().mockResolvedValue(products) },
     priceListItem: { findMany: vi.fn().mockResolvedValue(priceListItems) },
+    contact: {
+      findFirst: vi
+        .fn()
+        .mockResolvedValue(
+          contact ?? { id: 'contact-1', accountId: 'account-1' },
+        ),
+    },
+    tenantSetting: { findFirst: vi.fn().mockResolvedValue(null) },
+    postSaleCase: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi
+        .fn()
+        .mockResolvedValue(postSaleCase ?? { id: 'psc-1', contactId: null }),
+    },
     quote: {
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue(quoteRow),
@@ -61,13 +87,22 @@ function createPrisma({ quoteRow, products, priceListItems }: Setup) {
 }
 
 describe('QuotesService', () => {
+  beforeEach(() => {
+    auditLog.mockClear();
+    surveyQueueAdd.mockClear();
+  });
+
   it('getById: bulunamayan teklif icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({
       quoteRow: null,
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -79,7 +114,11 @@ describe('QuotesService', () => {
       products: [createProduct({ maxDiscountPct: 10 })],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.create('user-1', {
       accountId: 'account-1',
       priceListId: 'price-list-1',
@@ -107,7 +146,11 @@ describe('QuotesService', () => {
       products: [createProduct({ maxDiscountPct: 10 })],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.create('user-1', {
       accountId: 'account-1',
       priceListId: 'price-list-1',
@@ -135,7 +178,11 @@ describe('QuotesService', () => {
       products: [createProduct()],
       priceListItems: [{ productId: 'product-1', unitPrice: 250 }],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.create('user-1', {
       accountId: 'account-1',
       priceListId: 'price-list-1',
@@ -159,7 +206,11 @@ describe('QuotesService', () => {
       products: [createProduct()],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await expect(
       service.create('user-1', {
         accountId: 'account-1',
@@ -177,7 +228,11 @@ describe('QuotesService', () => {
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await expect(
       service.create('user-1', {
         accountId: 'account-1',
@@ -201,7 +256,11 @@ describe('QuotesService', () => {
       products: [createProduct()],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.create('user-1', {
       accountId: 'account-1',
       priceListId: 'price-list-1',
@@ -227,16 +286,158 @@ describe('QuotesService', () => {
     );
   });
 
+  it('create: contactId secilen firmaya ait degilse CONTACT_ACCOUNT_MISMATCH firlatir', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow(),
+      products: [createProduct()],
+      priceListItems: [],
+      contact: { id: 'contact-1', accountId: 'baska-firma' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await expect(
+      service.create('user-1', {
+        accountId: 'account-1',
+        contactId: 'contact-1',
+        priceListId: 'price-list-1',
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 1,
+            unitPrice: 10,
+            discountPct: 0,
+            vatPct: 0,
+          },
+        ],
+      } as never),
+    ).rejects.toMatchObject({ code: 'CONTACT_ACCOUNT_MISMATCH' });
+  });
+
+  it('create: S1 - dogrudan APPROVED olan teklif icin PostSaleCase acar ve contactId varsa anket kuyruguna ekler', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ contactId: 'contact-1' }),
+      products: [createProduct()],
+      priceListItems: [],
+      postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.create('user-1', {
+      accountId: 'account-1',
+      contactId: 'contact-1',
+      priceListId: 'price-list-1',
+      items: [
+        {
+          productId: 'product-1',
+          quantity: 1,
+          unitPrice: 10,
+          discountPct: 0,
+          vatPct: 0,
+        },
+      ],
+    } as never);
+
+    expect(prisma.__tx.postSaleCase.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ quoteId: 'quote-1' }),
+      }),
+    );
+    expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
+      postSaleCaseId: 'psc-1',
+    });
+  });
+
+  it('create: PENDING_APPROVAL olusan teklif icin PostSaleCase acmaz (S1 sadece APPROVED icin)', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
+      products: [createProduct({ maxDiscountPct: 10 })],
+      priceListItems: [],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.create('user-1', {
+      accountId: 'account-1',
+      priceListId: 'price-list-1',
+      items: [
+        {
+          productId: 'product-1',
+          quantity: 1,
+          unitPrice: 100,
+          discountPct: 25,
+          vatPct: 20,
+        },
+      ],
+    } as never);
+
+    expect(prisma.__tx.postSaleCase.create).not.toHaveBeenCalled();
+    expect(surveyQueueAdd).not.toHaveBeenCalled();
+  });
+
   it('update: onaylanmis teklif duzenlenemez', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'APPROVED' }),
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await expect(
       service.update('quote-1', { items: [] } as never),
     ).rejects.toMatchObject({ code: 'QUOTE_NOT_EDITABLE' });
+  });
+
+  it('update: S1 - PENDING_APPROVAL teklif iskonto sinirinin altina cekilince APPROVED olur ve PostSaleCase acar', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'PENDING_APPROVAL',
+        contactId: 'contact-1',
+      }),
+      products: [createProduct({ maxDiscountPct: 10 })],
+      priceListItems: [],
+      postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.update('quote-1', {
+      items: [
+        {
+          productId: 'product-1',
+          quantity: 1,
+          unitPrice: 100,
+          discountPct: 5,
+          vatPct: 20,
+        },
+      ],
+    } as never);
+
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'APPROVED' }),
+      }),
+    );
+    expect(prisma.__tx.postSaleCase.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ quoteId: 'quote-1' }),
+      }),
+    );
+    expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
+      postSaleCaseId: 'psc-1',
+    });
   });
 
   it('approve: onay bekleyen teklifi onaylar', async () => {
@@ -245,9 +446,13 @@ describe('QuotesService', () => {
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.approve('quote-1', 'manager-1');
-    expect(prisma.quote.update).toHaveBeenCalledWith(
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'APPROVED',
@@ -257,13 +462,65 @@ describe('QuotesService', () => {
     );
   });
 
+  it('approve: S1 - PostSaleCase acar, contactId varsa anket kuyruguna ekler', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'PENDING_APPROVAL',
+        contactId: 'contact-1',
+      }),
+      products: [],
+      priceListItems: [],
+      postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.approve('quote-1', 'manager-1');
+
+    expect(prisma.__tx.postSaleCase.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          quoteId: 'quote-1',
+          accountId: 'account-1',
+          contactId: 'contact-1',
+        }),
+      }),
+    );
+    expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
+      postSaleCaseId: 'psc-1',
+    });
+  });
+
+  it('approve: contactId yoksa anket kuyruguna eklemez', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL', contactId: null }),
+      products: [],
+      priceListItems: [],
+      postSaleCase: { id: 'psc-1', contactId: null },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.approve('quote-1', 'manager-1');
+
+    expect(surveyQueueAdd).not.toHaveBeenCalled();
+  });
+
   it('approve: onay bekleyen degilse QUOTE_NOT_PENDING firlatir', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'APPROVED' }),
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await expect(service.approve('quote-1', 'manager-1')).rejects.toMatchObject(
       {
         code: 'QUOTE_NOT_PENDING',
@@ -277,7 +534,11 @@ describe('QuotesService', () => {
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.reject('quote-1', 'manager-1');
     expect(prisma.quote.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -292,7 +553,11 @@ describe('QuotesService', () => {
       products: [],
       priceListItems: [],
     });
-    const service = new QuotesService(prisma as never, fakeAudit);
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
     await service.remove('quote-1');
     expect(prisma.quote.delete).toHaveBeenCalledWith({
       where: { id: 'quote-1' },

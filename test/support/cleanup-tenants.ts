@@ -38,6 +38,10 @@ export async function cleanupTestTenants(
   });
   await prisma.opportunity.deleteMany({ where: tenantFilter });
   await prisma.interaction.deleteMany({ where: tenantFilter });
+  // FeedbackSurvey/PostSaleCase (RESTRICT-referenced Quote/Account/Contact),
+  // once before those and before Product/Account/Contact themselves.
+  await prisma.feedbackSurvey.deleteMany({ where: tenantFilter });
+  await prisma.postSaleCase.deleteMany({ where: tenantFilter });
   // Quote/PriceList once (cascades quoteItems/priceListItems), before Product
   // (RESTRICT-referenced by those child rows) and Account/PriceList themselves.
   await prisma.quote.deleteMany({ where: tenantFilter });

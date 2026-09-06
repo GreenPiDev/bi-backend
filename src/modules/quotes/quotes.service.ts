@@ -1,20 +1,31 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
   Account,
+  Contact,
   Opportunity,
   PriceList,
   Product,
   Quote,
   QuoteItem,
 } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import {
+  POST_SALE_SURVEY_QUEUE,
+  SEND_POST_SALE_SURVEY_JOB,
+} from '../../jobs/post-sale-survey-queue.constants';
 import { AuditService } from '../audit/audit.service';
+import {
+  DEFAULT_POST_SALE_FOLLOW_UP_DAYS,
+  POST_SALE_FOLLOW_UP_DAYS_KEY,
+} from '../tenant-settings/tenant-settings.constants';
 import type {
   CreateQuoteDto,
   QuoteItemInputDto,
@@ -27,6 +38,7 @@ const QUOTE_NUMBER_CREATE_RETRIES = 5;
 
 const QUOTE_INCLUDE = {
   account: true,
+  contact: true,
   priceList: true,
   opportunity: true,
   items: { include: { product: true } },
@@ -34,10 +46,21 @@ const QUOTE_INCLUDE = {
 
 export type QuoteWithDetails = Quote & {
   account: Account;
+  contact: Contact | null;
   priceList: PriceList;
   opportunity: Opportunity | null;
   items: (QuoteItem & { product: Product })[];
 };
+
+interface EnsuredPostSaleCase {
+  id: string;
+  contactId: string | null;
+}
+
+type PostSaleCaseTx = Pick<
+  TenantPrismaClient,
+  'postSaleCase' | 'tenantSetting'
+>;
 
 interface ResolvedQuoteItem {
   productId: string;
@@ -62,7 +85,56 @@ export class QuotesService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    @InjectQueue(POST_SALE_SURVEY_QUEUE)
+    private readonly surveyQueue: Queue,
   ) {}
+
+  /**
+   * S1 (bkz. docs/VARSAYIMLAR.md V28): Quote.status APPROVED'a ulastigi HER an
+   * (create/update/approve - ucu de bu metodu cagirir) idempotent bir PostSaleCase
+   * acar. reminderAt, tenant'in postSaleFollowUpDays ayariyla hesaplanir (S2).
+   */
+  private async ensurePostSaleCase(
+    tx: PostSaleCaseTx,
+    params: {
+      quoteId: string;
+      accountId: string;
+      contactId: string | null;
+      approvedAt: Date;
+    },
+  ): Promise<EnsuredPostSaleCase> {
+    const setting = await tx.tenantSetting.findFirst({
+      where: { key: POST_SALE_FOLLOW_UP_DAYS_KEY },
+    });
+    const followUpDays =
+      typeof setting?.value === 'number'
+        ? setting.value
+        : DEFAULT_POST_SALE_FOLLOW_UP_DAYS;
+    const reminderAt = new Date(
+      params.approvedAt.getTime() + followUpDays * 24 * 60 * 60 * 1000,
+    );
+
+    // tenant-scoped extension yalnizca create/createMany'e tenantId enjekte
+    // eder (upsert desteklenmiyor) - bu yuzden findFirst + create kullanilir,
+    // Quote.postSaleCase 1:1 oldugu icin idempotency findFirst ile saglanir.
+    const existing = await tx.postSaleCase.findFirst({
+      where: { quoteId: params.quoteId },
+    });
+    if (existing) {
+      return { id: existing.id, contactId: existing.contactId };
+    }
+
+    const postSaleCase = await tx.postSaleCase.create({
+      data: {
+        quoteId: params.quoteId,
+        accountId: params.accountId,
+        contactId: params.contactId,
+        reminderAt,
+      } as never,
+    });
+
+    return { id: postSaleCase.id, contactId: postSaleCase.contactId };
+  }
 
   /**
    * Q3/Q4/Q5/Q7: satir basina birim fiyati (fiyat listesi ya da manuel ezme) ve
@@ -180,77 +252,107 @@ export class QuotesService {
     createdById: string,
     dto: CreateQuoteDto,
   ): Promise<QuoteWithDetails> {
-    const quoteId = await this.prisma.$transaction(async (tx) => {
-      const { items, requiresApproval } = await this.resolveItems(
-        tx,
-        dto.priceListId,
-        dto.items,
-      );
-
-      let created: Quote | undefined;
-      for (
-        let attempt = 0;
-        attempt < QUOTE_NUMBER_CREATE_RETRIES;
-        attempt += 1
-      ) {
-        const prefix = quoteNumberPrefix(new Date());
-        const countToday = await tx.quote.count({
-          where: { quoteNumber: { startsWith: prefix } },
-        });
-        const quoteNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
-        try {
-          created = await tx.quote.create({
-            data: {
-              accountId: dto.accountId,
-              priceListId: dto.priceListId,
-              quoteNumber,
-              status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
-              createdById,
-              items: { create: items },
-            } as never,
+    const { quoteId, postSaleCase } = await this.prisma.$transaction(
+      async (tx) => {
+        if (dto.contactId) {
+          const contact = await tx.contact.findFirst({
+            where: { id: dto.contactId },
           });
-          break;
-        } catch (error) {
-          const isDuplicateNumber =
-            error instanceof Prisma.PrismaClientKnownRequestError &&
-            error.code === 'P2002';
-          if (
-            !isDuplicateNumber ||
-            attempt === QUOTE_NUMBER_CREATE_RETRIES - 1
-          ) {
-            throw error;
+          if (!contact || contact.accountId !== dto.accountId) {
+            throw new AppException(
+              'CONTACT_ACCOUNT_MISMATCH',
+              'Secilen kisi bu firmaya ait degil.',
+              HttpStatus.BAD_REQUEST,
+            );
           }
         }
-      }
-      if (!created) {
-        throw new AppException(
-          'QUOTE_NUMBER_CONFLICT',
-          'Teklif numarasi olusturulamadi, lutfen tekrar deneyin.',
-          HttpStatus.CONFLICT,
+
+        const { items, requiresApproval } = await this.resolveItems(
+          tx,
+          dto.priceListId,
+          dto.items,
         );
-      }
 
-      if (dto.opportunity) {
-        await tx.opportunity.create({
-          data: {
-            accountId: dto.accountId,
-            quoteId: created.id,
-            name: dto.opportunity.name,
-            stage: dto.opportunity.stage,
-            estimatedValue: dto.opportunity.estimatedValue,
-            createdById,
-          } as never,
-        });
-      }
+        let created: Quote | undefined;
+        for (
+          let attempt = 0;
+          attempt < QUOTE_NUMBER_CREATE_RETRIES;
+          attempt += 1
+        ) {
+          const prefix = quoteNumberPrefix(new Date());
+          const countToday = await tx.quote.count({
+            where: { quoteNumber: { startsWith: prefix } },
+          });
+          const quoteNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
+          try {
+            created = await tx.quote.create({
+              data: {
+                accountId: dto.accountId,
+                contactId: dto.contactId ?? null,
+                priceListId: dto.priceListId,
+                quoteNumber,
+                status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
+                createdById,
+                items: { create: items },
+              } as never,
+            });
+            break;
+          } catch (error) {
+            const isDuplicateNumber =
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === 'P2002';
+            if (
+              !isDuplicateNumber ||
+              attempt === QUOTE_NUMBER_CREATE_RETRIES - 1
+            ) {
+              throw error;
+            }
+          }
+        }
+        if (!created) {
+          throw new AppException(
+            'QUOTE_NUMBER_CONFLICT',
+            'Teklif numarasi olusturulamadi, lutfen tekrar deneyin.',
+            HttpStatus.CONFLICT,
+          );
+        }
 
-      return created.id;
-    });
+        if (dto.opportunity) {
+          await tx.opportunity.create({
+            data: {
+              accountId: dto.accountId,
+              quoteId: created.id,
+              name: dto.opportunity.name,
+              stage: dto.opportunity.stage,
+              estimatedValue: dto.opportunity.estimatedValue,
+              createdById,
+            } as never,
+          });
+        }
+
+        const postSaleCase: EnsuredPostSaleCase | null = requiresApproval
+          ? null
+          : await this.ensurePostSaleCase(tx, {
+              quoteId: created.id,
+              accountId: dto.accountId,
+              contactId: dto.contactId ?? null,
+              approvedAt: new Date(),
+            });
+
+        return { quoteId: created.id, postSaleCase };
+      },
+    );
 
     await this.audit.log({
       action: 'CREATE',
       entity: 'Quote',
       entityId: quoteId,
     });
+    if (postSaleCase?.contactId) {
+      await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
+        postSaleCaseId: postSaleCase.id,
+      });
+    }
     return this.getById(quoteId);
   }
 
@@ -264,7 +366,7 @@ export class QuotesService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const postSaleCase = await this.prisma.$transaction(async (tx) => {
       const priceListId = dto.priceListId ?? existing.priceListId;
 
       if (dto.items) {
@@ -284,15 +386,30 @@ export class QuotesService {
             status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
           },
         });
+
+        if (!requiresApproval) {
+          return this.ensurePostSaleCase(tx, {
+            quoteId: id,
+            accountId: existing.accountId,
+            contactId: existing.contactId,
+            approvedAt: new Date(),
+          });
+        }
       } else if (dto.priceListId) {
         await tx.quote.update({
           where: { id },
           data: { priceListId: dto.priceListId },
         });
       }
+      return null;
     });
 
     await this.audit.log({ action: 'UPDATE', entity: 'Quote', entityId: id });
+    if (postSaleCase?.contactId) {
+      await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
+        postSaleCaseId: postSaleCase.id,
+      });
+    }
     return this.getById(id);
   }
 
@@ -316,12 +433,26 @@ export class QuotesService {
   }
 
   async approve(id: string, approvedById: string): Promise<QuoteWithDetails> {
-    await this.assertPendingApproval(id);
-    await this.prisma.quote.update({
-      where: { id },
-      data: { status: 'APPROVED', approvedAt: new Date(), approvedById },
+    const existing = await this.assertPendingApproval(id);
+    const approvedAt = new Date();
+    const postSaleCase = await this.prisma.$transaction(async (tx) => {
+      await tx.quote.update({
+        where: { id },
+        data: { status: 'APPROVED', approvedAt, approvedById },
+      });
+      return this.ensurePostSaleCase(tx, {
+        quoteId: id,
+        accountId: existing.accountId,
+        contactId: existing.contactId,
+        approvedAt,
+      });
     });
     await this.audit.log({ action: 'APPROVE', entity: 'Quote', entityId: id });
+    if (postSaleCase.contactId) {
+      await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
+        postSaleCaseId: postSaleCase.id,
+      });
+    }
     return this.getById(id);
   }
 

@@ -27,6 +27,9 @@ const QuoteOpportunityInputSchema = z.object({
 
 export const CreateQuoteSchema = z.object({
   accountId: z.string().uuid(),
+  /** S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - opsiyonel, verilirse
+   * accountId'ye ait bir kisi olmalidir. */
+  contactId: z.string().uuid().optional(),
   priceListId: z.string().uuid(),
   items: z
     .array(QuoteItemInputSchema)

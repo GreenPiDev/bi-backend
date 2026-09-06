@@ -24,6 +24,8 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Product',
   'PriceList',
   'Quote',
+  'PostSaleCase',
+  'FeedbackSurvey',
 ]);
 
 /**

@@ -48,9 +48,11 @@ enum OpportunityStage {
   LOST
 }
 
-/** Bkz. docs/VARSAYIMLAR.md V27: politika asimi yoksa olusturma aninda dogrudan APPROVED,
+/**
+ * Bkz. docs/VARSAYIMLAR.md V27: politika asimi yoksa olusturma aninda dogrudan APPROVED,
  * asim varsa PENDING_APPROVAL (APPROVE izniyle sonuclanir). DRAFT sema uyumlulugu icin
- * tutuluyor, Faz 11d'nin senkron olusturma akisi hic uretmiyor. */
+ * tutuluyor, Faz 11d'nin senkron olusturma akisi hic uretmiyor.
+ */
 enum QuoteStatus {
   DRAFT
   PENDING_APPROVAL
@@ -109,6 +111,8 @@ model Tenant {
   products         Product[]
   priceLists       PriceList[]
   quotes           Quote[]
+  postSaleCases    PostSaleCase[]
+  feedbackSurveys  FeedbackSurvey[]
 
   @@map("tenants")
 }
@@ -131,21 +135,25 @@ model User {
   @@map("users")
 }
 
-/** SUPERADMIN ve COMPANYADMIN sabit/koda gomulu roller olarak isSystem=true ile temsil
+/**
+ * SUPERADMIN ve COMPANYADMIN sabit/koda gomulu roller olarak isSystem=true ile temsil
  * edilir (COMPANYADMIN her tenant'ta kayit sirasinda otomatik olusur). isBasic=true olan
  * rol, bir rol silindiginde o role sahip kullanicilarin dusecegi, tenant basina tam 1 adet
  * bulunan silinemez rol("Temel Kullanici")dir. Bunlarin disindaki roller COMPANYADMIN
  * tarafindan serbestce olusturulan/silinen dinamik rollerdir - isimleri kod icinde asla
- * gecmez (bkz. CLAUDE.md SS0/SS5, docs/PLAN_ROL_YONETIMI.md SS0). */
+ * gecmez (bkz. CLAUDE.md SS0/SS5, docs/PLAN_ROL_YONETIMI.md SS0).
+ */
 model Role {
   id             String   @id @default(uuid())
   tenantId       String
   name           String
   isSystem       Boolean  @default(false)
   isBasic        Boolean  @default(false)
-  /** true ise guard bu rolu tasiyan kullaniciyi Page Registry'deki TUM sayfa/aksiyonlara
+  /**
+   * true ise guard bu rolu tasiyan kullaniciyi Page Registry'deki TUM sayfa/aksiyonlara
    * (gelecekte eklenecekler dahil) yetkili sayar - RolePermission satiri gerektirmez.
-   * Sadece tenant kaydi sirasinda otomatik olusturulan COMPANYADMIN rolunde true'dur. */
+   * Sadece tenant kaydi sirasinda otomatik olusturulan COMPANYADMIN rolunde true'dur.
+   */
   isCompanyAdmin Boolean  @default(false)
   createdAt      DateTime @default(now())
 
@@ -158,11 +166,13 @@ model Role {
   @@map("roles")
 }
 
-/** pageKey, core/modules/page-registry.ts'teki PAGE_REGISTRY key'lerine karsi whitelist
+/**
+ * pageKey, core/modules/page-registry.ts'teki PAGE_REGISTRY key'lerine karsi whitelist
  * dogrulanir (sorgu motorunun UNKNOWN_FIELD desenine paralel). tabKey null ise izin sayfanin
- * tamami icin gecerlidir. */
+ * tamami icin gecerlidir.
+ */
 model RolePermission {
-  id      String            @id @default(uuid())
+  id      String           @id @default(uuid())
   roleId  String
   pageKey String
   tabKey  String?
@@ -216,18 +226,17 @@ model PageModuleAssignment {
   @@map("page_module_assignments")
 }
 
-
 model DataSource {
-  id               String            @id @default(uuid())
+  id               String           @id @default(uuid())
   tenantId         String
   name             String
   type             DataSourceType
   originalFileName String
   sizeBytes        Int
-  status           DataSourceStatus  @default(PENDING)
+  status           DataSourceStatus @default(PENDING)
   errorMessage     String?
   createdById      String
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime         @default(now())
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   datasets Dataset[]
@@ -308,12 +317,12 @@ model Widget {
 }
 
 model ScheduledReport {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   dashboardId String
   cron        String
   recipients  String[]
-  isActive    Boolean  @default(true)
+  isActive    Boolean   @default(true)
   lastRunAt   DateTime?
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
@@ -376,11 +385,12 @@ model Account {
   updatedAt    DateTime      @updatedAt
   deletedAt    DateTime?
 
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
   contacts      Contact[]
   interactions  Interaction[]
   opportunities Opportunity[]
   quotes        Quote[]
+  postSaleCases PostSaleCase[]
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
@@ -388,26 +398,29 @@ model Account {
 }
 
 model Contact {
-  id                  String        @id @default(uuid())
-  tenantId            String
-  accountId           String?
-  firstName           String
-  lastName            String
-  title               String?
-  email               String?
-  phone               String?
-  ownerId             String?
-  status              ContactStatus @default(ACTIVE)
-  lastContactedAt     DateTime?
+  id                   String        @id @default(uuid())
+  tenantId             String
+  accountId            String?
+  firstName            String
+  lastName             String
+  title                String?
+  email                String?
+  phone                String?
+  ownerId              String?
+  status               ContactStatus @default(ACTIVE)
+  lastContactedAt      DateTime?
   inactivityNotifiedAt DateTime?
-  customFields        Json          @default("{}")
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  deletedAt           DateTime?
+  customFields         Json          @default("{}")
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  deletedAt            DateTime?
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  account      Account?      @relation(fields: [accountId], references: [id])
-  interactions Interaction[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  account         Account?         @relation(fields: [accountId], references: [id])
+  interactions    Interaction[]
+  quotes          Quote[]
+  postSaleCases   PostSaleCase[]
+  feedbackSurveys FeedbackSurvey[]
 
   @@index([tenantId, lastName])
   @@index([tenantId, deletedAt])
@@ -416,7 +429,9 @@ model Contact {
   @@map("crm_contacts")
 }
 
-/** A2: tenant kendi sektor listesini ADMIN/OWNER uzerinden yonetir (bkz. VARSAYIMLAR V18) */
+/**
+ * A2: tenant kendi sektor listesini ADMIN/OWNER uzerinden yonetir (bkz. VARSAYIMLAR V18)
+ */
 model SectorOption {
   id        String   @id @default(uuid())
   tenantId  String
@@ -429,7 +444,9 @@ model SectorOption {
   @@map("crm_sector_options")
 }
 
-/** Genel amacli tenant bazli anahtar-deger ayar deposu (K2 esigi buradan okunur). */
+/**
+ * Genel amacli tenant bazli anahtar-deger ayar deposu (K2 esigi buradan okunur).
+ */
 model TenantSetting {
   id        String   @id @default(uuid())
   tenantId  String
@@ -449,18 +466,18 @@ model TenantSetting {
  * (Faz 11c/11d/11g), gecerli deger listesi uygulama katmaninda kontrol edilecek.
  */
 model CalendarEvent {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   tenantId          String
   title             String
   description       String?
   startAt           DateTime
   endAt             DateTime
-  allDay            Boolean  @default(false)
+  allDay            Boolean   @default(false)
   relatedEntityType String?
   relatedEntityId   String?
   createdById       String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
 
   tenant    Tenant                  @relation(fields: [tenantId], references: [id])
@@ -471,14 +488,18 @@ model CalendarEvent {
   @@map("crm_calendar_events")
 }
 
-/** M6: her katilimciya kendi aciklamasi - "note" bu ihtiyaci karsilar. */
+/**
+ * M6: her katilimciya kendi aciklamasi - "note" bu ihtiyaci karsilar.
+ */
 model CalendarEventAttendee {
   id         String    @id @default(uuid())
   eventId    String
   userId     String
   note       String?
-  /** Faz 11c M4/M8/M9: hatirlatma e-postasi bu kullaniciya gonderildiginde damgalanir
-   * (Contact.inactivityNotifiedAt ile ayni desen) - tekrar gonderimi engeller. */
+  /**
+   * Faz 11c M4/M8/M9: hatirlatma e-postasi bu kullaniciya gonderildiginde damgalanir
+   * (Contact.inactivityNotifiedAt ile ayni desen) - tekrar gonderimi engeller.
+   */
   notifiedAt DateTime?
   createdAt  DateTime  @default(now())
 
@@ -502,18 +523,22 @@ model Interaction {
   notes              String
   occurredAt         DateTime
   status             InteractionStatus @default(OPEN)
-  /** M2: bilinmeyen firma serbest metinle girildiyse otomatik olusan cari - bildirim icin. */
+  /**
+   * M2: bilinmeyen firma serbest metinle girildiyse otomatik olusan cari - bildirim icin.
+   */
   accountAutoCreated Boolean           @default(false)
-  /** M1: bilinmeyen kisi serbest metinle girildiyse otomatik olusan kontak - bildirim icin. */
+  /**
+   * M1: bilinmeyen kisi serbest metinle girildiyse otomatik olusan kontak - bildirim icin.
+   */
   contactAutoCreated Boolean           @default(false)
   createdById        String
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   deletedAt          DateTime?
 
-  tenant       Tenant                    @relation(fields: [tenantId], references: [id])
-  account      Account                   @relation(fields: [accountId], references: [id])
-  contact      Contact?                  @relation(fields: [contactId], references: [id])
+  tenant       Tenant                   @relation(fields: [tenantId], references: [id])
+  account      Account                  @relation(fields: [accountId], references: [id])
+  contact      Contact?                 @relation(fields: [contactId], references: [id])
   opportunity  Opportunity?
   participants InteractionParticipant[]
 
@@ -523,8 +548,10 @@ model Interaction {
   @@map("crm_interactions")
 }
 
-/** M10: cari kayda eklenmesi istenmeyen katilimcilar (bizim taraf + karsi taraf).
- * CalendarEventAttendee gibi ayri tenantId tasimaz, interaction uzerinden cascade silinir. */
+/**
+ * M10: cari kayda eklenmesi istenmeyen katilimcilar (bizim taraf + karsi taraf).
+ * CalendarEventAttendee gibi ayri tenantId tasimaz, interaction uzerinden cascade silinir.
+ */
 model InteractionParticipant {
   id            String   @id @default(uuid())
   interactionId String
@@ -538,8 +565,10 @@ model InteractionParticipant {
   @@map("crm_interaction_participants")
 }
 
-/** quoteId Faz 11d'de gercek FK'ya yukseltildi (Quote modeli artik var) - bkz.
- * docs/VARSAYIMLAR.md V26 (baslangicta gevsek birakilma gerekcesi) / V27 (O2, FK'ya yukseltme). */
+/**
+ * quoteId Faz 11d'de gercek FK'ya yukseltildi (Quote modeli artik var) - bkz.
+ * docs/VARSAYIMLAR.md V26 (baslangicta gevsek birakilma gerekcesi) / V27 (O2, FK'ya yukseltme).
+ */
 model Opportunity {
   id             String           @id @default(uuid())
   tenantId       String
@@ -565,12 +594,14 @@ model Opportunity {
   @@map("crm_opportunities")
 }
 
-/** Faz 11d taslagi (CLAUDE.md SS7.2 U1/Q3) - Quote'un ihtiyac duydugu minimal urun kaydi.
+/**
+ * Faz 11d taslagi (CLAUDE.md SS7.2 U1/Q3) - Quote'un ihtiyac duydugu minimal urun kaydi.
  * Tam katalog (stok entegrasyonu) Faz 11h/11i'de genisletilecek, bkz. docs/VARSAYIMLAR.md V27.
  * minStockLevel simdiden eklendi (Faz 11h ST1'de kullanilacak) ama bu fazda okunmuyor/UI'da
  * zorunlu degil. maxDiscountPct Q7'nin "urun basina azami iskonto orani" ihtiyacini
  * karsilar - taslak semadaki ayri `ProductDiscountPolicy` modeli KURULMADI (bire-bir 1:1,
- * ek alani olmayan bir iliski icin gereksiz bir tablo/CRUD olurdu), bkz. VARSAYIMLAR V27. */
+ * ek alani olmayan bir iliski icin gereksiz bir tablo/CRUD olurdu), bkz. VARSAYIMLAR V27.
+ */
 model Product {
   id             String    @id @default(uuid())
   tenantId       String
@@ -592,7 +623,9 @@ model Product {
   @@map("crm_products")
 }
 
-/** Q3: teklif satirinda varsayilan birim fiyat buradan gelir, manuel ezilebilir. */
+/**
+ * Q3: teklif satirinda varsayilan birim fiyat buradan gelir, manuel ezilebilir.
+ */
 model PriceList {
   id        String    @id @default(uuid())
   tenantId  String
@@ -610,8 +643,10 @@ model PriceList {
   @@map("crm_price_lists")
 }
 
-/** tenantId tasimaz - InteractionParticipant/CalendarEventAttendee ile ayni desen, parent
- * (PriceList) uzerinden tenant izolasyonu saglanir, cascade silinir. */
+/**
+ * tenantId tasimaz - InteractionParticipant/CalendarEventAttendee ile ayni desen, parent
+ * (PriceList) uzerinden tenant izolasyonu saglanir, cascade silinir.
+ */
 model PriceListItem {
   id          String   @id @default(uuid())
   priceListId String
@@ -626,12 +661,19 @@ model PriceListItem {
   @@map("crm_price_list_items")
 }
 
-/** Q1-Q8 (bkz. docs/VARSAYIMLAR.md V27). quoteNumber formati TEK-YYYY-AA-GG-NNN, tenant
- * basina benzersiz, gun icinde sirali (Q1). */
+/**
+ * Q1-Q8 (bkz. docs/VARSAYIMLAR.md V27). quoteNumber formati TEK-YYYY-AA-GG-NNN, tenant
+ * basina benzersiz, gun icinde sirali (Q1).
+ */
 model Quote {
   id           String      @id @default(uuid())
   tenantId     String
   accountId    String
+  /**
+   * S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - teklif olustururken opsiyonel
+   * secilir, PostSaleCase/FeedbackSurvey bunu teklif uzerinden miras alir.
+   */
+  contactId    String?
   quoteNumber  String
   priceListId  String
   status       QuoteStatus @default(DRAFT)
@@ -642,22 +684,27 @@ model Quote {
   updatedAt    DateTime    @updatedAt
   deletedAt    DateTime?
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  account     Account      @relation(fields: [accountId], references: [id])
-  priceList   PriceList    @relation(fields: [priceListId], references: [id])
-  items       QuoteItem[]
-  opportunity Opportunity?
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  account      Account       @relation(fields: [accountId], references: [id])
+  contact      Contact?      @relation(fields: [contactId], references: [id])
+  priceList    PriceList     @relation(fields: [priceListId], references: [id])
+  items        QuoteItem[]
+  opportunity  Opportunity?
+  postSaleCase PostSaleCase?
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, accountId])
+  @@index([tenantId, contactId])
   @@index([tenantId, status])
   @@index([tenantId, deletedAt])
   @@map("crm_quotes")
 }
 
-/** tenantId tasimaz (PriceListItem ile ayni desen). unitPrice fiyat listesinden gelir ama
+/**
+ * tenantId tasimaz (PriceListItem ile ayni desen). unitPrice fiyat listesinden gelir ama
  * satir bazinda manuel ezilebilir (Q3) - burada saklanan deger PriceListItem'dan bagimsiz,
- * teklifin olusturuldugu andaki degeri korur. discountNote Q5'in otomatik notu. */
+ * teklifin olusturuldugu andaki degeri korur. discountNote Q5'in otomatik notu.
+ */
 model QuoteItem {
   id           String   @id @default(uuid())
   quoteId      String
@@ -673,4 +720,62 @@ model QuoteItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@map("crm_quote_items")
+}
+
+/**
+ * S1 (bkz. docs/VARSAYIMLAR.md V28): Quote.status APPROVED'a ulastigi HER an (dogrudan
+ * olusturma, approve endpoint'i, veya update() sirasinda iskonto siniri altina inme) tek bir
+ * PostSaleCase acilir (quoteId @unique, idempotent upsert - bkz. QuotesService.ensurePostSaleCase).
+ * status alani DB'de TUTULMAZ - Account.missingCriticalFields ile ayni "hesaplanan alan"
+ * konvansiyonu (bkz. VARSAYIMLAR V18), reminderSentAt/feedbackReceivedAt'tan servis katmaninda
+ * turetilir. reminderAt, onay anindaki TenantSetting(crm.postSaleFollowUpDays, varsayilan 14)
+ * degeriyle hesaplanir (S2).
+ */
+model PostSaleCase {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  quoteId            String    @unique
+  accountId          String
+  contactId          String?
+  reminderAt         DateTime
+  reminderSentAt     DateTime?
+  feedbackReceivedAt DateTime?
+  feedbackNote       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  quote          Quote           @relation(fields: [quoteId], references: [id])
+  account        Account         @relation(fields: [accountId], references: [id])
+  contact        Contact?        @relation(fields: [contactId], references: [id])
+  feedbackSurvey FeedbackSurvey?
+
+  @@index([tenantId, reminderAt])
+  @@index([tenantId, accountId])
+  @@map("crm_post_sale_cases")
+}
+
+/**
+ * S3 (bkz. docs/VARSAYIMLAR.md V28): anket SADECE e-posta olarak gonderilir (mevcut
+ * text-only MailService), yanit temsilci tarafindan elle isaretlenir - tokenli bir public
+ * link/form YAZILMADI. Bu yuzden taslak semadaki `response Json` yerine serbest metin
+ * `responseNote String?` yeterli gorulmustur (Q7/ProductDiscountPolicy'deki 1:1-basitlestirme
+ * kararlariyla ayni gerekce - bkz. docs/VARSAYIMLAR.md). postSaleCaseId @unique: bir vaka
+ * icin en fazla bir anket kaydi, yeniden gonderim sentAt'i gunceller (resend).
+ */
+model FeedbackSurvey {
+  id             String    @id @default(uuid())
+  tenantId       String
+  postSaleCaseId String    @unique
+  contactId      String
+  sentAt         DateTime
+  respondedAt    DateTime?
+  responseNote   String?
+  createdAt      DateTime  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  postSaleCase PostSaleCase @relation(fields: [postSaleCaseId], references: [id])
+  contact      Contact      @relation(fields: [contactId], references: [id])
+
+  @@map("crm_feedback_surveys")
 }

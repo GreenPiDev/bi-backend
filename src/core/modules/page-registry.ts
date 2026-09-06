@@ -77,6 +77,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     label: 'Teklifler',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'EXPORT'],
   },
+  {
+    key: 'post-sale-cases',
+    label: 'Satis Sonrasi Destek',
+    supportedActions: ['UPDATE'],
+  },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
     key: 'settings',
