@@ -1,6 +1,7 @@
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { NestFactory } from '@nestjs/core';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './core/filters/http-exception.filter';
 
@@ -14,6 +15,7 @@ async function bootstrap() {
   });
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.useWebSocketAdapter(new IoAdapter(app));
   await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();

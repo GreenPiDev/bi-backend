@@ -9,6 +9,7 @@ import {
   type PageModuleAssignment,
 } from '../../core/modules/page-modules.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { RealtimeService } from '../../core/realtime/realtime.service';
 import {
   TenantsService,
   type TenantModuleStatus,
@@ -28,6 +29,7 @@ export class PlatformAdminService {
     private readonly prisma: PrismaService,
     private readonly tenants: TenantsService,
     private readonly pageModules: PageModulesService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   listTenants(): Promise<TenantSummary[]> {
@@ -53,7 +55,9 @@ export class PlatformAdminService {
     } else {
       await this.tenants.disableModule(tenantId, moduleKey);
     }
-    return this.tenants.listModules(tenantId);
+    const modules = await this.tenants.listModules(tenantId);
+    this.realtime.emitToTenant(tenantId, 'tenant.modules.updated', modules);
+    return modules;
   }
 
   listModuleDefinitions(): readonly ModuleDefinition[] {
@@ -64,11 +68,16 @@ export class PlatformAdminService {
     return this.pageModules.listAssignments();
   }
 
-  setPageModule(
+  async setPageModule(
     pageKey: string,
     moduleKeys: string[],
   ): Promise<PageModuleAssignment[]> {
-    return this.pageModules.setAssignment(pageKey, moduleKeys);
+    const assignments = await this.pageModules.setAssignment(
+      pageKey,
+      moduleKeys,
+    );
+    this.realtime.emitToAll('page-modules.updated', assignments);
+    return assignments;
   }
 
   private async requireTenant(tenantId: string): Promise<void> {

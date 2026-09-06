@@ -9,6 +9,7 @@ import { PermissionGuard } from './core/guards/permission.guard';
 import { TenantContextInterceptor } from './core/interceptors/tenant-context.interceptor';
 import { PageModulesModule } from './core/modules/page-modules.module';
 import { PermissionsModule } from './core/permissions/permissions.module';
+import { RealtimeModule } from './core/realtime/realtime.module';
 import { RedisModule } from './core/redis/redis.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
@@ -43,6 +44,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 100 }]),
     CoreModule,
     RedisModule,
+    RealtimeModule,
     PermissionsModule,
     PageModulesModule,
     AuditModule,
