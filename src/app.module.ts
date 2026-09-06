@@ -28,7 +28,10 @@ import { InteractionsModule } from './modules/interactions/interactions.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
+import { PriceListsModule } from './modules/price-lists/price-lists.module';
+import { ProductsModule } from './modules/products/products.module';
 import { QueryModule } from './modules/query/query.module';
+import { QuotesModule } from './modules/quotes/quotes.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
@@ -73,6 +76,9 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     CalendarEventsModule,
     InteractionsModule,
     OpportunitiesModule,
+    ProductsModule,
+    PriceListsModule,
+    QuotesModule,
     JobsModule,
   ],
   providers: [

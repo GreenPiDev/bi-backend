@@ -38,6 +38,11 @@ export async function cleanupTestTenants(
   });
   await prisma.opportunity.deleteMany({ where: tenantFilter });
   await prisma.interaction.deleteMany({ where: tenantFilter });
+  // Quote/PriceList once (cascades quoteItems/priceListItems), before Product
+  // (RESTRICT-referenced by those child rows) and Account/PriceList themselves.
+  await prisma.quote.deleteMany({ where: tenantFilter });
+  await prisma.priceList.deleteMany({ where: tenantFilter });
+  await prisma.product.deleteMany({ where: tenantFilter });
   await prisma.contact.deleteMany({ where: tenantFilter });
   await prisma.account.deleteMany({ where: tenantFilter });
   await prisma.calendarEvent.deleteMany({ where: tenantFilter });

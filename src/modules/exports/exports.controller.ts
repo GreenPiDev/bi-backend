@@ -59,4 +59,20 @@ export class ExportsController {
     });
     res.send(pdf);
   }
+
+  @Post('quote/:id/pdf')
+  @RequiresPermission('quotes', 'EXPORT')
+  @HttpCode(HttpStatus.OK)
+  async exportQuotePdf(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.exports.exportQuotePdf(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="teklif-${id}.pdf"`,
+    });
+    res.send(pdf);
+  }
 }

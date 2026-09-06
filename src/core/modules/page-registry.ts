@@ -1,6 +1,6 @@
 /** VIEW ayrica "Sayfa Erisimleri" (gorunurluk) sekmesinde yonetilir, bu listede yer almaz. */
 export type CrudPermissionAction =
-  'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT';
+  'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'APPROVE';
 
 export interface PageTabDefinition {
   key: string;
@@ -61,6 +61,21 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     key: 'opportunities',
     label: 'Firsatlar',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
+    key: 'products',
+    label: 'Urunler',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
+    key: 'price-lists',
+    label: 'Fiyat Listeleri',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
+    key: 'quotes',
+    label: 'Teklifler',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'EXPORT'],
   },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {

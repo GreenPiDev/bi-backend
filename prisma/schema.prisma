@@ -14,6 +14,7 @@ enum PermissionAction {
   DELETE
   IMPORT
   EXPORT
+  APPROVE
 }
 
 enum AccountType {
@@ -45,6 +46,16 @@ enum OpportunityStage {
   PROPOSAL
   WON
   LOST
+}
+
+/** Bkz. docs/VARSAYIMLAR.md V27: politika asimi yoksa olusturma aninda dogrudan APPROVED,
+ * asim varsa PENDING_APPROVAL (APPROVE izniyle sonuclanir). DRAFT sema uyumlulugu icin
+ * tutuluyor, Faz 11d'nin senkron olusturma akisi hic uretmiyor. */
+enum QuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
 }
 
 enum DataSourceType {
@@ -95,6 +106,9 @@ model Tenant {
   calendarEvents   CalendarEvent[]
   interactions     Interaction[]
   opportunities    Opportunity[]
+  products         Product[]
+  priceLists       PriceList[]
+  quotes           Quote[]
 
   @@map("tenants")
 }
@@ -366,6 +380,7 @@ model Account {
   contacts      Contact[]
   interactions  Interaction[]
   opportunities Opportunity[]
+  quotes        Quote[]
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
@@ -523,14 +538,14 @@ model InteractionParticipant {
   @@map("crm_interaction_participants")
 }
 
-/** quoteId bilincli olarak gevsek/dogrulanmayan String: Quote modeli henuz yok (Faz 11d,
- * O2), bkz. docs/VARSAYIMLAR.md V19/V26 - CalendarEvent.relatedEntityType ile ayni desen. */
+/** quoteId Faz 11d'de gercek FK'ya yukseltildi (Quote modeli artik var) - bkz.
+ * docs/VARSAYIMLAR.md V26 (baslangicta gevsek birakilma gerekcesi) / V27 (O2, FK'ya yukseltme). */
 model Opportunity {
   id             String           @id @default(uuid())
   tenantId       String
   accountId      String
   interactionId  String?          @unique
-  quoteId        String?
+  quoteId        String?          @unique
   name           String
   stage          OpportunityStage @default(NEW)
   estimatedValue Decimal?         @db.Decimal(14, 2)
@@ -542,9 +557,120 @@ model Opportunity {
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   account     Account      @relation(fields: [accountId], references: [id])
   interaction Interaction? @relation(fields: [interactionId], references: [id])
+  quote       Quote?       @relation(fields: [quoteId], references: [id])
 
   @@index([tenantId, accountId])
   @@index([tenantId, stage])
   @@index([tenantId, deletedAt])
   @@map("crm_opportunities")
+}
+
+/** Faz 11d taslagi (CLAUDE.md SS7.2 U1/Q3) - Quote'un ihtiyac duydugu minimal urun kaydi.
+ * Tam katalog (stok entegrasyonu) Faz 11h/11i'de genisletilecek, bkz. docs/VARSAYIMLAR.md V27.
+ * minStockLevel simdiden eklendi (Faz 11h ST1'de kullanilacak) ama bu fazda okunmuyor/UI'da
+ * zorunlu degil. maxDiscountPct Q7'nin "urun basina azami iskonto orani" ihtiyacini
+ * karsilar - taslak semadaki ayri `ProductDiscountPolicy` modeli KURULMADI (bire-bir 1:1,
+ * ek alani olmayan bir iliski icin gereksiz bir tablo/CRUD olurdu), bkz. VARSAYIMLAR V27. */
+model Product {
+  id             String    @id @default(uuid())
+  tenantId       String
+  name           String
+  sku            String?
+  unit           String    @default("adet")
+  minStockLevel  Int?
+  maxDiscountPct Decimal?  @db.Decimal(5, 2)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  priceListItems PriceListItem[]
+  quoteItems     QuoteItem[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, deletedAt])
+  @@map("crm_products")
+}
+
+/** Q3: teklif satirinda varsayilan birim fiyat buradan gelir, manuel ezilebilir. */
+model PriceList {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  isDefault Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id])
+  items  PriceListItem[]
+  quotes Quote[]
+
+  @@index([tenantId, deletedAt])
+  @@map("crm_price_lists")
+}
+
+/** tenantId tasimaz - InteractionParticipant/CalendarEventAttendee ile ayni desen, parent
+ * (PriceList) uzerinden tenant izolasyonu saglanir, cascade silinir. */
+model PriceListItem {
+  id          String   @id @default(uuid())
+  priceListId String
+  productId   String
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@unique([priceListId, productId])
+  @@map("crm_price_list_items")
+}
+
+/** Q1-Q8 (bkz. docs/VARSAYIMLAR.md V27). quoteNumber formati TEK-YYYY-AA-GG-NNN, tenant
+ * basina benzersiz, gun icinde sirali (Q1). */
+model Quote {
+  id           String      @id @default(uuid())
+  tenantId     String
+  accountId    String
+  quoteNumber  String
+  priceListId  String
+  status       QuoteStatus @default(DRAFT)
+  approvedAt   DateTime?
+  approvedById String?
+  createdById  String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  account     Account      @relation(fields: [accountId], references: [id])
+  priceList   PriceList    @relation(fields: [priceListId], references: [id])
+  items       QuoteItem[]
+  opportunity Opportunity?
+
+  @@unique([tenantId, quoteNumber])
+  @@index([tenantId, accountId])
+  @@index([tenantId, status])
+  @@index([tenantId, deletedAt])
+  @@map("crm_quotes")
+}
+
+/** tenantId tasimaz (PriceListItem ile ayni desen). unitPrice fiyat listesinden gelir ama
+ * satir bazinda manuel ezilebilir (Q3) - burada saklanan deger PriceListItem'dan bagimsiz,
+ * teklifin olusturuldugu andaki degeri korur. discountNote Q5'in otomatik notu. */
+model QuoteItem {
+  id           String   @id @default(uuid())
+  quoteId      String
+  productId    String
+  quantity     Decimal  @db.Decimal(14, 3)
+  unitPrice    Decimal  @db.Decimal(14, 2)
+  discountPct  Decimal  @default(0) @db.Decimal(5, 2)
+  discountNote String?
+  vatPct       Decimal  @default(0) @db.Decimal(5, 2)
+  createdAt    DateTime @default(now())
+
+  quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("crm_quote_items")
 }

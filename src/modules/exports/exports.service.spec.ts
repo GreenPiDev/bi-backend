@@ -44,17 +44,33 @@ function createDashboardPdf() {
   return { render: vi.fn().mockResolvedValue(Buffer.from('pdf-bytes')) };
 }
 
+function createQuotePdf() {
+  return { render: vi.fn().mockResolvedValue(Buffer.from('quote-pdf-bytes')) };
+}
+
+function createQuotes(status: string = 'APPROVED') {
+  return { getById: vi.fn().mockResolvedValue({ id: QUOTE_ID, status }) };
+}
+
+const QUOTE_ID = '44444444-4444-4444-4444-444444444444';
+
+function buildService(overrides: Partial<Record<string, unknown>> = {}) {
+  return new ExportsService(
+    (overrides.widgets ?? createWidgets()) as never,
+    (overrides.query ?? createQuery()) as never,
+    (overrides.dashboards ?? createDashboards()) as never,
+    (overrides.quotes ?? createQuotes()) as never,
+    (overrides.tokenService ?? createTokenService()) as never,
+    (overrides.dashboardPdf ?? createDashboardPdf()) as never,
+    (overrides.quotePdf ?? createQuotePdf()) as never,
+  );
+}
+
 describe('ExportsService', () => {
   it('exportWidgetCsv: widget query sonucunu CSV metnine cevirir', async () => {
     const widgets = createWidgets();
     const query = createQuery();
-    const service = new ExportsService(
-      widgets as never,
-      query as never,
-      createDashboards() as never,
-      createTokenService() as never,
-      createDashboardPdf() as never,
-    );
+    const service = buildService({ widgets, query });
     const csv = await service.exportWidgetCsv(WIDGET_ID, TENANT_ID);
     expect(widgets.findByIdAcrossDashboards).toHaveBeenCalledWith(WIDGET_ID);
     expect(query.runQuery).toHaveBeenCalledWith(
@@ -68,13 +84,7 @@ describe('ExportsService', () => {
     const dashboards = createDashboards();
     const tokenService = createTokenService();
     const dashboardPdf = createDashboardPdf();
-    const service = new ExportsService(
-      createWidgets() as never,
-      createQuery() as never,
-      dashboards as never,
-      tokenService as never,
-      dashboardPdf as never,
-    );
+    const service = buildService({ dashboards, tokenService, dashboardPdf });
     const user = {
       id: 'u1',
       tenantId: TENANT_ID,
@@ -94,5 +104,33 @@ describe('ExportsService', () => {
       'signed-token',
     );
     expect(pdf.toString()).toBe('pdf-bytes');
+  });
+
+  it('exportQuotePdf: APPROVED teklif icin PDF uretir', async () => {
+    const quotes = createQuotes('APPROVED');
+    const quotePdf = createQuotePdf();
+    const service = buildService({ quotes, quotePdf });
+    const user = {
+      id: 'u1',
+      tenantId: TENANT_ID,
+      roleIds: ['role-1'],
+      isPlatformAdmin: false,
+    };
+    const pdf = await service.exportQuotePdf(QUOTE_ID, user);
+    expect(quotePdf.render).toHaveBeenCalledWith(QUOTE_ID, 'signed-token');
+    expect(pdf.toString()).toBe('quote-pdf-bytes');
+  });
+
+  it('exportQuotePdf: PENDING_APPROVAL teklif icin QUOTE_NOT_READY firlatir', async () => {
+    const service = buildService({ quotes: createQuotes('PENDING_APPROVAL') });
+    const user = {
+      id: 'u1',
+      tenantId: TENANT_ID,
+      roleIds: ['role-1'],
+      isPlatformAdmin: false,
+    };
+    await expect(service.exportQuotePdf(QUOTE_ID, user)).rejects.toMatchObject({
+      code: 'QUOTE_NOT_READY',
+    });
   });
 });
