@@ -10,6 +10,8 @@ export interface MailAttachment {
 
 export interface SendMailInput {
   to: string[];
+  /** M4: sirket ici diger kisiler CC olarak eklenebilir. */
+  cc?: string[];
   subject: string;
   text: string;
   attachments?: MailAttachment[];
@@ -31,6 +33,7 @@ export class MailService {
     await this.transporter.sendMail({
       from: 'PiLens <bildirim@pilens.local>',
       to: input.to,
+      cc: input.cc,
       subject: input.subject,
       text: input.text,
       attachments: input.attachments,

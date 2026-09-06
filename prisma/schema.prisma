@@ -26,6 +26,27 @@ enum ContactStatus {
   INACTIVE
 }
 
+enum InteractionType {
+  CALL
+  VISIT
+  MEETING
+  EMAIL
+  OTHER
+}
+
+enum InteractionStatus {
+  OPEN
+  CLOSED
+}
+
+enum OpportunityStage {
+  NEW
+  QUALIFIED
+  PROPOSAL
+  WON
+  LOST
+}
+
 enum DataSourceType {
   CSV
   XLSX
@@ -72,6 +93,8 @@ model Tenant {
   settings         TenantSetting[]
   roles            Role[]
   calendarEvents   CalendarEvent[]
+  interactions     Interaction[]
+  opportunities    Opportunity[]
 
   @@map("tenants")
 }
@@ -339,8 +362,10 @@ model Account {
   updatedAt    DateTime      @updatedAt
   deletedAt    DateTime?
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  contacts Contact[]
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  contacts      Contact[]
+  interactions  Interaction[]
+  opportunities Opportunity[]
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
@@ -365,8 +390,9 @@ model Contact {
   updatedAt           DateTime      @updatedAt
   deletedAt           DateTime?
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id])
-  account Account? @relation(fields: [accountId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  account      Account?      @relation(fields: [accountId], references: [id])
+  interactions Interaction[]
 
   @@index([tenantId, lastName])
   @@index([tenantId, deletedAt])
@@ -432,14 +458,93 @@ model CalendarEvent {
 
 /** M6: her katilimciya kendi aciklamasi - "note" bu ihtiyaci karsilar. */
 model CalendarEventAttendee {
-  id        String   @id @default(uuid())
-  eventId   String
-  userId    String
-  note      String?
-  createdAt DateTime @default(now())
+  id         String    @id @default(uuid())
+  eventId    String
+  userId     String
+  note       String?
+  /** Faz 11c M4/M8/M9: hatirlatma e-postasi bu kullaniciya gonderildiginde damgalanir
+   * (Contact.inactivityNotifiedAt ile ayni desen) - tekrar gonderimi engeller. */
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@map("crm_calendar_event_attendees")
+}
+
+/**
+ * Faz 11c (Gorusme/Aktivite, M1-M10) - bkz. docs/VARSAYIMLAR.md V26. Hatirlatma (M4-M9)
+ * icin ayri bir CalendarReminder modeli KURULMADI - CalendarEvent/CalendarEventAttendee
+ * (Faz 11b) relatedEntityType='Interaction' ile yeniden kullaniliyor, bkz. VARSAYIMLAR.md V26.
+ */
+model Interaction {
+  id                 String            @id @default(uuid())
+  tenantId           String
+  accountId          String
+  contactId          String?
+  type               InteractionType
+  notes              String
+  occurredAt         DateTime
+  status             InteractionStatus @default(OPEN)
+  /** M2: bilinmeyen firma serbest metinle girildiyse otomatik olusan cari - bildirim icin. */
+  accountAutoCreated Boolean           @default(false)
+  /** M1: bilinmeyen kisi serbest metinle girildiyse otomatik olusan kontak - bildirim icin. */
+  contactAutoCreated Boolean           @default(false)
+  createdById        String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id])
+  account      Account                   @relation(fields: [accountId], references: [id])
+  contact      Contact?                  @relation(fields: [contactId], references: [id])
+  opportunity  Opportunity?
+  participants InteractionParticipant[]
+
+  @@index([tenantId, accountId])
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, deletedAt])
+  @@map("crm_interactions")
+}
+
+/** M10: cari kayda eklenmesi istenmeyen katilimcilar (bizim taraf + karsi taraf).
+ * CalendarEventAttendee gibi ayri tenantId tasimaz, interaction uzerinden cascade silinir. */
+model InteractionParticipant {
+  id            String   @id @default(uuid())
+  interactionId String
+  name          String
+  isInternal    Boolean
+  note          String?
+  createdAt     DateTime @default(now())
+
+  interaction Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@map("crm_interaction_participants")
+}
+
+/** quoteId bilincli olarak gevsek/dogrulanmayan String: Quote modeli henuz yok (Faz 11d,
+ * O2), bkz. docs/VARSAYIMLAR.md V19/V26 - CalendarEvent.relatedEntityType ile ayni desen. */
+model Opportunity {
+  id             String           @id @default(uuid())
+  tenantId       String
+  accountId      String
+  interactionId  String?          @unique
+  quoteId        String?
+  name           String
+  stage          OpportunityStage @default(NEW)
+  estimatedValue Decimal?         @db.Decimal(14, 2)
+  createdById    String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  account     Account      @relation(fields: [accountId], references: [id])
+  interaction Interaction? @relation(fields: [interactionId], references: [id])
+
+  @@index([tenantId, accountId])
+  @@index([tenantId, stage])
+  @@index([tenantId, deletedAt])
+  @@map("crm_opportunities")
 }

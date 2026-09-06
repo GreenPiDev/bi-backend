@@ -13,7 +13,10 @@ import { CONTACT_INACTIVITY_QUEUE } from './contact-inactivity-queue.constants';
 import { ContactInactivitySchedulerBootstrap } from './contact-inactivity-scheduler.bootstrap';
 import { IngestDatasourceProcessor } from './ingest-datasource.processor';
 import { INGEST_QUEUE } from './ingest-queue.constants';
+import { INTERACTION_REMINDER_QUEUE } from './interaction-reminder-queue.constants';
+import { InteractionReminderSchedulerBootstrap } from './interaction-reminder-scheduler.bootstrap';
 import { REPORTS_QUEUE } from './reports-queue.constants';
+import { SendInteractionRemindersProcessor } from './send-interaction-reminders.processor';
 import { SendScheduledReportProcessor } from './send-scheduled-report.processor';
 
 @Module({
@@ -29,6 +32,7 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     BullModule.registerQueue({ name: REPORTS_QUEUE }),
     BullModule.registerQueue({ name: ALERTS_QUEUE }),
     BullModule.registerQueue({ name: CONTACT_INACTIVITY_QUEUE }),
+    BullModule.registerQueue({ name: INTERACTION_REMINDER_QUEUE }),
     DatasourcesModule,
     AuthModule,
     ExportsModule,
@@ -41,6 +45,8 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     AlertsSchedulerBootstrap,
     CheckContactInactivityProcessor,
     ContactInactivitySchedulerBootstrap,
+    SendInteractionRemindersProcessor,
+    InteractionReminderSchedulerBootstrap,
   ],
 })
 export class JobsModule {}

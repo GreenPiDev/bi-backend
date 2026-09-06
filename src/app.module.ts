@@ -24,7 +24,9 @@ import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { InteractionsModule } from './modules/interactions/interactions.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { QueryModule } from './modules/query/query.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -69,6 +71,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     SectorOptionsModule,
     TenantSettingsModule,
     CalendarEventsModule,
+    InteractionsModule,
+    OpportunitiesModule,
     JobsModule,
   ],
   providers: [

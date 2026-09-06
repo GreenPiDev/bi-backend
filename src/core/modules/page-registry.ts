@@ -52,6 +52,16 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     label: 'Ajanda',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
+  {
+    key: 'interactions',
+    label: 'Gorusmeler',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
+    key: 'opportunities',
+    label: 'Firsatlar',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
     key: 'settings',
