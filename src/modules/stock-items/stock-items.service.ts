@@ -40,8 +40,16 @@ export class StockItemsService {
    * doner). Aksi halde kullanici yeni bir urune stok girecek bir satir/buton
    * hic goremiyordu (bkz. bug raporu).
    */
-  private async resolveRows(): Promise<StockItemWithProduct[]> {
+  private async resolveRows(q?: string): Promise<StockItemWithProduct[]> {
     const products = await this.prisma.product.findMany({
+      where: q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' as const } },
+              { sku: { contains: q, mode: 'insensitive' as const } },
+            ],
+          }
+        : undefined,
       orderBy: { name: 'asc' },
       include: { stockItems: true },
     });
@@ -66,8 +74,8 @@ export class StockItemsService {
   async list(
     query: StockItemQueryDto,
   ): Promise<PagedResult<StockItemWithProduct>> {
-    const { page, pageSize } = query;
-    const rows = await this.resolveRows();
+    const { page, pageSize, q } = query;
+    const rows = await this.resolveRows(q);
     const total = rows.length;
     const data = rows.slice((page - 1) * pageSize, page * pageSize);
 
@@ -130,7 +138,14 @@ export class StockItemsService {
       action: existing ? 'UPDATE' : 'CREATE',
       entity: 'StockItem',
       entityId: stockItem.id,
-      meta: { productId, quantity: dto.quantity },
+      meta: existing
+        ? {
+            productId,
+            productName: product.name,
+            previousQuantity: existing.quantity,
+            quantity: dto.quantity,
+          }
+        : { productId, productName: product.name, quantity: dto.quantity },
     });
 
     return { ...stockItem, product };

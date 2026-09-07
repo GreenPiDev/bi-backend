@@ -190,4 +190,25 @@ describe('StockItemsService', () => {
       expect.objectContaining({ action: 'UPDATE' }),
     );
   });
+
+  it('upsertByProductId: guncellemede denetim kaydina onceki ve yeni miktari birlikte yazar', async () => {
+    const prisma = createPrisma({
+      existingStockItem: {
+        id: 'stock-1',
+        productId: 'product-1',
+        quantity: '3',
+      },
+    });
+    const service = new StockItemsService(prisma as never, fakeAudit);
+    await service.upsertByProductId('product-1', { quantity: 20 });
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'UPDATE',
+        meta: expect.objectContaining({
+          previousQuantity: '3',
+          quantity: 20,
+        }),
+      }),
+    );
+  });
 });
