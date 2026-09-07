@@ -35,7 +35,10 @@ export class DatasetsService {
   }
 
   async preview(id: string, tenantId: string): Promise<PreviewResult> {
-    await this.requireDataset(id);
+    const dataset = await this.requireDataset(id);
+    if (dataset.sourceKind === 'CRM_TABLE') {
+      return this.rawSql.previewView(dataset.physicalTable, tenantId, 50);
+    }
     return this.rawSql.previewRows(tenantId, id, 50);
   }
 
@@ -57,30 +60,43 @@ export class DatasetsService {
         );
       }
 
-      try {
-        if (update.name && update.name !== existing.name) {
-          await this.rawSql.renameColumn(
-            tenantId,
-            id,
-            existing.name,
-            update.name,
-          );
-        }
-        if (update.type && update.type !== existing.type) {
-          const columnName = update.name ?? existing.name;
-          await this.rawSql.alterColumnType(
-            tenantId,
-            id,
-            columnName,
-            update.type,
-          );
-        }
-      } catch {
+      const changesSchema =
+        (update.name && update.name !== existing.name) ||
+        (update.type && update.type !== existing.type);
+      if (dataset.sourceKind === 'CRM_TABLE' && changesSchema) {
         throw new AppException(
-          'SCHEMA_UPDATE_FAILED',
-          'Kolon guncellenemedi. Kolon adi baska bir kolonla cakisiyor olabilir veya veri yeni tipe donusturulemedi.',
+          'CRM_DATASET_READONLY_SCHEMA',
+          'Bu veri kumesinin kolonlari sistem tarafindan yonetilir, ad/tip degistirilemez.',
           HttpStatus.BAD_REQUEST,
         );
+      }
+
+      if (dataset.sourceKind !== 'CRM_TABLE') {
+        try {
+          if (update.name && update.name !== existing.name) {
+            await this.rawSql.renameColumn(
+              tenantId,
+              id,
+              existing.name,
+              update.name,
+            );
+          }
+          if (update.type && update.type !== existing.type) {
+            const columnName = update.name ?? existing.name;
+            await this.rawSql.alterColumnType(
+              tenantId,
+              id,
+              columnName,
+              update.type,
+            );
+          }
+        } catch {
+          throw new AppException(
+            'SCHEMA_UPDATE_FAILED',
+            'Kolon guncellenemedi. Kolon adi baska bir kolonla cakisiyor olabilir veya veri yeni tipe donusturulemedi.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
       }
 
       await this.prisma.datasetField.update({

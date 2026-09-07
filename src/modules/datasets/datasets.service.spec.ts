@@ -48,7 +48,16 @@ function createRawSql() {
     renameColumn: vi.fn().mockResolvedValue(undefined),
     alterColumnType: vi.fn().mockResolvedValue(undefined),
     previewRows: vi.fn().mockResolvedValue({ columns: [], rows: [] }),
+    previewView: vi.fn().mockResolvedValue({ columns: [], rows: [] }),
   };
+}
+
+function createCrmDatasetRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return createDatasetRow({
+    sourceKind: 'CRM_TABLE',
+    physicalTable: 'crm_quote_line_report',
+    ...overrides,
+  });
 }
 
 function createQueryCache() {
@@ -169,5 +178,85 @@ describe('DatasetsService', () => {
     );
     await service.preview(DATASET_ID, TENANT_ID);
     expect(rawSql.previewRows).toHaveBeenCalledWith(TENANT_ID, DATASET_ID, 50);
+  });
+
+  it('preview: CRM_TABLE dataset icin rawSql.previewView cagirir', async () => {
+    const prisma = createPrisma(createCrmDatasetRow());
+    const rawSql = createRawSql();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+      fakeAudit,
+    );
+    await service.preview(DATASET_ID, TENANT_ID);
+    expect(rawSql.previewView).toHaveBeenCalledWith(
+      'crm_quote_line_report',
+      TENANT_ID,
+      50,
+    );
+    expect(rawSql.previewRows).not.toHaveBeenCalled();
+  });
+
+  it('updateFields: CRM_TABLE dataset icin ad degisikligi CRM_DATASET_READONLY_SCHEMA firlatir', async () => {
+    const prisma = createPrisma(createCrmDatasetRow());
+    const rawSql = createRawSql();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+      fakeAudit,
+    );
+    await expect(
+      service.updateFields(DATASET_ID, TENANT_ID, [
+        { id: FIELD_ID, name: 'yeni_ad' },
+      ]),
+    ).rejects.toMatchObject({
+      code: 'CRM_DATASET_READONLY_SCHEMA',
+    } satisfies Partial<AppException>);
+    expect(rawSql.renameColumn).not.toHaveBeenCalled();
+  });
+
+  it('updateFields: CRM_TABLE dataset icin tip degisikligi CRM_DATASET_READONLY_SCHEMA firlatir', async () => {
+    const prisma = createPrisma(createCrmDatasetRow());
+    const rawSql = createRawSql();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+      fakeAudit,
+    );
+    await expect(
+      service.updateFields(DATASET_ID, TENANT_ID, [
+        { id: FIELD_ID, type: 'STRING' },
+      ]),
+    ).rejects.toMatchObject({
+      code: 'CRM_DATASET_READONLY_SCHEMA',
+    } satisfies Partial<AppException>);
+    expect(rawSql.alterColumnType).not.toHaveBeenCalled();
+  });
+
+  it('updateFields: CRM_TABLE dataset icin label/role/isVisible degisikligi serbesttir', async () => {
+    const prisma = createPrisma(createCrmDatasetRow());
+    const rawSql = createRawSql();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+      fakeAudit,
+    );
+    await service.updateFields(DATASET_ID, TENANT_ID, [
+      { id: FIELD_ID, label: 'Ciro', role: 'DIMENSION', isVisible: false },
+    ]);
+    expect(rawSql.renameColumn).not.toHaveBeenCalled();
+    expect(rawSql.alterColumnType).not.toHaveBeenCalled();
+    expect(prisma.datasetField.update).toHaveBeenCalledWith({
+      where: { id: FIELD_ID },
+      data: expect.objectContaining({
+        label: 'Ciro',
+        role: 'DIMENSION',
+        isVisible: false,
+      }),
+    });
   });
 });

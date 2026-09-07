@@ -226,4 +226,54 @@ describe('Platform admin (e2e)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('UNKNOWN_MODULE');
   });
+
+  // Faz 11f (R1-R2, bkz. docs/VARSAYIMLAR.md V29): 'crm' modulu acilinca/kapaninca
+  // sentetik CRM rapor dataset'i otomatik saglanip kaldirilmali.
+  it("'crm' modulu acilinca CRM rapor dataset'i otomatik olusur", async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/platform-admin/tenants/${adminTenantId}/modules/crm`)
+      .set('Cookie', adminCookies)
+      .send({ enabled: true });
+
+    expect(res.status).toBe(200);
+
+    const dataset = await prisma.dataset.findFirst({
+      where: {
+        tenantId: adminTenantId,
+        sourceKind: 'CRM_TABLE',
+        physicalTable: 'crm_quote_line_report',
+      },
+      include: { fields: true },
+    });
+    expect(dataset).not.toBeNull();
+    expect(dataset?.fields.length).toBeGreaterThan(0);
+  });
+
+  it("'crm' modulu tekrar acilirsa dataset cogaltilmaz (idempotent)", async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/platform-admin/tenants/${adminTenantId}/modules/crm`)
+      .set('Cookie', adminCookies)
+      .send({ enabled: true });
+
+    expect(res.status).toBe(200);
+
+    const datasets = await prisma.dataset.findMany({
+      where: { tenantId: adminTenantId, sourceKind: 'CRM_TABLE' },
+    });
+    expect(datasets).toHaveLength(1);
+  });
+
+  it("'crm' modulu kapaninca CRM rapor dataset'i silinir", async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/platform-admin/tenants/${adminTenantId}/modules/crm`)
+      .set('Cookie', adminCookies)
+      .send({ enabled: false });
+
+    expect(res.status).toBe(200);
+
+    const datasets = await prisma.dataset.findMany({
+      where: { tenantId: adminTenantId, sourceKind: 'CRM_TABLE' },
+    });
+    expect(datasets).toHaveLength(0);
+  });
 });

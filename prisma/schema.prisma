@@ -85,6 +85,17 @@ enum DatasetFieldRole {
   DATE
 }
 
+/**
+ * Faz 11f (R1-R2, bkz. docs/VARSAYIMLAR.md V29): UPLOAD = CSV/XLSX'ten ingest edilen
+ * klasik dataset (tenant_<id>.ds_<uuid>). CRM_TABLE = CRM verisini raporlayan, provisioning
+ * ile olusturulan sentetik dataset; fiziksel karsiligi paylasimli semadaki bir Postgres
+ * view'i (Dataset.physicalTable), sorgu motoru tenantId'yi zorunlu WHERE olarak ekler.
+ */
+enum DatasetSourceKind {
+  UPLOAD
+  CRM_TABLE
+}
+
 model Tenant {
   id        String   @id @default(uuid())
   name      String
@@ -246,17 +257,18 @@ model DataSource {
 }
 
 model Dataset {
-  id             String    @id @default(uuid())
+  id             String            @id @default(uuid())
   tenantId       String
-  dataSourceId   String
+  dataSourceId   String?
   name           String
   physicalTable  String
-  rowCount       Int       @default(0)
+  sourceKind     DatasetSourceKind @default(UPLOAD)
+  rowCount       Int               @default(0)
   lastIngestedAt DateTime?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime          @default(now())
 
   tenant     Tenant         @relation(fields: [tenantId], references: [id])
-  dataSource DataSource     @relation(fields: [dataSourceId], references: [id])
+  dataSource DataSource?    @relation(fields: [dataSourceId], references: [id])
   fields     DatasetField[]
 
   @@index([tenantId])
@@ -309,7 +321,7 @@ model Widget {
   position    Json
   createdAt   DateTime @default(now())
 
-  dashboard Dashboard @relation(fields: [dashboardId], references: [id])
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
   alerts    Alert[]
 
   @@index([dashboardId])
@@ -326,7 +338,7 @@ model ScheduledReport {
   lastRunAt   DateTime?
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  dashboard Dashboard @relation(fields: [dashboardId], references: [id])
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("scheduled_reports")
@@ -342,7 +354,7 @@ model Alert {
   lastTriggeredAt DateTime?
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
-  widget Widget @relation(fields: [widgetId], references: [id])
+  widget Widget @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("alerts")

@@ -2,7 +2,11 @@ import type { DatasetField } from '@prisma/client';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import type { QuerySpec } from './dto/query-spec.dto';
-import { buildAggregationQuery, buildRowsQuery } from './query-builder';
+import {
+  buildAggregationQuery,
+  buildRowsQuery,
+  type QueryableDataset,
+} from './query-builder';
 import { buildFieldMap } from './query-validation';
 
 type AnyDb = Record<string, never>;
@@ -15,6 +19,18 @@ const db = new Kysely<AnyDb>({
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111';
 const DATASET_ID = '22222222-2222-2222-2222-222222222222';
+
+const DATASET: QueryableDataset = {
+  id: DATASET_ID,
+  physicalTable: `ds_${DATASET_ID.replace(/-/g, '')}`,
+  sourceKind: 'UPLOAD',
+};
+
+const CRM_DATASET: QueryableDataset = {
+  id: '33333333-3333-3333-3333-333333333333',
+  physicalTable: 'crm_quote_line_report',
+  sourceKind: 'CRM_TABLE',
+};
 
 function field(overrides: Partial<DatasetField>): DatasetField {
   return {
@@ -96,6 +112,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain(
@@ -116,6 +133,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.parameters.at(-1)).toBe(51);
@@ -130,6 +148,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     // granularity literal olarak gomulur (bind parametresi degil); boylece
@@ -151,6 +170,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     // ORDER BY, date_trunc(...) ifadesini parametreleyerek tekrar gomerse
@@ -172,6 +192,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     // sehir 1. kolon, toplam 2. kolon.
@@ -190,6 +211,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain('"tutar" > $1 and "sehir" = $2');
@@ -205,6 +227,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain('"sehir" IN ($1, $2)');
@@ -220,6 +243,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     expect(compile(raw).sql).toContain('"sehir" NOT IN ($1)');
   });
@@ -235,6 +259,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain('"tarih" BETWEEN $1 AND $2');
@@ -253,6 +278,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain('"sehir" ILIKE $1');
@@ -271,6 +297,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain('"sehir" IS NULL and "tarih" IS NOT NULL');
@@ -286,6 +313,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     expect(compile(raw).sql).toContain('order by 1 desc');
   });
@@ -297,6 +325,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).not.toContain('group by');
@@ -312,6 +341,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     expect(compile(raw).sql).toContain('count(distinct "sehir") as "adet"');
   });
@@ -326,6 +356,7 @@ describe('buildAggregationQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain(
@@ -342,6 +373,7 @@ describe('buildRowsQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     expect(columns.map((c) => c.name)).toEqual(['sehir', 'tutar', 'tarih']);
     expect(compile(raw).sql).not.toContain('"gizli"');
@@ -356,6 +388,7 @@ describe('buildRowsQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     expect(compile(raw).sql).not.toContain('sum(');
   });
@@ -370,9 +403,84 @@ describe('buildRowsQuery', () => {
       buildFieldMap(FIELDS),
       FIELDS,
       TENANT_ID,
+      DATASET,
     );
     const compiled = compile(raw);
     expect(compiled.sql).toContain('"tutar" >= $1');
     expect(compiled.parameters.at(-1)).toBe(6);
+  });
+});
+
+describe('CRM_TABLE dataset (Faz 11f)', () => {
+  it('tableRef, tenant_<id>.ds_<id> yerine physicalTable adini kullanir', () => {
+    const spec = baseSpec({ datasetId: CRM_DATASET.id });
+    const { raw } = buildAggregationQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+      CRM_DATASET,
+    );
+    const compiled = compile(raw);
+    expect(compiled.sql).toContain('from "crm_quote_line_report"');
+    expect(compiled.sql).not.toContain('tenant_');
+  });
+
+  it('kullanici filtresi olmasa bile zorunlu tenantId predicate ekler', () => {
+    const spec = baseSpec({ datasetId: CRM_DATASET.id });
+    const { raw } = buildAggregationQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+      CRM_DATASET,
+    );
+    const compiled = compile(raw);
+    expect(compiled.sql).toContain('where "tenantId" = $');
+    expect(compiled.parameters).toContain(TENANT_ID);
+  });
+
+  it('kullanici filtresiyle birlikte tenantId predicate AND ile birlesir', () => {
+    const spec = baseSpec({
+      datasetId: CRM_DATASET.id,
+      filters: [{ field: 'tutar', op: 'gt', value: 100 }],
+    });
+    const { raw } = buildAggregationQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+      CRM_DATASET,
+    );
+    const compiled = compile(raw);
+    expect(compiled.sql).toContain('where "tenantId" = $1 and "tutar" > $2');
+  });
+
+  it('buildRowsQuery icin de zorunlu tenantId predicate ekler', () => {
+    const spec = baseSpec({ datasetId: CRM_DATASET.id });
+    const { raw } = buildRowsQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+      CRM_DATASET,
+    );
+    const compiled = compile(raw);
+    expect(compiled.sql).toContain('where "tenantId" = $1');
+    expect(compiled.parameters[0]).toBe(TENANT_ID);
+  });
+
+  it('UPLOAD dataset davranisi regresyona ugramaz (tenantId predicate eklenmez)', () => {
+    const spec = baseSpec();
+    const { raw } = buildAggregationQuery(
+      spec,
+      buildFieldMap(FIELDS),
+      FIELDS,
+      TENANT_ID,
+      DATASET,
+    );
+    const compiled = compile(raw);
+    expect(compiled.sql).not.toContain('"tenantId"');
+    expect(compiled.sql).toMatch(/from "tenant_1{8,}"\."ds_2{8,}"/);
   });
 });

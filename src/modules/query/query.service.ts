@@ -48,6 +48,7 @@ export class QueryService {
       fieldsByName,
       dataset.fields,
       tenantId,
+      dataset,
     );
     const result = await this.execute(built.raw, built.columns, spec.limit);
 
@@ -69,7 +70,13 @@ export class QueryService {
     }
 
     const fieldsByName = validateRowsQuery(spec, dataset.fields);
-    const built = buildRowsQuery(spec, fieldsByName, dataset.fields, tenantId);
+    const built = buildRowsQuery(
+      spec,
+      fieldsByName,
+      dataset.fields,
+      tenantId,
+      dataset,
+    );
     const result = await this.execute(built.raw, built.columns, spec.limit);
 
     await this.queryCache.set(tenantId, spec.datasetId, 'rows', spec, result);

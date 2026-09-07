@@ -141,6 +141,40 @@ describe('Dashboards (e2e)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('DELETE /dashboards/:id widgeti olan bir panoyu da siler (FK cascade regresyonu)', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/api/v1/dashboards')
+      .set('Cookie', cookiesA)
+      .send({ name: 'Widgetli Pano' });
+    const widgetedDashboardId = createRes.body.id as string;
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/dashboards/${widgetedDashboardId}/widgets`)
+      .set('Cookie', cookiesA)
+      .send({
+        type: 'kpi',
+        title: 'Toplam Tutar',
+        querySpec: {
+          datasetId: randomUUID(),
+          measures: [{ field: 'tutar', agg: 'sum', alias: 'toplam' }],
+          dimensions: [],
+          filters: [],
+          orderBy: [],
+        },
+        position: { x: 0, y: 0, w: 2, h: 2 },
+      });
+
+    const res = await request(app.getHttpServer())
+      .delete(`/api/v1/dashboards/${widgetedDashboardId}`)
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(204);
+
+    const getRes = await request(app.getHttpServer())
+      .get(`/api/v1/dashboards/${widgetedDashboardId}`)
+      .set('Cookie', cookiesA);
+    expect(getRes.status).toBe(404);
+  });
+
   it('DELETE /dashboards/:id panoyu siler', async () => {
     const res = await request(app.getHttpServer())
       .delete(`/api/v1/dashboards/${dashboardId}`)

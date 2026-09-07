@@ -160,6 +160,29 @@ export class RawSqlService implements OnModuleDestroy {
     return { columns, rows };
   }
 
+  /**
+   * Faz 11f (bkz. docs/VARSAYIMLAR.md V29): CRM_TABLE dataset'leri paylasimli semadaki
+   * bir view'a isaret eder, tenant_<id> semasi altinda degildir - previewRows'un
+   * tenantSchemaName/datasetTableName konvansiyonu burada uygulanmaz. tenantId zorunlu
+   * WHERE olarak parametreli gecilir (query motorunun tenantPredicates'iyle ayni ilke).
+   */
+  async previewView(
+    physicalTable: string,
+    tenantId: string,
+    limit = 50,
+  ): Promise<{ columns: string[]; rows: unknown[][] }> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    const result = await this.pool.query(
+      `SELECT * FROM ${quoteIdent(physicalTable)} WHERE "tenantId" = $1 LIMIT $2`,
+      [tenantId, safeLimit],
+    );
+    const columns = result.fields.map((field) => field.name);
+    const rows = result.rows.map((row: Record<string, unknown>) =>
+      columns.map((column) => row[column]),
+    );
+    return { columns, rows };
+  }
+
   async dropTable(tenantId: string, datasetId: string): Promise<void> {
     const schema = tenantSchemaName(tenantId);
     const table = datasetTableName(datasetId);

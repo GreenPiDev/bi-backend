@@ -1,4 +1,4 @@
-import type { DatasetField, DatasetFieldType } from '@prisma/client';
+import type { Dataset, DatasetField, DatasetFieldType } from '@prisma/client';
 import { sql, type RawBuilder } from 'kysely';
 import {
   datasetTableName,
@@ -23,6 +23,11 @@ export interface BuiltQuery {
   columns: BuiltColumn[];
 }
 
+export type QueryableDataset = Pick<
+  Dataset,
+  'id' | 'physicalTable' | 'sourceKind'
+>;
+
 const AGG_EXPR: Record<
   AggregationType,
   (col: RawBuilder<unknown>) => RawBuilder<unknown>
@@ -35,10 +40,32 @@ const AGG_EXPR: Record<
   count_distinct: (c) => sql`count(distinct ${c})`,
 };
 
-function tableRef(tenantId: string, datasetId: string): RawBuilder<unknown> {
+/**
+ * UPLOAD dataset'leri icin tablo tenant'a ozel semada fiziksel olarak izole
+ * (tenant_<id>.ds_<id>). CRM_TABLE dataset'leri ise paylasimli semadaki bir Postgres
+ * view'ina isaret eder (Dataset.physicalTable) - fiziksel izolasyon yok, bu yuzden
+ * buildWhere zorunlu bir tenantId predicate'i ekler (bkz. tenantPredicates).
+ */
+function tableRef(
+  tenantId: string,
+  dataset: QueryableDataset,
+): RawBuilder<unknown> {
+  if (dataset.sourceKind === 'CRM_TABLE') {
+    return sql.table(dataset.physicalTable);
+  }
   const schema = tenantSchemaName(tenantId);
-  const table = datasetTableName(datasetId);
+  const table = datasetTableName(dataset.id);
   return sql.table(`${schema}.${table}`);
+}
+
+function tenantPredicates(
+  tenantId: string,
+  dataset: QueryableDataset,
+): RawBuilder<unknown>[] {
+  if (dataset.sourceKind !== 'CRM_TABLE') {
+    return [];
+  }
+  return [sql`${sql.ref('tenantId')} = ${tenantId}`];
 }
 
 function dimensionExpr(
@@ -94,11 +121,15 @@ function filterExpr(
 function buildWhere(
   filters: FilterSpec[],
   fieldsByName: Map<string, DatasetField>,
+  extraPredicates: RawBuilder<unknown>[] = [],
 ): RawBuilder<unknown> {
-  if (filters.length === 0) {
+  const filterExprs = filters.map((f) =>
+    filterExpr(f, fieldsByName.get(f.field)!),
+  );
+  const exprs = [...extraPredicates, ...filterExprs];
+  if (exprs.length === 0) {
     return sql``;
   }
-  const exprs = filters.map((f) => filterExpr(f, fieldsByName.get(f.field)!));
   return sql`where ${sql.join(exprs, sql` and `)}`;
 }
 
@@ -149,9 +180,14 @@ export function buildAggregationQuery(
   fieldsByName: Map<string, DatasetField>,
   allFields: DatasetField[],
   tenantId: string,
+  dataset: QueryableDataset,
 ): BuiltQuery {
-  const table = tableRef(tenantId, spec.datasetId);
-  const where = buildWhere(spec.filters, fieldsByName);
+  const table = tableRef(tenantId, dataset);
+  const where = buildWhere(
+    spec.filters,
+    fieldsByName,
+    tenantPredicates(tenantId, dataset),
+  );
   const limit = spec.limit + 1;
 
   if (spec.measures.length === 0 && spec.dimensions.length === 0) {
@@ -205,9 +241,14 @@ export function buildRowsQuery(
   fieldsByName: Map<string, DatasetField>,
   allFields: DatasetField[],
   tenantId: string,
+  dataset: QueryableDataset,
 ): BuiltQuery {
-  const table = tableRef(tenantId, spec.datasetId);
-  const where = buildWhere(spec.filters, fieldsByName);
+  const table = tableRef(tenantId, dataset);
+  const where = buildWhere(
+    spec.filters,
+    fieldsByName,
+    tenantPredicates(tenantId, dataset),
+  );
   const orderBy = buildOrderBy(spec.orderBy);
   const limit = spec.limit + 1;
   const { select, columns } = buildRowsSelect(allFields);

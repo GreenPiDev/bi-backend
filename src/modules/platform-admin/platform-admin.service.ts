@@ -10,6 +10,7 @@ import {
 } from '../../core/modules/page-modules.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { RealtimeService } from '../../core/realtime/realtime.service';
+import { CrmReportProvisioningService } from '../datasets/crm-report-provisioning.service';
 import {
   TenantsService,
   type TenantModuleStatus,
@@ -30,6 +31,7 @@ export class PlatformAdminService {
     private readonly tenants: TenantsService,
     private readonly pageModules: PageModulesService,
     private readonly realtime: RealtimeService,
+    private readonly crmReports: CrmReportProvisioningService,
   ) {}
 
   listTenants(): Promise<TenantSummary[]> {
@@ -54,6 +56,15 @@ export class PlatformAdminService {
       await this.tenants.enableModule(tenantId, moduleKey);
     } else {
       await this.tenants.disableModule(tenantId, moduleKey);
+    }
+    // Faz 11f (bkz. docs/VARSAYIMLAR.md V29): CRM rapor dataset'lerinin yasam dongusu
+    // dogrudan crm modulunun ac/kapa durumuna baglidir, ayri bir modul kapisi yok.
+    if (moduleKey === 'crm') {
+      if (enabled) {
+        await this.crmReports.provisionForTenant(tenantId);
+      } else {
+        await this.crmReports.deprovisionForTenant(tenantId);
+      }
     }
     const modules = await this.tenants.listModules(tenantId);
     this.realtime.emitToTenant(tenantId, 'tenant.modules.updated', modules);
