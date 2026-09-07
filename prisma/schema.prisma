@@ -636,6 +636,14 @@ model Product {
   unit           String    @default("adet")
   minStockLevel  Int?
   maxDiscountPct Decimal?  @db.Decimal(5, 2)
+  /** Faz 11i: U1 katalog genislemesi. Satis fiyati kasitli olarak eklenmedi -
+   * teklif fiyati zaten PriceList'ten geliyor (Q3), ikinci bir fiyat kaynagi
+   * celiskiye yol acardi (bkz. docs/VARSAYIMLAR.md V32). */
+  description    String?
+  category       String?
+  costPrice      Decimal?  @db.Decimal(12, 2)
+  /** Cloudflare R2'deki nesne anahtari; herkese acik URL yanitta hesaplanir. */
+  imageKey       String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?

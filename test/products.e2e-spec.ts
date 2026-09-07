@@ -81,14 +81,27 @@ describe('Products (e2e)', () => {
     });
   });
 
-  it('POST /products: urun olusturur', async () => {
+  it('POST /products: urun olusturur (aciklama/kategori/maliyet dahil)', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/products')
       .set('Cookie', cookiesA)
-      .send({ name: 'Dizustu Bilgisayar', sku: 'SKU-1', maxDiscountPct: 10 });
+      .send({
+        name: 'Dizustu Bilgisayar',
+        sku: 'SKU-1',
+        maxDiscountPct: 10,
+        description: 'Ofis kullanimi icin dizustu bilgisayar.',
+        category: 'Elektronik',
+        costPrice: 12500.5,
+      });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Dizustu Bilgisayar');
     expect(res.body.unit).toBe('adet');
+    expect(res.body.description).toBe(
+      'Ofis kullanimi icin dizustu bilgisayar.',
+    );
+    expect(res.body.category).toBe('Elektronik');
+    expect(res.body.costPrice).toBe('12500.5');
+    expect(res.body.imageUrl).toBeNull();
     productId = res.body.id as string;
   });
 
@@ -109,6 +122,35 @@ describe('Products (e2e)', () => {
       .send({ maxDiscountPct: 15 });
     expect(res.status).toBe(200);
     expect(res.body.maxDiscountPct).toBe('15');
+  });
+
+  it('POST /products/:id/image: R2 yapilandirilmamisken STORAGE_NOT_CONFIGURED doner', async () => {
+    // gecerli bir 1x1 PNG (magic-byte dogrulamasini gecmesi icin)
+    const pngBuffer = Buffer.from(
+      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100e221bc330000000049454e44ae426082',
+      'hex',
+    );
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/products/${productId}/image`)
+      .set('Cookie', cookiesA)
+      .attach('file', pngBuffer, {
+        filename: 'urun.png',
+        contentType: 'image/png',
+      });
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('STORAGE_NOT_CONFIGURED');
+  });
+
+  it('POST /products/:id/image: B tenanti A tenantinin urunune erisemez (404)', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/products/${productId}/image`)
+      .set('Cookie', cookiesB)
+      .attach('file', Buffer.from('fake-png-bytes'), {
+        filename: 'urun.png',
+        contentType: 'image/png',
+      });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
   it('B tenanti A tenantinin urunune erisemez (404)', async () => {
