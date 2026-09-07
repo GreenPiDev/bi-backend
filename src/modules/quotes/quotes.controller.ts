@@ -18,6 +18,10 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
+  PurchaseOrdersService,
+  type PurchaseOrderWithItems,
+} from '../purchase-orders/purchase-orders.service';
+import {
   CreateQuoteSchema,
   QuoteQuerySchema,
   UpdateQuoteSchema,
@@ -30,7 +34,10 @@ import { QuotesService, type QuoteWithDetails } from './quotes.service';
 @ModulePage('quotes')
 @Controller('quotes')
 export class QuotesController {
-  constructor(private readonly quotes: QuotesService) {}
+  constructor(
+    private readonly quotes: QuotesService,
+    private readonly purchaseOrders: PurchaseOrdersService,
+  ) {}
 
   @Get()
   @RequiresPermission('quotes', 'VIEW')
@@ -87,5 +94,15 @@ export class QuotesController {
     @CurrentUser() user: RequestUser,
   ): Promise<QuoteWithDetails> {
     return this.quotes.reject(id, user.id);
+  }
+
+  /** SP1: onayli bir teklifden satin alma siparisi olusturur (bkz. PurchaseOrdersService). */
+  @Post(':id/create-purchase-order')
+  @RequiresPermission('purchase-orders', 'CREATE')
+  createPurchaseOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<PurchaseOrderWithItems> {
+    return this.purchaseOrders.createFromQuote(user.id, id);
   }
 }

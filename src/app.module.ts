@@ -32,11 +32,13 @@ import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.m
 import { PriceListsModule } from './modules/price-lists/price-lists.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { QueryModule } from './modules/query/query.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
+import { StockItemsModule } from './modules/stock-items/stock-items.module';
 import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -83,6 +85,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     QuotesModule,
     PostSaleCasesModule,
     ProjectsModule,
+    PurchaseOrdersModule,
+    StockItemsModule,
     JobsModule,
   ],
   providers: [

@@ -42,12 +42,17 @@ export async function cleanupTestTenants(
   // once before those and before Product/Account/Contact themselves.
   await prisma.feedbackSurvey.deleteMany({ where: tenantFilter });
   await prisma.postSaleCase.deleteMany({ where: tenantFilter });
+  // PurchaseOrder (RESTRICT-referenced Quote, cascades purchaseOrderItems),
+  // before Project/Quote themselves.
+  await prisma.purchaseOrder.deleteMany({ where: tenantFilter });
   // Project (RESTRICT-referenced Quote/Account), before those.
   await prisma.project.deleteMany({ where: tenantFilter });
   // Quote/PriceList once (cascades quoteItems/priceListItems), before Product
   // (RESTRICT-referenced by those child rows) and Account/PriceList themselves.
   await prisma.quote.deleteMany({ where: tenantFilter });
   await prisma.priceList.deleteMany({ where: tenantFilter });
+  // StockItem (RESTRICT-referenced Product), before Product itself.
+  await prisma.stockItem.deleteMany({ where: tenantFilter });
   await prisma.product.deleteMany({ where: tenantFilter });
   await prisma.contact.deleteMany({ where: tenantFilter });
   await prisma.account.deleteMany({ where: tenantFilter });

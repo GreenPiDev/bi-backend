@@ -87,6 +87,16 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     label: 'Projeler',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
+  {
+    key: 'purchase-orders',
+    label: 'Siparis / Satin Alma',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
+    key: 'stock',
+    label: 'Stok',
+    supportedActions: ['UPDATE'],
+  },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
     key: 'settings',

@@ -22,6 +22,16 @@ enum AccountType {
   SUPPLIER
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+}
+
+enum PurchaseOrderItemSource {
+  QUOTE
+  EXTRA
+}
+
 enum ContactStatus {
   ACTIVE
   INACTIVE
@@ -125,6 +135,8 @@ model Tenant {
   postSaleCases    PostSaleCase[]
   feedbackSurveys  FeedbackSurvey[]
   projects         Project[]
+  purchaseOrders   PurchaseOrder[]
+  stockItems       StockItem[]
 
   @@map("tenants")
 }
@@ -628,9 +640,11 @@ model Product {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  priceListItems PriceListItem[]
-  quoteItems     QuoteItem[]
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  priceListItems     PriceListItem[]
+  quoteItems         QuoteItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stockItems         StockItem[]
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
@@ -698,14 +712,15 @@ model Quote {
   updatedAt    DateTime    @updatedAt
   deletedAt    DateTime?
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  account      Account       @relation(fields: [accountId], references: [id])
-  contact      Contact?      @relation(fields: [contactId], references: [id])
-  priceList    PriceList     @relation(fields: [priceListId], references: [id])
-  items        QuoteItem[]
-  opportunity  Opportunity?
-  postSaleCase PostSaleCase?
-  project      Project?
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  account        Account         @relation(fields: [accountId], references: [id])
+  contact        Contact?        @relation(fields: [contactId], references: [id])
+  priceList      PriceList       @relation(fields: [priceListId], references: [id])
+  items          QuoteItem[]
+  opportunity    Opportunity?
+  postSaleCase   PostSaleCase?
+  project        Project?
+  purchaseOrders PurchaseOrder[]
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, accountId])
@@ -819,12 +834,88 @@ model Project {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  account Account @relation(fields: [accountId], references: [id])
-  quote   Quote?  @relation(fields: [quoteId], references: [id])
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  account        Account         @relation(fields: [accountId], references: [id])
+  quote          Quote?          @relation(fields: [quoteId], references: [id])
+  purchaseOrders PurchaseOrder[]
 
   @@unique([tenantId, projectNumber])
   @@index([tenantId, accountId])
   @@index([tenantId, deletedAt])
   @@map("crm_projects")
+}
+
+/**
+ * Faz 11h (CLAUDE.md SS2.3.11 SP1-SP3). Onaylanmis bir teklifden (Quote.status ==
+ * APPROVED) olusturulur - QuotesController'daki POST /quotes/:id/create-purchase-order
+ * ucu tetikler, ayri bir POST /purchase-orders ucu YOK (bkz. PurchaseOrdersService.
+ * createFromQuote). orderNumber SIP-YYYY-AA-GG-NNN formatinda, Quote/Project ile ayni
+ * gun-icinde-sirali sayac deseni. projectId, quoteId'ye baglanan bir Project varsa
+ * otomatik doldurulur - kullanici tarafindan setlenmez.
+ */
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  tenantId    String
+  orderNumber String
+  quoteId     String
+  projectId   String?
+  status      PurchaseOrderStatus @default(DRAFT)
+  createdById String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  deletedAt   DateTime?
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id])
+  quote   Quote               @relation(fields: [quoteId], references: [id])
+  project Project?            @relation(fields: [projectId], references: [id])
+  items   PurchaseOrderItem[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, quoteId])
+  @@map("crm_purchase_orders")
+}
+
+/**
+ * SP2/SP3: kaynak ("source") teklif satirindan mi (QUOTE) yoksa siparise ozel ek bir
+ * kalemden mi (EXTRA) geldigini isaretler. productId, EXTRA satirlarda opsiyoneldir
+ * (serbest metin kalem de eklenebilir - SP3). description QuoteItem'in aksine her
+ * zaman tutulur (urun adinin kopyasi ya da serbest metin), tenantId tasimaz (QuoteItem
+ * ile ayni desen).
+ */
+model PurchaseOrderItem {
+  id              String                  @id @default(uuid())
+  purchaseOrderId String
+  productId       String?
+  description     String
+  quantity        Decimal                 @db.Decimal(14, 3)
+  source          PurchaseOrderItemSource
+  createdAt       DateTime                @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product?      @relation(fields: [productId], references: [id])
+
+  @@map("crm_purchase_order_items")
+}
+
+/**
+ * Faz 11h (CLAUDE.md SS2.3.12 ST1). Urun basina tek stok satiri (depo/warehouse
+ * ayrimi bu turda kapsam disi, taslak semadaki warehouseId eklenmedi - basit tutuldu).
+ * Dusuk stok uyarisi (ST1) GET /stock-items/low-stock'ta uygulama katmaninda
+ * hesaplanir (Product.minStockLevel ile karsilastirma).
+ */
+model StockItem {
+  id        String   @id @default(uuid())
+  tenantId  String
+  productId String
+  quantity  Decimal  @default(0) @db.Decimal(14, 3)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([tenantId, productId])
+  @@index([tenantId])
+  @@map("crm_stock_items")
 }
