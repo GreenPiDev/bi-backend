@@ -31,6 +31,7 @@ import { PlatformAdminModule } from './modules/platform-admin/platform-admin.mod
 import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.module';
 import { PriceListsModule } from './modules/price-lists/price-lists.module';
 import { ProductsModule } from './modules/products/products.module';
+import { ProjectsModule } from './modules/projects/projects.module';
 import { QueryModule } from './modules/query/query.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -81,6 +82,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     PriceListsModule,
     QuotesModule,
     PostSaleCasesModule,
+    ProjectsModule,
     JobsModule,
   ],
   providers: [

@@ -42,6 +42,8 @@ export async function cleanupTestTenants(
   // once before those and before Product/Account/Contact themselves.
   await prisma.feedbackSurvey.deleteMany({ where: tenantFilter });
   await prisma.postSaleCase.deleteMany({ where: tenantFilter });
+  // Project (RESTRICT-referenced Quote/Account), before those.
+  await prisma.project.deleteMany({ where: tenantFilter });
   // Quote/PriceList once (cascades quoteItems/priceListItems), before Product
   // (RESTRICT-referenced by those child rows) and Account/PriceList themselves.
   await prisma.quote.deleteMany({ where: tenantFilter });

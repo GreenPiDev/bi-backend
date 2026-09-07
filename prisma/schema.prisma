@@ -124,6 +124,7 @@ model Tenant {
   quotes           Quote[]
   postSaleCases    PostSaleCase[]
   feedbackSurveys  FeedbackSurvey[]
+  projects         Project[]
 
   @@map("tenants")
 }
@@ -403,6 +404,7 @@ model Account {
   opportunities Opportunity[]
   quotes        Quote[]
   postSaleCases PostSaleCase[]
+  projects      Project[]
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
@@ -703,6 +705,7 @@ model Quote {
   items        QuoteItem[]
   opportunity  Opportunity?
   postSaleCase PostSaleCase?
+  project      Project?
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, accountId])
@@ -790,4 +793,38 @@ model FeedbackSurvey {
   contact      Contact      @relation(fields: [contactId], references: [id])
 
   @@map("crm_feedback_surveys")
+}
+
+/**
+ * Faz 11g (CLAUDE.md SS2.3.10 P1-P3). projectNumber formati PRJ-YYYY-AA-GG-NNN (Q1 ile
+ * ayni gun-icinde-sirali desen, bkz. ProjectsService). quoteId opsiyonel (P2, "zorunlu
+ * degil") - @unique, bir teklife en fazla bir proje baglanabilir. estimatedBudget/
+ * actualCost, raporlamadaki kazanc formulunun (teklif tutari - maliyet - masraf, P3)
+ * girdileri - formulun kendisi bu fazda hesaplanmiyor/yazilmiyor, sadece degerler
+ * saklaniyor. `name` taslak semada (CLAUDE.md SS7.2) yoktu, listede/UI'da projeyi
+ * tanimlamak icin pratik olarak eklendi (Product/Quote'taki gibi tum entity'lerin bir
+ * adi/numarasi var).
+ */
+model Project {
+  id              String    @id @default(uuid())
+  tenantId        String
+  projectNumber   String
+  accountId       String
+  quoteId         String?   @unique
+  name            String
+  estimatedBudget Decimal   @db.Decimal(14, 2)
+  actualCost      Decimal?  @db.Decimal(14, 2)
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+  quote   Quote?  @relation(fields: [quoteId], references: [id])
+
+  @@unique([tenantId, projectNumber])
+  @@index([tenantId, accountId])
+  @@index([tenantId, deletedAt])
+  @@map("crm_projects")
 }

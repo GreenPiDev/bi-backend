@@ -82,6 +82,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     label: 'Satis Sonrasi Destek',
     supportedActions: ['UPDATE'],
   },
+  {
+    key: 'projects',
+    label: 'Projeler',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
     key: 'settings',
