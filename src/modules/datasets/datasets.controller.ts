@@ -23,16 +23,19 @@ export class DatasetsController {
   constructor(private readonly datasets: DatasetsService) {}
 
   @Get()
+  @RequiresPermission('datasets', 'VIEW')
   list(): Promise<Dataset[]> {
     return this.datasets.list();
   }
 
   @Get(':id')
+  @RequiresPermission('datasets', 'VIEW')
   getById(@Param('id') id: string): Promise<DatasetWithFields> {
     return this.datasets.getById(id);
   }
 
   @Post(':id/preview')
+  @RequiresPermission('datasets', 'VIEW')
   preview(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,

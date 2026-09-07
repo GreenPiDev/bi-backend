@@ -34,6 +34,7 @@ export class OpportunitiesController {
   constructor(private readonly opportunities: OpportunitiesService) {}
 
   @Get()
+  @RequiresPermission('opportunities', 'VIEW')
   list(
     @Query(new ZodValidationPipe(OpportunityQuerySchema))
     query: OpportunityQueryDto,
@@ -42,6 +43,7 @@ export class OpportunitiesController {
   }
 
   @Get(':id')
+  @RequiresPermission('opportunities', 'VIEW')
   getById(@Param('id') id: string): Promise<Opportunity> {
     return this.opportunities.getById(id);
   }

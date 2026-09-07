@@ -37,6 +37,7 @@ export class InteractionsController {
   constructor(private readonly interactions: InteractionsService) {}
 
   @Get()
+  @RequiresPermission('interactions', 'VIEW')
   list(
     @Query(new ZodValidationPipe(InteractionQuerySchema))
     query: InteractionQueryDto,
@@ -45,6 +46,7 @@ export class InteractionsController {
   }
 
   @Get(':id')
+  @RequiresPermission('interactions', 'VIEW')
   getById(@Param('id') id: string): Promise<InteractionWithDetails> {
     return this.interactions.getById(id);
   }

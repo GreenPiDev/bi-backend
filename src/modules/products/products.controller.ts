@@ -30,6 +30,7 @@ export class ProductsController {
   constructor(private readonly products: ProductsService) {}
 
   @Get()
+  @RequiresPermission('products', 'VIEW')
   list(
     @Query(new ZodValidationPipe(ProductQuerySchema)) query: ProductQueryDto,
   ): Promise<PagedResult<Product>> {
@@ -37,6 +38,7 @@ export class ProductsController {
   }
 
   @Get(':id')
+  @RequiresPermission('products', 'VIEW')
   getById(@Param('id') id: string): Promise<Product> {
     return this.products.getById(id);
   }

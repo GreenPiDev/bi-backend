@@ -30,6 +30,7 @@ export class ContactsController {
   constructor(private readonly contacts: ContactsService) {}
 
   @Get()
+  @RequiresPermission('contacts', 'VIEW')
   list(
     @Query(new ZodValidationPipe(ContactQuerySchema)) query: ContactQueryDto,
   ): Promise<PagedResult<Contact>> {
@@ -37,6 +38,7 @@ export class ContactsController {
   }
 
   @Get(':id')
+  @RequiresPermission('contacts', 'VIEW')
   getById(@Param('id') id: string) {
     return this.contacts.getById(id);
   }

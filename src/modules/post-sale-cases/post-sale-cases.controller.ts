@@ -30,6 +30,7 @@ export class PostSaleCasesController {
   constructor(private readonly postSaleCases: PostSaleCasesService) {}
 
   @Get()
+  @RequiresPermission('post-sale-cases', 'VIEW')
   list(
     @Query(new ZodValidationPipe(PostSaleCaseQuerySchema))
     query: PostSaleCaseQueryDto,
@@ -38,6 +39,7 @@ export class PostSaleCasesController {
   }
 
   @Get(':id')
+  @RequiresPermission('post-sale-cases', 'VIEW')
   getById(@Param('id') id: string): Promise<PostSaleCaseWithDetails> {
     return this.postSaleCases.getById(id);
   }

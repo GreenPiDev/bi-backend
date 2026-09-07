@@ -30,6 +30,7 @@ export class AccountsController {
   constructor(private readonly accounts: AccountsService) {}
 
   @Get()
+  @RequiresPermission('accounts', 'VIEW')
   list(
     @Query(new ZodValidationPipe(AccountQuerySchema)) query: AccountQueryDto,
   ): Promise<PagedResult<AccountWithMeta>> {
@@ -37,6 +38,7 @@ export class AccountsController {
   }
 
   @Get(':id')
+  @RequiresPermission('accounts', 'VIEW')
   getById(@Param('id') id: string) {
     return this.accounts.getById(id);
   }

@@ -35,6 +35,7 @@ export class CalendarEventsController {
   constructor(private readonly calendarEvents: CalendarEventsService) {}
 
   @Get()
+  @RequiresPermission('calendar', 'VIEW')
   list(
     @Query(new ZodValidationPipe(CalendarEventQuerySchema))
     query: CalendarEventQueryDto,
@@ -43,11 +44,13 @@ export class CalendarEventsController {
   }
 
   @Get('assignable-users')
+  @RequiresPermission('calendar', 'VIEW')
   listAssignableUsers(): Promise<{ id: string; name: string }[]> {
     return this.calendarEvents.listAssignableUsers();
   }
 
   @Get(':id')
+  @RequiresPermission('calendar', 'VIEW')
   getById(@Param('id') id: string): Promise<CalendarEventWithAttendees> {
     return this.calendarEvents.getById(id);
   }

@@ -26,6 +26,7 @@ export class WidgetsController {
   constructor(private readonly widgets: WidgetsService) {}
 
   @Get()
+  @RequiresPermission('dashboards', 'VIEW')
   list(@Param('dashboardId') dashboardId: string): Promise<Widget[]> {
     return this.widgets.list(dashboardId);
   }

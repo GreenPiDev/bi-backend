@@ -32,6 +32,7 @@ export class PriceListsController {
   constructor(private readonly priceLists: PriceListsService) {}
 
   @Get()
+  @RequiresPermission('price-lists', 'VIEW')
   list(
     @Query(new ZodValidationPipe(PriceListQuerySchema))
     query: PriceListQueryDto,
@@ -40,6 +41,7 @@ export class PriceListsController {
   }
 
   @Get(':id')
+  @RequiresPermission('price-lists', 'VIEW')
   getById(@Param('id') id: string): Promise<PriceListWithItems> {
     return this.priceLists.getById(id);
   }

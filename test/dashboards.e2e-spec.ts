@@ -125,6 +125,24 @@ describe('Dashboards (e2e)', () => {
     expect(res.status).toBe(403);
   });
 
+  it('dashboards VIEW izni olmayan kullanici panolari listeleyemez (403)', async () => {
+    const noPermCookies = await inviteUserWithNoPermissions(
+      app,
+      cookiesA,
+      `noview${emailSuffix}`,
+    );
+
+    const listRes = await request(app.getHttpServer())
+      .get('/api/v1/dashboards')
+      .set('Cookie', noPermCookies);
+    expect(listRes.status).toBe(403);
+
+    const detailRes = await request(app.getHttpServer())
+      .get(`/api/v1/dashboards/${dashboardId}`)
+      .set('Cookie', noPermCookies);
+    expect(detailRes.status).toBe(403);
+  });
+
   it('B tenanti A tenantinin panosuna erisemez (404)', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/dashboards/${dashboardId}`)

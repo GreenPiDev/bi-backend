@@ -33,11 +33,13 @@ export class DashboardsController {
   constructor(private readonly dashboards: DashboardsService) {}
 
   @Get()
+  @RequiresPermission('dashboards', 'VIEW')
   list(): Promise<Dashboard[]> {
     return this.dashboards.list();
   }
 
   @Get(':id')
+  @RequiresPermission('dashboards', 'VIEW')
   getById(@Param('id') id: string): Promise<DashboardWithWidgets> {
     return this.dashboards.getById(id);
   }

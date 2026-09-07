@@ -68,6 +68,7 @@ export class DatasourcesController {
   }
 
   @Get(':id/status')
+  @RequiresPermission('datasets', 'VIEW')
   getStatus(@Param('id') id: string): Promise<DataSourceStatusView> {
     return this.datasources.getStatus(id);
   }

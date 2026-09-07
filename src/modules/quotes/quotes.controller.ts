@@ -33,6 +33,7 @@ export class QuotesController {
   constructor(private readonly quotes: QuotesService) {}
 
   @Get()
+  @RequiresPermission('quotes', 'VIEW')
   list(
     @Query(new ZodValidationPipe(QuoteQuerySchema)) query: QuoteQueryDto,
   ): Promise<PagedResult<QuoteWithDetails>> {
@@ -40,6 +41,7 @@ export class QuotesController {
   }
 
   @Get(':id')
+  @RequiresPermission('quotes', 'VIEW')
   getById(@Param('id') id: string): Promise<QuoteWithDetails> {
     return this.quotes.getById(id);
   }
