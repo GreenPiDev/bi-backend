@@ -15,6 +15,8 @@ const fakeStorage = {
   getPublicUrl: storageGetPublicUrl,
 } as never;
 
+const FIXED_UPDATED_AT = new Date('2026-09-07T12:00:00.000Z');
+
 function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'product-1',
@@ -22,6 +24,7 @@ function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
     sku: 'SKU-1',
     unit: 'adet',
     imageKey: null,
+    updatedAt: FIXED_UPDATED_AT,
     ...overrides,
   };
 }
@@ -62,10 +65,10 @@ describe('ProductsService', () => {
     } satisfies Partial<AppException>);
   });
 
-  it('getById: imageKey varsa herkese acik URL doner', async () => {
+  it('getById: imageKey varsa herkese acik URL + cache-buster doner', async () => {
     const prisma = createPrisma(
       createProductRow({
-        imageKey: 'PILENS/development/t1/product-images/product-1/x.png',
+        imageKey: 'PILENS/development/t1/product-images/product-1.png',
       }),
     );
     const service = new ProductsService(
@@ -75,7 +78,7 @@ describe('ProductsService', () => {
     );
     const result = await service.getById('product-1');
     expect(result.imageUrl).toBe(
-      'https://cdn.example.com/PILENS/development/t1/product-images/product-1/x.png',
+      `https://cdn.example.com/PILENS/development/t1/product-images/product-1.png?v=${FIXED_UPDATED_AT.getTime()}`,
     );
   });
 
@@ -107,7 +110,9 @@ describe('ProductsService', () => {
     );
     await expect(
       service.update('yok', { name: 'x' } as never),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
   });
 
   it('remove: urunu siler ve audit log yazar', async () => {
@@ -134,8 +139,8 @@ describe('ProductsService', () => {
     expect(storageDelete).toHaveBeenCalledWith('old-key.png');
   });
 
-  it('uploadImage: gecerli PNG icin yukler, eski resmi siler ve imageKey gunceller', async () => {
-    const prisma = createPrisma(createProductRow({ imageKey: 'old-key.png' }));
+  it('uploadImage: gecerli PNG icin urun id.ext anahtariyla yukler, imageKey gunceller', async () => {
+    const prisma = createPrisma(createProductRow({ imageKey: null }));
     const service = new ProductsService(
       prisma as never,
       fakeAudit,
@@ -146,19 +151,55 @@ describe('ProductsService', () => {
       buffer: PNG_BUFFER,
     });
     expect(storageUpload).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /^PILENS\/development\/tenant-1\/product-images\/product-1\/.+\.png$/,
-      ),
+      'PILENS/development/tenant-1/product-images/product-1.png',
       PNG_BUFFER,
       'image/png',
     );
-    expect(storageDelete).toHaveBeenCalledWith('old-key.png');
-    expect(prisma.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: {
-          imageKey: expect.stringContaining('product-images/product-1/'),
-        },
+    expect(storageDelete).not.toHaveBeenCalled();
+    expect(prisma.product.update).toHaveBeenCalledWith({
+      where: { id: 'product-1' },
+      data: {
+        imageKey: 'PILENS/development/tenant-1/product-images/product-1.png',
+      },
+    });
+  });
+
+  it('uploadImage: ayni uzantiyla tekrar yuklenince eski anahtari silmeye calismaz (uzerine yazilir)', async () => {
+    const prisma = createPrisma(
+      createProductRow({
+        imageKey: 'PILENS/development/tenant-1/product-images/product-1.png',
       }),
+    );
+    const service = new ProductsService(
+      prisma as never,
+      fakeAudit,
+      fakeStorage,
+    );
+    await service.uploadImage('product-1', 'tenant-1', {
+      mimetype: 'image/png',
+      buffer: PNG_BUFFER,
+    });
+    expect(storageDelete).not.toHaveBeenCalled();
+  });
+
+  it('uploadImage: farkli uzantiyla degistirilince eski anahtari siler', async () => {
+    // eski gorsel .jpg olarak kayitliydi, simdi .png yukleniyor - iki farkli anahtar
+    const prisma = createPrisma(
+      createProductRow({
+        imageKey: 'PILENS/development/tenant-1/product-images/product-1.jpg',
+      }),
+    );
+    const service = new ProductsService(
+      prisma as never,
+      fakeAudit,
+      fakeStorage,
+    );
+    await service.uploadImage('product-1', 'tenant-1', {
+      mimetype: 'image/png',
+      buffer: PNG_BUFFER,
+    });
+    expect(storageDelete).toHaveBeenCalledWith(
+      'PILENS/development/tenant-1/product-images/product-1.jpg',
     );
   });
 

@@ -1,6 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Product } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
@@ -31,8 +30,12 @@ export class ProductsService {
   private toView(product: Product): ProductView {
     return {
       ...product,
+      // ?v= cache-buster: imageKey urun basina sabit (ayni uzantiyla degistirmede ayni
+      // anahtar yeniden yazilir), CDN/tarayici eski gorseli servis etmesin diye updatedAt
+      // eklenir. Alakasiz bir alan guncellenince de eklenir - zararsiz, sadece gereksiz bir
+      // yeniden-fetch'e yol acar.
       imageUrl: product.imageKey
-        ? this.storage.getPublicUrl(product.imageKey)
+        ? `${this.storage.getPublicUrl(product.imageKey)}?v=${product.updatedAt.getTime()}`
         : null,
     };
   }
@@ -130,10 +133,14 @@ export class ProductsService {
     const ext = detectProductImageExtension(file.mimetype, file.buffer);
     const env =
       process.env.NODE_ENV === 'production' ? 'production' : 'development';
-    const key = `PILENS/${env}/${tenantId}/product-images/${id}/${randomUUID()}.${ext}`;
+    // Urun basina tek gorsel oldugu icin anahtar sabit (id.ext) - ekstra bir klasor/uuid
+    // gerekmiyor. Onceki yukleme farkli bir uzantiylaysa (orn. png -> jpg) eski anahtar
+    // asagida ayrica silinir; ayni uzantida ise R2'deki nesne zaten uzerine yazilir.
+    // Tarayici/CDN cache'i toView()'daki ?v=updatedAt sorgu parametresiyle atlatilir.
+    const key = `PILENS/${env}/${tenantId}/product-images/${id}.${ext}`;
 
     await this.storage.upload(key, file.buffer, file.mimetype);
-    if (product.imageKey) {
+    if (product.imageKey && product.imageKey !== key) {
       await this.storage.delete(product.imageKey);
     }
 
