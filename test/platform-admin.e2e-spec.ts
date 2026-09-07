@@ -91,6 +91,117 @@ describe('Platform admin (e2e)', () => {
     expect(res.status).toBe(200);
     const ids = (res.body as { id: string }[]).map((t) => t.id);
     expect(ids).toContain(adminTenantId);
+    const tenant = (
+      res.body as { id: string; adminEmail: string | null }[]
+    ).find((t) => t.id === adminTenantId);
+    expect(tenant?.adminEmail).toBe(adminEmail);
+  });
+
+  it('platform-admin olmayan kullanici yeni kiraci olusturamaz (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/platform-admin/tenants')
+      .set('Cookie', normalCookies)
+      .send({
+        tenantName: 'Yetkisiz Kiraci',
+        adminName: 'Yetkisiz Admin',
+        adminEmail: `yetkisiz${emailSuffix}`,
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('platform-admin yeni bir kiraci ve ilk COMPANYADMIN kullanicisini olusturur', async () => {
+    const newAdminEmail = `yeni-musteri${emailSuffix}`;
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/platform-admin/tenants')
+      .set('Cookie', adminCookies)
+      .send({
+        tenantName: 'Yeni Musteri A.S.',
+        adminName: 'Yeni Musteri Admin',
+        adminEmail: newAdminEmail,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.tenant.name).toBe('Yeni Musteri A.S.');
+    expect(res.body.tenant.adminEmail).toBe(newAdminEmail);
+    expect(typeof res.body.temporaryPassword).toBe('string');
+    expect((res.body.temporaryPassword as string).length).toBe(6);
+
+    const newTenantId = res.body.tenant.id as string;
+    const newLoginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: newAdminEmail, password: res.body.temporaryPassword });
+    expect(newLoginRes.status).toBe(201);
+    expect(newLoginRes.body.user.tenantId).toBe(newTenantId);
+    const roleNames = (newLoginRes.body.user.roles as { name: string }[]).map(
+      (r) => r.name,
+    );
+    expect(roleNames).toContain('COMPANYADMIN');
+  });
+
+  it('ayni e-posta ile ikinci kez kiraci olusturmaya calisilirsa EMAIL_TAKEN doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/platform-admin/tenants')
+      .set('Cookie', adminCookies)
+      .send({
+        tenantName: 'Tekrar Kiraci',
+        adminName: 'Tekrar Admin',
+        adminEmail: adminEmail,
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('EMAIL_TAKEN');
+  });
+
+  it('platform-admin olmayan kullanici bir kiracinin admin sifresini sifirlayamaz (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .post(
+        `/api/v1/platform-admin/tenants/${adminTenantId}/reset-admin-password`,
+      )
+      .set('Cookie', normalCookies);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('platform-admin bir kiracinin COMPANYADMIN sifresini sifirlar ve yeni sifreyle giris yapilabilir', async () => {
+    const res = await request(app.getHttpServer())
+      .post(
+        `/api/v1/platform-admin/tenants/${adminTenantId}/reset-admin-password`,
+      )
+      .set('Cookie', adminCookies);
+
+    expect(res.status).toBe(201);
+    expect(typeof res.body.temporaryPassword).toBe('string');
+    expect((res.body.temporaryPassword as string).length).toBe(6);
+
+    const oldPasswordLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: adminEmail, password });
+    expect(oldPasswordLogin.status).toBe(401);
+
+    const newPasswordLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: adminEmail, password: res.body.temporaryPassword });
+    expect(newPasswordLogin.status).toBe(201);
+
+    // Sonraki testler `adminCookies`'e guveniyor - sifirlamadan sonra tekrar giris
+    // yapip cookie'yi guncelliyoruz.
+    adminCookies = newPasswordLogin.headers[
+      'set-cookie'
+    ] as unknown as string[];
+  });
+
+  it('olmayan tenant icin sifre sifirlama NOT_FOUND doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post(
+        `/api/v1/platform-admin/tenants/${randomUUID()}/reset-admin-password`,
+      )
+      .set('Cookie', adminCookies);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
   it('core modulu her tenant icin enabled=true, alwaysOn=true doner', async () => {

@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { type RequestUser } from '../../core/decorators/current-user.decorator';
@@ -8,6 +7,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { generateTemporaryPassword } from '../../core/security/temporary-password';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import {
@@ -21,11 +21,7 @@ import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 import type { UpdateRoleDto } from './dto/update-role.dto';
 
-/** Admin panelinde gosterilen tek kullanimlik gecici sifre - 6 haneli, sifirla
- * baslayabilen sayisal string (ornegin "048213"). */
-export function generateTemporaryPassword(): string {
-  return randomInt(0, 1_000_000).toString().padStart(6, '0');
-}
+export { generateTemporaryPassword } from '../../core/security/temporary-password';
 
 export interface UserProfile extends SafeUser {
   isActive: boolean;

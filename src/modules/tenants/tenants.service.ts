@@ -1,13 +1,35 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
+import * as argon2 from 'argon2';
+import { Prisma } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import {
   MODULE_REGISTRY,
   findModuleDefinition,
 } from '../../core/modules/module-registry';
 import { PageModulesService } from '../../core/modules/page-modules.service';
+import {
+  BASIC_ROLE_NAME,
+  COMPANY_ADMIN_ROLE_NAME,
+} from '../../core/permissions/system-role-names';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { generateTemporaryPassword } from '../../core/security/temporary-password';
 import { slugify } from './slugify';
+
+export interface CreateTenantWithAdminInput {
+  tenantName: string;
+  adminName: string;
+  adminEmail: string;
+}
+
+export interface TenantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  createdAt: Date;
+  adminEmail: string | null;
+}
 
 export interface PageAccessStatus {
   pageKey: string;
@@ -42,6 +64,142 @@ export class TenantsService {
     }
 
     return { id: randomUUID(), slug };
+  }
+
+  /** Tenant listesi + her tenant'in COMPANYADMIN kullanicisinin e-postasi (platform-admin
+   * ekraninda kiraci iletisim bilgisi olarak gosterilir). Birden fazla COMPANYADMIN varsa
+   * en eski (ilk) kaydedilen alinir. */
+  async listTenantSummaries(): Promise<TenantSummary[]> {
+    const tenants = await this.prisma.tenant.findMany({
+      select: { id: true, name: true, slug: true, plan: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const admins = await this.prisma.user.findMany({
+      where: {
+        tenantId: { in: tenants.map((t) => t.id) },
+        roles: { some: { role: { isCompanyAdmin: true } } },
+      },
+      select: { tenantId: true, email: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const adminEmailByTenantId = new Map<string, string>();
+    for (const admin of admins) {
+      if (!adminEmailByTenantId.has(admin.tenantId)) {
+        adminEmailByTenantId.set(admin.tenantId, admin.email);
+      }
+    }
+    return tenants.map((tenant) => ({
+      ...tenant,
+      adminEmail: adminEmailByTenantId.get(tenant.id) ?? null,
+    }));
+  }
+
+  /** Superadmin'in /new-customer formundan yeni bir kiraci + ilk COMPANYADMIN
+   * kullanicisini olusturur. Kullaniciya gecici bir sifre atanir ve donus degerinde
+   * gosterilir - kullanici bunu ilk girisinde degistirmelidir (bkz. UsersService.createUser
+   * ile ayni desen). */
+  async createTenantWithAdmin(
+    dto: CreateTenantWithAdminInput,
+  ): Promise<{ tenant: TenantSummary; temporaryPassword: string }> {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.adminEmail },
+    });
+    if (existingUser) {
+      throw new AppException(
+        'EMAIL_TAKEN',
+        'Bu e-posta adresi zaten kullaniliyor.',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const { id: tenantId, slug } = await this.createTenantWithUniqueSlug(
+      dto.tenantName,
+    );
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await argon2.hash(temporaryPassword, {
+      type: argon2.argon2id,
+    });
+
+    try {
+      const tenant = await this.prisma.$transaction(async (tx) => {
+        const createdTenant = await tx.tenant.create({
+          data: { id: tenantId, name: dto.tenantName, slug },
+        });
+        const companyAdminRole = await tx.role.create({
+          data: {
+            tenantId,
+            name: COMPANY_ADMIN_ROLE_NAME,
+            isSystem: true,
+            isCompanyAdmin: true,
+          },
+        });
+        await tx.role.create({
+          data: {
+            tenantId,
+            name: BASIC_ROLE_NAME,
+            isSystem: true,
+            isBasic: true,
+          },
+        });
+        await tx.user.create({
+          data: {
+            tenantId,
+            email: dto.adminEmail,
+            passwordHash,
+            name: dto.adminName,
+            roles: { create: { roleId: companyAdminRole.id } },
+          },
+        });
+        return createdTenant;
+      });
+      return {
+        tenant: { ...tenant, adminEmail: dto.adminEmail },
+        temporaryPassword,
+      };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new AppException(
+          'EMAIL_TAKEN',
+          'Bu e-posta adresi zaten kullaniliyor.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** Superadmin, musteri tenant'inin COMPANYADMIN kullanicisi sifresini unuttugunda
+   * (bize ulastiginda) buradan sifirlar - UsersService.resetPassword'un tenant-ici
+   * esdegeri, ama burada TenantContext yok (superadmin herhangi bir tenant'in icinde
+   * degil), bu yuzden ayri bir metod: hedef kullaniciyi dogrudan tenantId'ye gore bulur. */
+  async resetAdminPassword(
+    tenantId: string,
+  ): Promise<{ temporaryPassword: string }> {
+    const admin = await this.prisma.user.findFirst({
+      where: { tenantId, roles: { some: { role: { isCompanyAdmin: true } } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!admin) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Bu kiraci icin yonetici kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await argon2.hash(temporaryPassword, {
+      type: argon2.argon2id,
+    });
+    await this.prisma.user.update({
+      where: { id: admin.id },
+      data: { passwordHash },
+    });
+
+    return { temporaryPassword };
   }
 
   async listModules(tenantId: string): Promise<TenantModuleStatus[]> {

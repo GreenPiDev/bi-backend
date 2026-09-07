@@ -1,8 +1,17 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { PlatformAdminGuard } from '../../core/guards/platform-admin.guard';
 import type { ModuleDefinition } from '../../core/modules/module-registry';
 import type { PageModuleAssignment } from '../../core/modules/page-modules.service';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
+import { CreateTenantDto, CreateTenantSchema } from './dto/create-tenant.dto';
 import {
   SetPageModuleDto,
   SetPageModuleSchema,
@@ -20,6 +29,20 @@ export class PlatformAdminController {
   @Get('tenants')
   listTenants(): Promise<TenantSummary[]> {
     return this.platformAdmin.listTenants();
+  }
+
+  @Post('tenants')
+  createTenant(
+    @Body(new ZodValidationPipe(CreateTenantSchema)) dto: CreateTenantDto,
+  ): Promise<{ tenant: TenantSummary; temporaryPassword: string }> {
+    return this.platformAdmin.createTenant(dto);
+  }
+
+  @Post('tenants/:id/reset-admin-password')
+  resetAdminPassword(
+    @Param('id') id: string,
+  ): Promise<{ temporaryPassword: string }> {
+    return this.platformAdmin.resetAdminPassword(id);
   }
 
   @Get('tenants/:id/modules')

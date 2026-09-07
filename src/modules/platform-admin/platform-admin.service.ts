@@ -14,15 +14,11 @@ import { CrmReportProvisioningService } from '../datasets/crm-report-provisionin
 import {
   TenantsService,
   type TenantModuleStatus,
+  type TenantSummary,
 } from '../tenants/tenants.service';
+import { CreateTenantDto } from './dto/create-tenant.dto';
 
-export interface TenantSummary {
-  id: string;
-  name: string;
-  slug: string;
-  plan: string;
-  createdAt: Date;
-}
+export type { TenantSummary };
 
 @Injectable()
 export class PlatformAdminService {
@@ -35,10 +31,20 @@ export class PlatformAdminService {
   ) {}
 
   listTenants(): Promise<TenantSummary[]> {
-    return this.prisma.tenant.findMany({
-      select: { id: true, name: true, slug: true, plan: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.tenants.listTenantSummaries();
+  }
+
+  async createTenant(
+    dto: CreateTenantDto,
+  ): Promise<{ tenant: TenantSummary; temporaryPassword: string }> {
+    return this.tenants.createTenantWithAdmin(dto);
+  }
+
+  async resetAdminPassword(
+    tenantId: string,
+  ): Promise<{ temporaryPassword: string }> {
+    await this.requireTenant(tenantId);
+    return this.tenants.resetAdminPassword(tenantId);
   }
 
   async listTenantModules(tenantId: string): Promise<TenantModuleStatus[]> {
