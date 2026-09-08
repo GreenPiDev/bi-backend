@@ -138,7 +138,7 @@ describe('CalendarEventsService', () => {
     const service = new CalendarEventsService(prisma as never, fakeAudit);
     const result = await service.listAssignableUsers();
     expect(prisma.user.findMany).toHaveBeenCalledWith({
-      where: { isActive: true },
+      where: { isActive: true, isPlatformAdmin: false },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
