@@ -25,7 +25,7 @@ const REMINDER_CONFLICT_STEP_MINUTES = 30;
 const REMINDER_CONFLICT_MAX_TRIES = 48; // 24 saat, 30 dk adimlarla
 
 export type InteractionWithDetails = Interaction & {
-  account: Account;
+  account: Account | null;
   contact: Contact | null;
   participants: InteractionParticipant[];
   opportunity: Opportunity | null;
@@ -197,13 +197,6 @@ export class InteractionsService {
         accountId = account.id;
         accountAutoCreated = true;
       }
-      if (!accountId) {
-        throw new AppException(
-          'VALIDATION_ERROR',
-          'Firma belirlenemedi.',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
 
       let contactId = dto.contactId;
       let contactAutoCreated = false;
@@ -214,6 +207,24 @@ export class InteractionsService {
         });
         contactId = contact.id;
         contactAutoCreated = true;
+      }
+
+      // Firma girilmediyse (sadece kisi secildiyse), o kisinin zaten bagli
+      // oldugu firmayi kullan - kullaniciya ayrica firma sordurma.
+      if (!accountId && contactId) {
+        const contact = await tx.contact.findUnique({
+          where: { id: contactId },
+          select: { accountId: true },
+        });
+        accountId = contact?.accountId ?? undefined;
+      }
+
+      if (!accountId && dto.opportunity) {
+        throw new AppException(
+          'VALIDATION_ERROR',
+          'Firsat olusturmak icin firma gereklidir.',
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
       const created = await tx.interaction.create({
@@ -233,7 +244,7 @@ export class InteractionsService {
         },
       });
 
-      if (dto.opportunity) {
+      if (dto.opportunity && accountId) {
         await tx.opportunity.create({
           data: {
             tenantId,

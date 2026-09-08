@@ -557,7 +557,7 @@ model CalendarEventAttendee {
 model Interaction {
   id                 String            @id @default(uuid())
   tenantId           String
-  accountId          String
+  accountId          String?
   contactId          String?
   type               InteractionType
   notes              String
@@ -577,7 +577,7 @@ model Interaction {
   deletedAt          DateTime?
 
   tenant       Tenant                   @relation(fields: [tenantId], references: [id])
-  account      Account                  @relation(fields: [accountId], references: [id])
+  account      Account?                 @relation(fields: [accountId], references: [id])
   contact      Contact?                 @relation(fields: [contactId], references: [id])
   opportunity  Opportunity?
   participants InteractionParticipant[]

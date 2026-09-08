@@ -54,14 +54,25 @@ export const CreateInteractionSchema = z
     opportunity: NestedOpportunitySchema.optional(),
     reminder: ReminderSchema.optional(),
   })
-  .refine((dto) => Boolean(dto.accountId) !== Boolean(dto.accountName), {
-    message: 'accountId veya accountName alanlarindan tam biri verilmelidir.',
+  .refine((dto) => !(dto.accountId && dto.accountName), {
+    message: 'accountId ve accountName ayni anda verilemez.',
     path: ['accountId'],
   })
   .refine((dto) => !(dto.contactId && dto.contactName), {
     message: 'contactId ve contactName ayni anda verilemez.',
     path: ['contactId'],
-  });
+  })
+  .refine(
+    (dto) =>
+      Boolean(dto.accountId) ||
+      Boolean(dto.accountName) ||
+      Boolean(dto.contactId) ||
+      Boolean(dto.contactName),
+    {
+      message: 'Firma veya kisi alanlarindan en az biri doldurulmalidir.',
+      path: ['accountId'],
+    },
+  );
 export type CreateInteractionDto = z.infer<typeof CreateInteractionSchema>;
 
 export const UpdateInteractionSchema = z.object({

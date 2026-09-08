@@ -111,6 +111,41 @@ describe('Interactions (e2e)', () => {
     expect(res.body.interaction.contact.firstName).toBe('Ahmet');
   });
 
+  it('POST /interactions: firma bos, sadece contactId ile olusturur ve firmayi kisiden alir', async () => {
+    const contact = await prisma.contact.create({
+      data: {
+        tenantId: tenantIdA,
+        accountId: accountIdA,
+        firstName: 'Zeynep',
+        lastName: 'Kaya',
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/interactions')
+      .set('Cookie', cookiesA)
+      .send({
+        contactId: contact.id,
+        type: 'CALL',
+        notes: 'Sadece kisi ile gorusme',
+        occurredAt: '2026-01-01T10:00:00.000Z',
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.interaction.contactId).toBe(contact.id);
+    expect(res.body.interaction.accountId).toBe(accountIdA);
+  });
+
+  it('POST /interactions: firma ve kisi ikisi de bossa 400 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/interactions')
+      .set('Cookie', cookiesA)
+      .send({
+        type: 'CALL',
+        notes: 'Eksik gorusme',
+        occurredAt: '2026-01-01T10:00:00.000Z',
+      });
+    expect(res.status).toBe(400);
+  });
+
   it('POST /interactions: bilinen accountId ile ve M3/O1 gomulu firsatla olusturur', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/interactions')

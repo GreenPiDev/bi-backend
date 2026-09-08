@@ -30,6 +30,7 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
     },
     contact: {
       create: vi.fn().mockResolvedValue({ id: 'contact-1' }),
+      findUnique: vi.fn().mockResolvedValue({ accountId: ACCOUNT_ID }),
     },
     interaction: {
       findFirst: vi.fn().mockResolvedValue(interactionRow),
@@ -114,6 +115,65 @@ describe('InteractionsService', () => {
     expect(prisma.contact.create).toHaveBeenCalledWith({
       data: { accountId: ACCOUNT_ID, firstName: 'Ahmet', lastName: 'Yilmaz' },
     });
+  });
+
+  it('create: firma bos, mevcut contactId verilmisse firma o kisinin carisinden alinir', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(prisma as never, fakeAudit);
+    await service.create(TENANT_ID, USER_ID, {
+      contactId: 'contact-1',
+      type: 'CALL',
+      notes: 'notlar',
+      occurredAt: new Date('2026-01-01'),
+    } as never);
+    expect(prisma.contact.findUnique).toHaveBeenCalledWith({
+      where: { id: 'contact-1' },
+      select: { accountId: true },
+    });
+    expect(prisma.interaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          accountId: ACCOUNT_ID,
+          contactId: 'contact-1',
+        }),
+      }),
+    );
+  });
+
+  it('create: firma bos, yeni contactName verilmisse firmasiz kisi olusturur', async () => {
+    const prisma = createPrisma();
+    prisma.contact.findUnique = vi.fn().mockResolvedValue({ accountId: null });
+    const service = new InteractionsService(prisma as never, fakeAudit);
+    await service.create(TENANT_ID, USER_ID, {
+      contactName: 'Ahmet Yilmaz',
+      type: 'CALL',
+      notes: 'notlar',
+      occurredAt: new Date('2026-01-01'),
+    } as never);
+    expect(prisma.contact.create).toHaveBeenCalledWith({
+      data: { accountId: undefined, firstName: 'Ahmet', lastName: 'Yilmaz' },
+    });
+    expect(prisma.interaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ accountId: undefined }),
+      }),
+    );
+  });
+
+  it('create: firma yokken opportunity istenirse VALIDATION_ERROR firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.contact.findUnique = vi.fn().mockResolvedValue({ accountId: null });
+    const service = new InteractionsService(prisma as never, fakeAudit);
+    await expect(
+      service.create(TENANT_ID, USER_ID, {
+        contactName: 'Ahmet Yilmaz',
+        type: 'CALL',
+        notes: 'notlar',
+        occurredAt: new Date('2026-01-01'),
+        opportunity: { name: 'Yeni sunucu ihtiyaci' },
+      } as never),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(prisma.opportunity.create).not.toHaveBeenCalled();
   });
 
   it('create: M3/O1 - opportunity verilmisse gomulu firsat olusturur ve baglar', async () => {

@@ -37,6 +37,22 @@ describe('Interaction DTO', () => {
     expect(result.success).toBe(true);
   });
 
+  it('sadece contactId verilmisse gecerlidir (firma opsiyonel)', () => {
+    const result = CreateInteractionSchema.safeParse({
+      ...base,
+      contactId: '11111111-1111-1111-8111-111111111111',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('sadece contactName verilmisse gecerlidir (firma opsiyonel)', () => {
+    const result = CreateInteractionSchema.safeParse({
+      ...base,
+      contactName: 'Ahmet Yilmaz',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('contactId ve contactName ayni anda verilirse hata verir', () => {
     const result = CreateInteractionSchema.safeParse({
       ...base,
