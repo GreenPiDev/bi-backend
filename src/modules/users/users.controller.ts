@@ -1,20 +1,27 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
+import { AppException } from '../../core/errors/app.exception';
 import { CompanyAdminGuard } from '../../core/guards/company-admin.guard';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { SafeUser } from '../auth/auth.service';
+import { MAX_AVATAR_IMAGE_SIZE_BYTES } from './avatar-image-validation';
 import {
   ChangePasswordDto,
   ChangePasswordSchema,
@@ -56,6 +63,31 @@ export class UsersController {
     @Body(new ZodValidationPipe(ChangePasswordSchema)) dto: ChangePasswordDto,
   ): Promise<{ ok: true }> {
     return this.users.changePassword(user, dto);
+  }
+
+  @Post('me/avatar')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_AVATAR_IMAGE_SIZE_BYTES },
+    }),
+  )
+  uploadAvatar(
+    @CurrentUser() user: RequestUser,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UserProfile> {
+    if (!file) {
+      throw new AppException(
+        'FILE_REQUIRED',
+        'Resim yuklenmedi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.users.uploadAvatar(user, file);
+  }
+
+  @Delete('me/avatar')
+  removeAvatar(@CurrentUser() user: RequestUser): Promise<UserProfile> {
+    return this.users.removeAvatar(user);
   }
 
   @UseGuards(CompanyAdminGuard)

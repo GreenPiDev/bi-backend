@@ -143,8 +143,9 @@ describe('Products (e2e)', () => {
           contentType: 'image/png',
         });
       expect(uploadRes.status).toBe(201);
+      expect(uploadRes.body.imageUrl).toContain('/files?key=');
       expect(uploadRes.body.imageUrl).toContain(
-        `product-images/${productId}.png`,
+        encodeURIComponent(`product-images/${productId}.png`),
       );
 
       const deleteRes = await request(app.getHttpServer())

@@ -8,6 +8,8 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { generateTemporaryPassword } from '../../core/security/temporary-password';
+import { FileUrlService } from '../../core/storage/file-url.service';
+import { R2StorageService } from '../../core/storage/r2-storage.service';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import {
@@ -16,6 +18,7 @@ import {
   type SafeUser,
   type UserWithRoles,
 } from '../auth/auth.service';
+import { detectAvatarImageExtension } from './avatar-image-validation';
 import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
@@ -35,6 +38,8 @@ export class UsersService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly rawPrisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: R2StorageService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   async list(): Promise<SafeUser[]> {
@@ -42,7 +47,7 @@ export class UsersService {
       orderBy: { createdAt: 'asc' },
       include: USER_WITH_ROLES_INCLUDE,
     });
-    return users.map((u) => toSafeUser(u as UserWithRoles));
+    return users.map((u) => toSafeUser(u as UserWithRoles, this.fileUrl));
   }
 
   async getProfile(actingUser: RequestUser): Promise<UserProfile> {
@@ -116,7 +121,10 @@ export class UsersService {
       meta: { email: dto.email, roleIds: dto.roleIds },
     });
 
-    return { user: toSafeUser(user as UserWithRoles), temporaryPassword };
+    return {
+      user: toSafeUser(user as UserWithRoles, this.fileUrl),
+      temporaryPassword,
+    };
   }
 
   async resetPassword(
@@ -207,7 +215,7 @@ export class UsersService {
       entityId: targetUserId,
       meta: { previousRoleIds, newRoleIds: dto.roleIds },
     });
-    return toSafeUser(updated as UserWithRoles);
+    return toSafeUser(updated as UserWithRoles, this.fileUrl);
   }
 
   async updateProfile(
@@ -287,9 +295,78 @@ export class UsersService {
     return { ok: true };
   }
 
+  async uploadAvatar(
+    actingUser: RequestUser,
+    file: { mimetype: string; buffer: Buffer },
+  ): Promise<UserProfile> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: actingUser.id },
+    });
+    if (!user) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const ext = detectAvatarImageExtension(file.mimetype, file.buffer);
+    const env =
+      process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    // Kullanici basina tek gorsel oldugu icin anahtar sabit (id.ext) - urun gorseli
+    // deseniyle ayni (bkz. ProductsService.uploadImage).
+    const key = `PILENS/${env}/${user.tenantId}/avatars/${user.id}.${ext}`;
+
+    await this.storage.upload(key, file.buffer, file.mimetype);
+    if (user.avatarKey && user.avatarKey !== key) {
+      await this.storage.delete(user.avatarKey);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { avatarKey: key },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+    await this.audit.log({
+      action: 'UPDATE_PROFILE',
+      entity: 'User',
+      entityId: user.id,
+      meta: { avatarUploaded: true },
+    });
+    return this.toProfile(updated as UserWithRoles);
+  }
+
+  async removeAvatar(actingUser: RequestUser): Promise<UserProfile> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: actingUser.id },
+    });
+    if (!user) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (user.avatarKey) {
+      await this.storage.delete(user.avatarKey);
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { avatarKey: null },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+    await this.audit.log({
+      action: 'UPDATE_PROFILE',
+      entity: 'User',
+      entityId: user.id,
+      meta: { avatarRemoved: true },
+    });
+    return this.toProfile(updated as UserWithRoles);
+  }
+
   private toProfile(user: UserWithRoles): UserProfile {
     return {
-      ...toSafeUser(user),
+      ...toSafeUser(user, this.fileUrl),
       isActive: user.isActive,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,

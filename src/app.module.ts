@@ -23,6 +23,7 @@ import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { FilesModule } from './modules/files/files.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
@@ -69,6 +70,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     WidgetsModule,
     OnboardingModule,
     ExportsModule,
+    FilesModule,
     ReportsModule,
     AlertsModule,
     ChatbotModule,

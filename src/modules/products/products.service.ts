@@ -6,6 +6,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { FileUrlService } from '../../core/storage/file-url.service';
 import { R2StorageService } from '../../core/storage/r2-storage.service';
 import { AuditService } from '../audit/audit.service';
 import type {
@@ -25,18 +26,13 @@ export class ProductsService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
     private readonly storage: R2StorageService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   private toView(product: Product): ProductView {
     return {
       ...product,
-      // ?v= cache-buster: imageKey urun basina sabit (ayni uzantiyla degistirmede ayni
-      // anahtar yeniden yazilir), CDN/tarayici eski gorseli servis etmesin diye updatedAt
-      // eklenir. Alakasiz bir alan guncellenince de eklenir - zararsiz, sadece gereksiz bir
-      // yeniden-fetch'e yol acar.
-      imageUrl: product.imageKey
-        ? `${this.storage.getPublicUrl(product.imageKey)}?v=${product.updatedAt.getTime()}`
-        : null,
+      imageUrl: this.fileUrl.build(product.imageKey, product.updatedAt),
     };
   }
 

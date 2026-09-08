@@ -19,3 +19,4 @@ prisma/migrations/dev-tmp/
 # misc
 .DS_Store
 .idea/
+.wrangler/

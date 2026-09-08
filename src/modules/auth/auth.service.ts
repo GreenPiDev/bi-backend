@@ -9,6 +9,7 @@ import {
 } from '../../core/permissions/system-role-names';
 import type { EffectivePermissionSet } from '../../core/permissions/permission.types';
 import { PermissionsService } from '../../core/permissions/permissions.service';
+import { FileUrlService } from '../../core/storage/file-url.service';
 import { TenantsService } from '../tenants/tenants.service';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
@@ -26,6 +27,7 @@ export interface SafeUser {
   name: string;
   roles: SafeUserRole[];
   isPlatformAdmin: boolean;
+  avatarUrl: string | null;
 }
 
 /** /auth/me ve login/register/refresh yanitlarindaki "su an giris yapmis kullanici"
@@ -56,6 +58,7 @@ export class AuthService {
     private readonly tenants: TenantsService,
     private readonly tokens: TokenService,
     private readonly permissions: PermissionsService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -217,11 +220,14 @@ export class AuthService {
       user.tenantId,
       roleIds,
     );
-    return { ...toSafeUser(user), permissions };
+    return { ...toSafeUser(user, this.fileUrl), permissions };
   }
 }
 
-export function toSafeUser(user: UserWithRoles): SafeUser {
+export function toSafeUser(
+  user: UserWithRoles,
+  fileUrl: FileUrlService,
+): SafeUser {
   return {
     id: user.id,
     tenantId: user.tenantId,
@@ -229,5 +235,6 @@ export function toSafeUser(user: UserWithRoles): SafeUser {
     name: user.name,
     roles: user.roles.map((r) => r.role),
     isPlatformAdmin: user.isPlatformAdmin,
+    avatarUrl: fileUrl.build(user.avatarKey, user.updatedAt),
   };
 }

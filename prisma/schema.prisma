@@ -149,8 +149,10 @@ model User {
   name            String
   isActive        Boolean   @default(true)
   isPlatformAdmin Boolean   @default(false)
+  avatarKey       String?
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant Tenant         @relation(fields: [tenantId], references: [id])
   roles  UserRoleLink[]

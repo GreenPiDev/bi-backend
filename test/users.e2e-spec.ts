@@ -317,4 +317,67 @@ describe('Kullanici profili (e2e)', () => {
       });
     expect(loginRes.status).toBe(201);
   });
+
+  it('yeni kullanicinin avatarUrl alani basta null doner', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/users/me')
+      .set('Cookie', cookies);
+    expect(res.status).toBe(200);
+    expect(res.body.avatarUrl).toBeNull();
+  });
+
+  // R2 ortam degiskenleri yerelde/CI'da tanimli olmayabilir (bkz. .env.example) - o
+  // durumda bu test atlanir, konfigurasyon-yoksa-STORAGE_NOT_CONFIGURED davranisi
+  // core/storage/r2-storage.service.spec.ts'te ag'a cikmadan test ediliyor.
+  it.runIf(Boolean(process.env.R2_ACCOUNT_ID))(
+    'POST /users/me/avatar + DELETE: gercek R2 bucket ina yukler, herkese acik URL doner, kaldirir',
+    async () => {
+      // gecerli bir 1x1 PNG (magic-byte dogrulamasini gecmesi icin)
+      const pngBuffer = Buffer.from(
+        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100e221bc330000000049454e44ae426082',
+        'hex',
+      );
+      const uploadRes = await request(app.getHttpServer())
+        .post('/api/v1/users/me/avatar')
+        .set('Cookie', cookies)
+        .attach('file', pngBuffer, {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+        });
+      expect(uploadRes.status).toBe(201);
+      expect(uploadRes.body.avatarUrl).toContain('/files?key=');
+      expect(uploadRes.body.avatarUrl).toContain(
+        encodeURIComponent('avatars/'),
+      );
+      expect(uploadRes.body.avatarUrl).toContain(encodeURIComponent('.png'));
+
+      const deleteRes = await request(app.getHttpServer())
+        .delete('/api/v1/users/me/avatar')
+        .set('Cookie', cookies);
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.avatarUrl).toBeNull();
+    },
+  );
+
+  it('POST /users/me/avatar: gecersiz magic-byte icin UNSUPPORTED_IMAGE_TYPE doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/users/me/avatar')
+      .set('Cookie', cookies)
+      .attach('file', Buffer.from('not-a-real-image'), {
+        filename: 'avatar.png',
+        contentType: 'image/png',
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('UNSUPPORTED_IMAGE_TYPE');
+  });
+
+  it('kimliksiz avatar yukleme 401 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/users/me/avatar')
+      .attach('file', Buffer.from('not-a-real-image'), {
+        filename: 'avatar.png',
+        contentType: 'image/png',
+      });
+    expect(res.status).toBe(401);
+  });
 });

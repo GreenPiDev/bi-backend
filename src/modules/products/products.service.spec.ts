@@ -6,14 +6,17 @@ const fakeAudit = { log: auditLog } as never;
 
 const storageUpload = vi.fn().mockResolvedValue(undefined);
 const storageDelete = vi.fn().mockResolvedValue(undefined);
-const storageGetPublicUrl = vi.fn(
-  (key: string) => `https://cdn.example.com/${key}`,
-);
 const fakeStorage = {
   upload: storageUpload,
   delete: storageDelete,
-  getPublicUrl: storageGetPublicUrl,
 } as never;
+
+const fileUrlBuild = vi.fn((key: string | null, updatedAt: Date) =>
+  key
+    ? `https://api.example.com/files?key=${encodeURIComponent(key)}&v=${updatedAt.getTime()}`
+    : null,
+);
+const fakeFileUrl = { build: fileUrlBuild } as never;
 
 const FIXED_UPDATED_AT = new Date('2026-09-07T12:00:00.000Z');
 
@@ -59,6 +62,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -75,10 +79,11 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     const result = await service.getById('product-1');
     expect(result.imageUrl).toBe(
-      `https://cdn.example.com/PILENS/development/t1/product-images/product-1.png?v=${FIXED_UPDATED_AT.getTime()}`,
+      `https://api.example.com/files?key=${encodeURIComponent('PILENS/development/t1/product-images/product-1.png')}&v=${FIXED_UPDATED_AT.getTime()}`,
     );
   });
 
@@ -88,6 +93,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.create({
       name: 'Dizustu Bilgisayar',
@@ -107,6 +113,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await expect(
       service.update('yok', { name: 'x' } as never),
@@ -121,6 +128,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.remove('product-1');
     expect(prisma.product.delete).toHaveBeenCalledWith({
@@ -134,6 +142,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.remove('product-1');
     expect(storageDelete).toHaveBeenCalledWith('old-key.png');
@@ -145,6 +154,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.uploadImage('product-1', 'tenant-1', {
       mimetype: 'image/png',
@@ -174,6 +184,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.uploadImage('product-1', 'tenant-1', {
       mimetype: 'image/png',
@@ -193,6 +204,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.uploadImage('product-1', 'tenant-1', {
       mimetype: 'image/png',
@@ -209,6 +221,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await expect(
       service.uploadImage('product-1', 'tenant-1', {
@@ -225,6 +238,7 @@ describe('ProductsService', () => {
       prisma as never,
       fakeAudit,
       fakeStorage,
+      fakeFileUrl,
     );
     await service.removeImage('product-1');
     expect(storageDelete).toHaveBeenCalledWith('old-key.png');
