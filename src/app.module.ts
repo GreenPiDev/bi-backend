@@ -26,6 +26,7 @@ import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
@@ -89,6 +90,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ProjectsModule,
     PurchaseOrdersModule,
     StockItemsModule,
+    MessagesModule,
     JobsModule,
   ],
   providers: [

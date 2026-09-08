@@ -97,6 +97,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     label: 'Stok',
     supportedActions: ['UPDATE'],
   },
+  {
+    key: 'messages',
+    label: 'Mesajlar',
+    supportedActions: ['CREATE'],
+  },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
     key: 'settings',

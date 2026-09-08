@@ -32,6 +32,17 @@ enum PurchaseOrderItemSource {
   EXTRA
 }
 
+enum MessageRelatedEntity {
+  PROJECT
+  QUOTE
+  INTERACTION
+}
+
+enum MessageRecipientKind {
+  TO
+  CC
+}
+
 enum ContactStatus {
   ACTIVE
   INACTIVE
@@ -137,6 +148,7 @@ model Tenant {
   projects         Project[]
   purchaseOrders   PurchaseOrder[]
   stockItems       StockItem[]
+  messages         Message[]
 
   @@map("tenants")
 }
@@ -928,4 +940,48 @@ model StockItem {
   @@unique([tenantId, productId])
   @@index([tenantId])
   @@map("crm_stock_items")
+}
+
+/**
+ * Faz 11j (CLAUDE.md SS2.3.1 G3) - sistem ici mesajlasma, 3. parti mail servisi degil.
+ * relatedEntity CalendarEvent.relatedEntityType'in aksine gercek enum: Project/Quote/
+ * Interaction bu fazda zaten var, String'e gevsetmeye gerek yok.
+ */
+model Message {
+  id              String                @id @default(uuid())
+  tenantId        String
+  senderId        String
+  body            String
+  sentAt          DateTime              @default(now())
+  relatedEntity   MessageRelatedEntity?
+  relatedEntityId String?
+  createdById     String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id])
+  recipients MessageRecipient[]
+
+  @@index([tenantId, relatedEntity, relatedEntityId])
+  @@index([tenantId, sentAt])
+  @@map("crm_messages")
+}
+
+/**
+ * CalendarEventAttendee ile ayni desen: userId gercek FK degil (User'a relation eklemek
+ * gereksiz bir back-relation dizisi zorunlu kilar), tenant izolasyonu messageId uzerinden
+ * Message'a cascade ile miras alinir - kendi tenantId'si yok, TENANT_SCOPED_MODELS'e girmez.
+ */
+model MessageRecipient {
+  id        String               @id @default(uuid())
+  messageId String
+  userId    String
+  kind      MessageRecipientKind
+  readAt    DateTime?
+  createdAt DateTime             @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, kind])
+  @@map("crm_message_recipients")
 }
