@@ -16,6 +16,7 @@ export const CreateMessageSchema = z
     ccUserIds: z.array(z.string().uuid()).max(50).default([]),
     relatedEntity: MessageRelatedEntitySchema.optional(),
     relatedEntityId: z.string().uuid().optional(),
+    conversationId: z.string().uuid().optional(),
   })
   .refine(
     (dto) => Boolean(dto.relatedEntity) === Boolean(dto.relatedEntityId),

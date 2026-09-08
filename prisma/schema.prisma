@@ -950,6 +950,7 @@ model StockItem {
 model Message {
   id              String                @id @default(uuid())
   tenantId        String
+  conversationId  String                @default(uuid())
   senderId        String
   body            String
   sentAt          DateTime              @default(now())
@@ -964,6 +965,7 @@ model Message {
 
   @@index([tenantId, relatedEntity, relatedEntityId])
   @@index([tenantId, sentAt])
+  @@index([tenantId, conversationId])
   @@map("crm_messages")
 }
 

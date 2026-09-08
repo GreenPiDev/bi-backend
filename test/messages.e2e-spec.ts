@@ -28,7 +28,7 @@ describe('Messages (e2e)', () => {
   let cookiesB: string[];
   let recipientCookiesA: string[];
   let bystanderCookiesA: string[];
-  let messageId: string;
+  let conversationId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -129,17 +129,20 @@ describe('Messages (e2e)', () => {
       kind: 'TO',
       readAt: null,
     });
-    messageId = res.body.id as string;
+    conversationId = res.body.conversationId as string;
+    expect(conversationId).toEqual(expect.any(String));
   });
 
-  it('GET /messages?box=sent: gonderen kendi gonderdigini gorur', async () => {
+  it('GET /messages?box=sent: gonderen kendi gonderdigi konusmayi gorur', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/v1/messages?box=sent')
       .set('Cookie', cookiesA);
     expect(res.status).toBe(200);
-    expect((res.body.data as { id: string }[]).map((m) => m.id)).toContain(
-      messageId,
-    );
+    expect(
+      (res.body.data as { conversationId: string }[]).map(
+        (c) => c.conversationId,
+      ),
+    ).toContain(conversationId);
   });
 
   it('GET /messages?box=inbox: alici gelen kutusunda gorur', async () => {
@@ -147,9 +150,11 @@ describe('Messages (e2e)', () => {
       .get('/api/v1/messages?box=inbox')
       .set('Cookie', recipientCookiesA);
     expect(res.status).toBe(200);
-    expect((res.body.data as { id: string }[]).map((m) => m.id)).toContain(
-      messageId,
-    );
+    expect(
+      (res.body.data as { conversationId: string }[]).map(
+        (c) => c.conversationId,
+      ),
+    ).toContain(conversationId);
   });
 
   it('GET /messages?box=inbox: ilgisiz ayni tenant kullanicisi gelen kutusunda gormez', async () => {
@@ -157,46 +162,95 @@ describe('Messages (e2e)', () => {
       .get('/api/v1/messages?box=inbox')
       .set('Cookie', bystanderCookiesA);
     expect(res.status).toBe(200);
-    expect((res.body.data as { id: string }[]).map((m) => m.id)).not.toContain(
-      messageId,
-    );
+    expect(
+      (res.body.data as { conversationId: string }[]).map(
+        (c) => c.conversationId,
+      ),
+    ).not.toContain(conversationId);
   });
 
-  it('GET /messages/:id: TO/CC disindaki ayni tenant kullanicisi 404 alir', async () => {
+  it('GET /messages/:conversationId: TO/CC disindaki ayni tenant kullanicisi 404 alir', async () => {
     const res = await request(app.getHttpServer())
-      .get(`/api/v1/messages/${messageId}`)
+      .get(`/api/v1/messages/${conversationId}`)
       .set('Cookie', bystanderCookiesA);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
-  it('GET /messages/:id: B tenanti A tenantinin mesajina erisemez (404)', async () => {
+  it('GET /messages/:conversationId: B tenanti A tenantinin konusmasina erisemez (404)', async () => {
     const res = await request(app.getHttpServer())
-      .get(`/api/v1/messages/${messageId}`)
+      .get(`/api/v1/messages/${conversationId}`)
       .set('Cookie', cookiesB);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
-  it('PATCH /messages/:id/read: alici disindaki kullanici (gonderen dahil) 404 alir', async () => {
+  it('POST /messages: conversationId ile katilimcisi olmayan kullanici yanit atarsa 404 alir', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/messages')
+      .set('Cookie', bystanderCookiesA)
+      .send({ body: 'Yetkisiz yanit', toUserIds: [ownerIdA], conversationId });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('POST /messages: conversationId ile alici cevap atinca ayni konusmaya eklenir', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/messages')
+      .set('Cookie', recipientCookiesA)
+      .send({
+        body: 'Tamamdir, bakiyorum.',
+        toUserIds: [ownerIdA],
+        conversationId,
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.conversationId).toBe(conversationId);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/messages/${conversationId}`)
+      .set('Cookie', cookiesA);
+    expect(detail.status).toBe(200);
+    expect(detail.body.messages).toHaveLength(2);
+    expect(
+      (detail.body.messages as { body: string }[]).map((m) => m.body),
+    ).toEqual(['Bu ay ki teklif hakkinda konusalim.', 'Tamamdir, bakiyorum.']);
+  });
+
+  it('GET /messages: konusma ozetinde okunmamis sayisi dogru hesaplanir', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/messages?box=inbox')
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(200);
+    const summary = (
+      res.body.data as { conversationId: string; unreadCount: number }[]
+    ).find((c) => c.conversationId === conversationId);
+    expect(summary?.unreadCount).toBe(1);
+  });
+
+  it('PATCH /messages/:conversationId/read: alici disindaki kullanici (gonderen dahil) 404 alir', async () => {
     const bystanderRes = await request(app.getHttpServer())
-      .patch(`/api/v1/messages/${messageId}/read`)
+      .patch(`/api/v1/messages/${conversationId}/read`)
       .set('Cookie', bystanderCookiesA);
     expect(bystanderRes.status).toBe(404);
   });
 
-  it('PATCH /messages/:id/read: alici mesaji okundu isaretler', async () => {
+  it('PATCH /messages/:conversationId/read: alici konusmadaki tum okunmamis mesajlari okundu isaretler', async () => {
     const res = await request(app.getHttpServer())
-      .patch(`/api/v1/messages/${messageId}/read`)
+      .patch(`/api/v1/messages/${conversationId}/read`)
       .set('Cookie', recipientCookiesA);
     expect(res.status).toBe(200);
 
     const detail = await request(app.getHttpServer())
-      .get(`/api/v1/messages/${messageId}`)
+      .get(`/api/v1/messages/${conversationId}`)
       .set('Cookie', recipientCookiesA);
-    const recipient = (
-      detail.body.recipients as { userId: string; readAt: string | null }[]
-    ).find((r) => r.userId === recipientIdA);
+    const firstMessage = (
+      detail.body.messages as {
+        recipients: { userId: string; readAt: string | null }[];
+      }[]
+    )[0];
+    const recipient = firstMessage.recipients.find(
+      (r) => r.userId === recipientIdA,
+    );
     expect(recipient?.readAt).not.toBeNull();
   });
 });

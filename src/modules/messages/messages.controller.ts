@@ -23,6 +23,8 @@ import {
 } from './dto/message.dto';
 import {
   MessagesService,
+  type ConversationDetail,
+  type ConversationSummary,
   type MessageWithRecipients,
 } from './messages.service';
 
@@ -36,7 +38,7 @@ export class MessagesController {
   list(
     @Query(new ZodValidationPipe(MessageQuerySchema)) query: MessageQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<PagedResult<MessageWithRecipients>> {
+  ): Promise<PagedResult<ConversationSummary>> {
     return this.messages.list(user.id, query);
   }
 
@@ -46,13 +48,13 @@ export class MessagesController {
     return this.messages.listAssignableUsers();
   }
 
-  @Get(':id')
+  @Get(':conversationId')
   @RequiresPermission('messages', 'VIEW')
   getById(
-    @Param('id') id: string,
+    @Param('conversationId') conversationId: string,
     @CurrentUser() user: RequestUser,
-  ): Promise<MessageWithRecipients> {
-    return this.messages.getById(id, user.id);
+  ): Promise<ConversationDetail> {
+    return this.messages.getById(conversationId, user.id);
   }
 
   @Post()
@@ -64,12 +66,12 @@ export class MessagesController {
     return this.messages.create(user.tenantId, user.id, dto);
   }
 
-  @Patch(':id/read')
+  @Patch(':conversationId/read')
   @RequiresPermission('messages', 'VIEW')
   markRead(
-    @Param('id') id: string,
+    @Param('conversationId') conversationId: string,
     @CurrentUser() user: RequestUser,
   ): Promise<void> {
-    return this.messages.markRead(id, user.id);
+    return this.messages.markConversationRead(conversationId, user.id);
   }
 }
