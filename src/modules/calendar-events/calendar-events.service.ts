@@ -32,7 +32,7 @@ export class CalendarEventsService {
    */
   async listAssignableUsers(): Promise<{ id: string; name: string }[]> {
     return this.prisma.user.findMany({
-      where: { isActive: true },
+      where: { isActive: true, isPlatformAdmin: false },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
