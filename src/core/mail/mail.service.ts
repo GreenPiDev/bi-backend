@@ -22,16 +22,22 @@ export class MailService {
   private readonly transporter: Transporter;
 
   constructor(private readonly config: ConfigService) {
+    const user = this.config.get<string>('SMTP_USER');
+    const pass = this.config.get<string>('SMTP_PASS');
     this.transporter = nodemailer.createTransport({
       host: this.config.getOrThrow<string>('SMTP_HOST'),
       port: this.config.get<number>('SMTP_PORT', 1025),
-      secure: false,
+      secure: this.config.get<string>('SMTP_SECURE') === 'true',
+      auth: user && pass ? { user, pass } : undefined,
     });
   }
 
   async send(input: SendMailInput): Promise<void> {
     await this.transporter.sendMail({
-      from: 'PiLens <bildirim@pilens.local>',
+      from: this.config.get<string>(
+        'MAIL_FROM',
+        'PiLens <bildirim@pilens.local>',
+      ),
       to: input.to,
       cc: input.cc,
       subject: input.subject,
