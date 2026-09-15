@@ -141,6 +141,7 @@ model Tenant {
   interactions     Interaction[]
   opportunities    Opportunity[]
   products         Product[]
+  productLists     ProductList[]
   priceLists       PriceList[]
   quotes           Quote[]
   postSaleCases    PostSaleCase[]
@@ -645,6 +646,7 @@ model Opportunity {
 model Product {
   id             String    @id @default(uuid())
   tenantId       String
+  productListId  String
   name           String
   sku            String?
   unit           String    @default("adet")
@@ -663,6 +665,7 @@ model Product {
   deletedAt      DateTime?
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  productList        ProductList         @relation(fields: [productListId], references: [id])
   priceListItems     PriceListItem[]
   quoteItems         QuoteItem[]
   purchaseOrderItems PurchaseOrderItem[]
@@ -670,13 +673,17 @@ model Product {
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
+  @@index([tenantId, productListId])
   @@map("crm_products")
 }
 
 /**
- * Q3: teklif satirinda varsayilan birim fiyat buradan gelir, manuel ezilebilir.
+ * Bir tenant'in birden fazla urun katalogu olabilmesi icin eklendi (ProductList).
+ * Her Product/PriceList tam olarak bir ProductList'e aittir (1:N, N:M degil) - bkz.
+ * docs/VARSAYIMLAR.md V36. Migration, mevcut tum urun/fiyat listesi kayitlarini
+ * otomatik bir "Genel" ProductList'e tasir.
  */
-model PriceList {
+model ProductList {
   id        String    @id @default(uuid())
   tenantId  String
   name      String
@@ -685,11 +692,37 @@ model PriceList {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  tenant Tenant          @relation(fields: [tenantId], references: [id])
-  items  PriceListItem[]
-  quotes Quote[]
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  products   Product[]
+  priceLists PriceList[]
 
   @@index([tenantId, deletedAt])
+  @@map("crm_product_lists")
+}
+
+/**
+ * Q3: teklif satirinda varsayilan birim fiyat buradan gelir, manuel ezilebilir.
+ * productListId olusturulduktan sonra DEGISTIRILEMEZ (immutable) - bir fiyat listesi
+ * kavramsal olarak tek bir urun katalogun aittir, kalemlerindeki urunler de o katalogdan
+ * secilir (bkz. docs/VARSAYIMLAR.md V36).
+ */
+model PriceList {
+  id            String    @id @default(uuid())
+  tenantId      String
+  productListId String
+  name          String
+  isDefault     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  productList ProductList     @relation(fields: [productListId], references: [id])
+  items       PriceListItem[]
+  quotes      Quote[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, productListId])
   @@map("crm_price_lists")
 }
 

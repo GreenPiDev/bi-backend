@@ -63,6 +63,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
   {
+    key: 'product-lists',
+    label: 'Urun Listeleri',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
     key: 'products',
     label: 'Urunler',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],

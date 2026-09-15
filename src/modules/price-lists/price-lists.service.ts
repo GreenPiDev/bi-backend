@@ -1,5 +1,10 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { PriceList, PriceListItem, Product } from '@prisma/client';
+import type {
+  PriceList,
+  PriceListItem,
+  Product,
+  ProductList,
+} from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
@@ -17,10 +22,12 @@ const SORTABLE_FIELDS = ['name', 'createdAt'] as const;
 
 const PRICE_LIST_INCLUDE = {
   items: { include: { product: true } },
+  productList: true,
 } as const;
 
 export type PriceListWithItems = PriceList & {
   items: (PriceListItem & { product: Product })[];
+  productList: ProductList;
 };
 
 @Injectable()
@@ -33,13 +40,14 @@ export class PriceListsService {
   async list(
     query: PriceListQueryDto,
   ): Promise<PagedResult<PriceListWithItems>> {
-    const { page, pageSize, q } = query;
+    const { page, pageSize, q, productListId } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
     });
 
     const where = {
+      ...(productListId ? { productListId } : {}),
       ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
     };
 
@@ -75,11 +83,41 @@ export class PriceListsService {
     return priceList;
   }
 
+  /**
+   * Bir urun listesine ait olmayan urunlerin fiyat listesine eklenmesini engeller -
+   * PriceList.productListId immutable oldugu icin kalemlerin de her zaman o kataloga
+   * ait olmasi gerekir (bkz. docs/VARSAYIMLAR.md V36).
+   */
+  private async assertProductsBelongToList(
+    tx: Pick<TenantPrismaClient, 'product'>,
+    productIds: string[],
+    productListId: string,
+  ): Promise<void> {
+    if (productIds.length === 0) return;
+    const matching = await tx.product.findMany({
+      where: { id: { in: productIds }, productListId },
+      select: { id: true },
+    });
+    if (matching.length !== new Set(productIds).size) {
+      throw new AppException(
+        'PRODUCT_NOT_IN_LIST',
+        'Secilen urun(ler) bu urun listesine ait degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   async create(dto: CreatePriceListDto): Promise<PriceListWithItems> {
     const created = await this.prisma.$transaction(async (tx) => {
+      await this.assertProductsBelongToList(
+        tx,
+        dto.items.map((item) => item.productId),
+        dto.productListId,
+      );
       const priceList = await tx.priceList.create({
         // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
         data: {
+          productListId: dto.productListId,
           name: dto.name,
           isDefault: dto.isDefault ?? false,
           ...(dto.items.length ? { items: { create: dto.items } } : {}),
@@ -100,8 +138,15 @@ export class PriceListsService {
     id: string,
     dto: UpdatePriceListDto,
   ): Promise<PriceListWithItems> {
-    await this.getById(id);
+    const existing = await this.getById(id);
     await this.prisma.$transaction(async (tx) => {
+      if (dto.items) {
+        await this.assertProductsBelongToList(
+          tx,
+          dto.items.map((item) => item.productId),
+          existing.productListId,
+        );
+      }
       await tx.priceList.update({
         where: { id },
         data: {

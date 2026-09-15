@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { Product } from '@prisma/client';
+import type { Product, ProductList } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
@@ -18,7 +18,12 @@ import { detectProductImageExtension } from './product-image-validation';
 
 const SORTABLE_FIELDS = ['name', 'sku', 'createdAt'] as const;
 
-export type ProductView = Product & { imageUrl: string | null };
+type ProductWithProductList = Product & { productList: ProductList };
+
+export type ProductView = Product & {
+  imageUrl: string | null;
+  productList: { id: string; name: string };
+};
 
 @Injectable()
 export class ProductsService {
@@ -29,21 +34,26 @@ export class ProductsService {
     private readonly fileUrl: FileUrlService,
   ) {}
 
-  private toView(product: Product): ProductView {
+  private toView(product: ProductWithProductList): ProductView {
     return {
       ...product,
       imageUrl: this.fileUrl.build(product.imageKey, product.updatedAt),
+      productList: {
+        id: product.productList.id,
+        name: product.productList.name,
+      },
     };
   }
 
   async list(query: ProductQueryDto): Promise<PagedResult<ProductView>> {
-    const { page, pageSize, q } = query;
+    const { page, pageSize, q, productListId } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'name',
       direction: 'asc',
     });
 
     const where = {
+      ...(productListId ? { productListId } : {}),
       ...(q
         ? {
             OR: [
@@ -60,6 +70,7 @@ export class ProductsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { [field]: direction },
+        include: { productList: true },
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -75,8 +86,11 @@ export class ProductsService {
     return this.toView(product);
   }
 
-  private async findOrThrow(id: string): Promise<Product> {
-    const product = await this.prisma.product.findFirst({ where: { id } });
+  private async findOrThrow(id: string): Promise<ProductWithProductList> {
+    const product = await this.prisma.product.findFirst({
+      where: { id },
+      include: { productList: true },
+    });
     if (!product) {
       throw new AppException(
         'NOT_FOUND',
@@ -91,6 +105,7 @@ export class ProductsService {
     const product = await this.prisma.product.create({
       // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
       data: { ...dto } as never,
+      include: { productList: true },
     });
     await this.audit.log({
       action: 'CREATE',
@@ -106,6 +121,7 @@ export class ProductsService {
     const product = await this.prisma.product.update({
       where: { id },
       data: dto,
+      include: { productList: true },
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Product', entityId: id });
     return this.toView(product);
@@ -143,6 +159,7 @@ export class ProductsService {
     const updated = await this.prisma.product.update({
       where: { id },
       data: { imageKey: key },
+      include: { productList: true },
     });
     await this.audit.log({
       action: 'UPDATE',
@@ -161,6 +178,7 @@ export class ProductsService {
     const updated = await this.prisma.product.update({
       where: { id },
       data: { imageKey: null },
+      include: { productList: true },
     });
     await this.audit.log({
       action: 'UPDATE',

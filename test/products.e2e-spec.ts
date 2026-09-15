@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { createTestProductList } from './support/product-lists';
 
 describe('Products (e2e)', () => {
   let app: INestApplication;
@@ -21,6 +22,7 @@ describe('Products (e2e)', () => {
   let tenantIdB: string;
   let cookiesA: string[];
   let cookiesB: string[];
+  let productListId: string;
   let productId: string;
 
   beforeAll(async () => {
@@ -79,6 +81,7 @@ describe('Products (e2e)', () => {
     await prisma.tenantModule.create({
       data: { tenantId: tenantIdB, moduleKey: 'crm' },
     });
+    productListId = await createTestProductList(prisma, tenantIdA);
   });
 
   it('POST /products: urun olusturur (aciklama/kategori/maliyet dahil)', async () => {
@@ -86,6 +89,7 @@ describe('Products (e2e)', () => {
       .post('/api/v1/products')
       .set('Cookie', cookiesA)
       .send({
+        productListId,
         name: 'Dizustu Bilgisayar',
         sku: 'SKU-1',
         maxDiscountPct: 10,

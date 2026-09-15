@@ -55,6 +55,8 @@ export async function cleanupTestTenants(
   // StockItem (RESTRICT-referenced Product), before Product itself.
   await prisma.stockItem.deleteMany({ where: tenantFilter });
   await prisma.product.deleteMany({ where: tenantFilter });
+  // ProductList (RESTRICT-referenced by Product/PriceList), after both.
+  await prisma.productList.deleteMany({ where: tenantFilter });
   await prisma.contact.deleteMany({ where: tenantFilter });
   await prisma.account.deleteMany({ where: tenantFilter });
   await prisma.calendarEvent.deleteMany({ where: tenantFilter });

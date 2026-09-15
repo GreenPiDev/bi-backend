@@ -8,6 +8,7 @@ import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { CrmReportProvisioningService } from '../src/modules/datasets/crm-report-provisioning.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { createTestProductList } from './support/product-lists';
 
 /**
  * Faz 11f (R1-R2, bkz. docs/VARSAYIMLAR.md V29): sentetik CRM_TABLE dataset'inin
@@ -75,12 +76,19 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
     const account = await prisma.account.create({
       data: { tenantId: tenantAId, name: 'Musteri A' },
     });
+    const productListId = await createTestProductList(prisma, tenantAId);
     const product = await prisma.product.create({
-      data: { tenantId: tenantAId, name: 'Urun A', unit: 'adet' },
+      data: {
+        tenantId: tenantAId,
+        productListId,
+        name: 'Urun A',
+        unit: 'adet',
+      },
     });
     const priceList = await prisma.priceList.create({
       data: {
         tenantId: tenantAId,
+        productListId,
         name: 'Liste',
         items: { create: [{ productId: product.id, unitPrice: 100 }] },
       },

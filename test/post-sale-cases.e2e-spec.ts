@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { createTestProductList } from './support/product-lists';
 
 describe('Post-Sale Cases (e2e)', () => {
   let app: INestApplication;
@@ -113,14 +114,17 @@ describe('Post-Sale Cases (e2e)', () => {
     });
     otherAccountContactId = otherContact.id;
 
+    const productListId = await createTestProductList(prisma, tenantIdA);
+
     const product = await prisma.product.create({
-      data: { tenantId: tenantIdA, name: 'Dizustu Bilgisayar' },
+      data: { tenantId: tenantIdA, productListId, name: 'Dizustu Bilgisayar' },
     });
     productId = product.id;
 
     const limitedProduct = await prisma.product.create({
       data: {
         tenantId: tenantIdA,
+        productListId,
         name: 'Sunucu',
         maxDiscountPct: 10,
       },
@@ -130,6 +134,7 @@ describe('Post-Sale Cases (e2e)', () => {
     const priceList = await prisma.priceList.create({
       data: {
         tenantId: tenantIdA,
+        productListId,
         name: 'Standart Fiyat Listesi',
         items: {
           create: [

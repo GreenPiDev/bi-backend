@@ -32,6 +32,7 @@ import { OpportunitiesModule } from './modules/opportunities/opportunities.modul
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.module';
 import { PriceListsModule } from './modules/price-lists/price-lists.module';
+import { ProductListsModule } from './modules/product-lists/product-lists.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
@@ -83,6 +84,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     CalendarEventsModule,
     InteractionsModule,
     OpportunitiesModule,
+    ProductListsModule,
     ProductsModule,
     PriceListsModule,
     QuotesModule,

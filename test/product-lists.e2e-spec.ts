@@ -7,9 +7,8 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
-import { createTestProductList } from './support/product-lists';
 
-describe('PriceLists (e2e)', () => {
+describe('ProductLists (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
@@ -23,8 +22,6 @@ describe('PriceLists (e2e)', () => {
   let cookiesA: string[];
   let cookiesB: string[];
   let productListId: string;
-  let productId: string;
-  let priceListId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -66,76 +63,69 @@ describe('PriceLists (e2e)', () => {
     await app.close();
   });
 
-  it("tenant A ve B icin 'crm' modulunu etkinlestir, urun kur", async () => {
+  it("'crm' modulu kapaliyken POST /product-lists 403 doner", async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/product-lists')
+      .set('Cookie', cookiesA)
+      .send({ name: 'Genel' });
+    expect(res.status).toBe(403);
+  });
+
+  it("tenant A ve B icin 'crm' modulunu etkinlestir", async () => {
     await prisma.tenantModule.create({
       data: { tenantId: tenantIdA, moduleKey: 'crm' },
     });
     await prisma.tenantModule.create({
       data: { tenantId: tenantIdB, moduleKey: 'crm' },
     });
-    productListId = await createTestProductList(prisma, tenantIdA);
-    const product = await prisma.product.create({
-      data: { tenantId: tenantIdA, productListId, name: 'Dizustu Bilgisayar' },
-    });
-    productId = product.id;
   });
 
-  it('POST /price-lists: urun satirlariyla birlikte olusturur', async () => {
+  it('POST /product-lists: urun listesi olusturur', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/v1/price-lists')
+      .post('/api/v1/product-lists')
       .set('Cookie', cookiesA)
-      .send({
-        productListId,
-        name: 'Standart Fiyat Listesi',
-        items: [{ productId, unitPrice: 20000 }],
-      });
+      .send({ name: '2026 Katalogu', isDefault: true });
     expect(res.status).toBe(201);
-    expect(res.body.items).toHaveLength(1);
-    expect(res.body.items[0].unitPrice).toBe('20000');
-    expect(res.body.items[0].product.name).toBe('Dizustu Bilgisayar');
-    priceListId = res.body.id as string;
+    expect(res.body.name).toBe('2026 Katalogu');
+    expect(res.body.isDefault).toBe(true);
+    productListId = res.body.id as string;
   });
 
-  it('POST /price-lists: ayni urun iki kez eklenirse 400 doner', async () => {
+  it('GET /product-lists: tenantA sadece kendi listelerini gorur', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/v1/price-lists')
-      .set('Cookie', cookiesA)
-      .send({
-        productListId,
-        name: 'Gecersiz Liste',
-        items: [
-          { productId, unitPrice: 1 },
-          { productId, unitPrice: 2 },
-        ],
-      });
-    expect(res.status).toBe(400);
-  });
-
-  it('PATCH /price-lists/:id: urun satirlarini degistirir', async () => {
-    const res = await request(app.getHttpServer())
-      .patch(`/api/v1/price-lists/${priceListId}`)
-      .set('Cookie', cookiesA)
-      .send({ items: [{ productId, unitPrice: 25000 }] });
+      .get('/api/v1/product-lists')
+      .set('Cookie', cookiesA);
     expect(res.status).toBe(200);
-    expect(res.body.items[0].unitPrice).toBe('25000');
+    expect(
+      res.body.data.some((pl: { id: string }) => pl.id === productListId),
+    ).toBe(true);
   });
 
-  it('B tenanti A tenantinin fiyat listesine erisemez (404)', async () => {
+  it('PATCH /product-lists/:id: adi gunceller', async () => {
     const res = await request(app.getHttpServer())
-      .get(`/api/v1/price-lists/${priceListId}`)
+      .patch(`/api/v1/product-lists/${productListId}`)
+      .set('Cookie', cookiesA)
+      .send({ name: 'Bayi Katalogu' });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Bayi Katalogu');
+  });
+
+  it('B tenanti A tenantinin urun listesine erisemez (404)', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/product-lists/${productListId}`)
       .set('Cookie', cookiesB);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
-  it('DELETE /price-lists/:id: yumusak siler', async () => {
+  it('DELETE /product-lists/:id: yumusak siler', async () => {
     const res = await request(app.getHttpServer())
-      .delete(`/api/v1/price-lists/${priceListId}`)
+      .delete(`/api/v1/product-lists/${productListId}`)
       .set('Cookie', cookiesA);
     expect(res.status).toBe(204);
 
     const getRes = await request(app.getHttpServer())
-      .get(`/api/v1/price-lists/${priceListId}`)
+      .get(`/api/v1/product-lists/${productListId}`)
       .set('Cookie', cookiesA);
     expect(getRes.status).toBe(404);
   });

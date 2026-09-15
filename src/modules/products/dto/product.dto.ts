@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 
 export const CreateProductSchema = z.object({
+  productListId: z.string().uuid('Gecerli bir urun listesi seciniz.'),
   name: z.string().trim().min(2, 'Urun adi en az 2 karakter olmalidir.'),
   sku: z.string().trim().min(1).optional(),
   unit: z.string().trim().min(1).default('adet'),
@@ -15,6 +16,7 @@ export const CreateProductSchema = z.object({
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 
 export const UpdateProductSchema = z.object({
+  productListId: z.string().uuid().optional(),
   name: z.string().trim().min(2).optional(),
   sku: z.string().trim().min(1).optional(),
   unit: z.string().trim().min(1).optional(),
@@ -26,5 +28,7 @@ export const UpdateProductSchema = z.object({
 });
 export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
 
-export const ProductQuerySchema = ListQuerySchema;
+export const ProductQuerySchema = ListQuerySchema.extend({
+  productListId: z.string().uuid().optional(),
+});
 export type ProductQueryDto = z.infer<typeof ProductQuerySchema>;

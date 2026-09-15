@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { createTestProductList } from './support/product-lists';
 
 describe('Projects (e2e)', () => {
   let app: INestApplication;
@@ -95,12 +96,14 @@ describe('Projects (e2e)', () => {
     });
     otherAccountIdA = otherAccount.id;
 
+    const productListId = await createTestProductList(prisma, tenantIdA);
     const product = await prisma.product.create({
-      data: { tenantId: tenantIdA, name: 'Sunucu' },
+      data: { tenantId: tenantIdA, productListId, name: 'Sunucu' },
     });
     const priceList = await prisma.priceList.create({
       data: {
         tenantId: tenantIdA,
+        productListId,
         name: 'Standart Fiyat Listesi',
         items: { create: [{ productId: product.id, unitPrice: 20000 }] },
       },

@@ -11,6 +11,7 @@ function hasUniqueProductIds(items: { productId: string }[]): boolean {
 }
 
 export const CreatePriceListSchema = z.object({
+  productListId: z.string().uuid('Gecerli bir urun listesi seciniz.'),
   name: z
     .string()
     .trim()
@@ -39,5 +40,7 @@ export const UpdatePriceListSchema = z.object({
 });
 export type UpdatePriceListDto = z.infer<typeof UpdatePriceListSchema>;
 
-export const PriceListQuerySchema = ListQuerySchema;
+export const PriceListQuerySchema = ListQuerySchema.extend({
+  productListId: z.string().uuid().optional(),
+});
 export type PriceListQueryDto = z.infer<typeof PriceListQuerySchema>;

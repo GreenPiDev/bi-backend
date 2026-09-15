@@ -23,6 +23,8 @@ const FIXED_UPDATED_AT = new Date('2026-09-07T12:00:00.000Z');
 function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'product-1',
+    productListId: 'product-list-1',
+    productList: { id: 'product-list-1', name: 'Genel' },
     name: 'Dizustu Bilgisayar',
     sku: 'SKU-1',
     unit: 'adet',
@@ -171,6 +173,7 @@ describe('ProductsService', () => {
       data: {
         imageKey: 'PILENS/development/tenant-1/product-images/product-1.png',
       },
+      include: { productList: true },
     });
   });
 
@@ -245,6 +248,7 @@ describe('ProductsService', () => {
     expect(prisma.product.update).toHaveBeenCalledWith({
       where: { id: 'product-1' },
       data: { imageKey: null },
+      include: { productList: true },
     });
   });
 });

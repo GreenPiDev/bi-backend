@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
+import { createTestProductList } from './support/product-lists';
 
 describe('Purchase Orders & Stock (e2e)', () => {
   let app: INestApplication;
@@ -77,18 +78,25 @@ describe('Purchase Orders & Stock (e2e)', () => {
     });
     accountIdA = account.id;
 
+    const productListId = await createTestProductList(prisma, tenantIdA);
+
     const productWithStock = await prisma.product.create({
-      data: { tenantId: tenantIdA, name: 'Sunucu' },
+      data: { tenantId: tenantIdA, productListId, name: 'Sunucu' },
     });
     productWithStockId = productWithStock.id;
 
     const productWithoutStock = await prisma.product.create({
-      data: { tenantId: tenantIdA, name: 'Klavye' },
+      data: { tenantId: tenantIdA, productListId, name: 'Klavye' },
     });
     productWithoutStockId = productWithoutStock.id;
 
     const productLowStock = await prisma.product.create({
-      data: { tenantId: tenantIdA, name: 'Monitor', minStockLevel: 5 },
+      data: {
+        tenantId: tenantIdA,
+        productListId,
+        name: 'Monitor',
+        minStockLevel: 5,
+      },
     });
     productLowStockId = productLowStock.id;
 
@@ -104,6 +112,7 @@ describe('Purchase Orders & Stock (e2e)', () => {
     const priceList = await prisma.priceList.create({
       data: {
         tenantId: tenantIdA,
+        productListId,
         name: 'Standart Fiyat Listesi',
         items: {
           create: [
