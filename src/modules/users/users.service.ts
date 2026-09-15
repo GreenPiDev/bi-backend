@@ -240,6 +240,9 @@ export class UsersService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.defaultPageSize !== undefined
+          ? { defaultPageSize: dto.defaultPageSize }
+          : {}),
       },
       include: USER_WITH_ROLES_INCLUDE,
     });
@@ -248,7 +251,11 @@ export class UsersService {
       action: 'UPDATE_PROFILE',
       entity: 'User',
       entityId: actingUser.id,
-      meta: { name: dto.name, email: dto.email },
+      meta: {
+        name: dto.name,
+        email: dto.email,
+        defaultPageSize: dto.defaultPageSize,
+      },
     });
 
     return this.toProfile(updated as UserWithRoles);

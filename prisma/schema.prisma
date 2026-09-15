@@ -163,6 +163,7 @@ model User {
   isActive        Boolean   @default(true)
   isPlatformAdmin Boolean   @default(false)
   avatarKey       String?
+  defaultPageSize Int       @default(25)
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

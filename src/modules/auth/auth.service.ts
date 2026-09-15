@@ -28,6 +28,7 @@ export interface SafeUser {
   roles: SafeUserRole[];
   isPlatformAdmin: boolean;
   avatarUrl: string | null;
+  defaultPageSize: number;
 }
 
 /** /auth/me ve login/register/refresh yanitlarindaki "su an giris yapmis kullanici"
@@ -236,5 +237,6 @@ export function toSafeUser(
     roles: user.roles.map((r) => r.role),
     isPlatformAdmin: user.isPlatformAdmin,
     avatarUrl: fileUrl.build(user.avatarKey, user.updatedAt),
+    defaultPageSize: user.defaultPageSize,
   };
 }

@@ -283,6 +283,28 @@ describe('Kullanici profili (e2e)', () => {
     expect(res.body.email).toBe(newEmail);
   });
 
+  it('kullanici varsayilan sayfa boyutunu gunceller', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookies)
+      .send({ defaultPageSize: 50 });
+    expect(res.status).toBe(200);
+    expect(res.body.defaultPageSize).toBe(50);
+
+    const meRes = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Cookie', cookies);
+    expect(meRes.body.defaultPageSize).toBe(50);
+  });
+
+  it('gecersiz sayfa boyutu (100) icin 400 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookies)
+      .send({ defaultPageSize: 100 });
+    expect(res.status).toBe(400);
+  });
+
   it('baskasina ait e-postaya gecemez (EMAIL_TAKEN)', async () => {
     const res = await request(app.getHttpServer())
       .patch('/api/v1/users/me')
