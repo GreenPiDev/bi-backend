@@ -48,6 +48,12 @@ export class ContactsService {
               { lastName: { contains: q, mode: 'insensitive' as const } },
               { email: { contains: q, mode: 'insensitive' as const } },
               { phone: { contains: q, mode: 'insensitive' as const } },
+              {
+                account: {
+                  deletedAt: null,
+                  name: { contains: q, mode: 'insensitive' as const },
+                },
+              },
             ],
           }
         : {}),

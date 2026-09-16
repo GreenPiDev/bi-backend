@@ -147,6 +147,30 @@ describe('ContactsService', () => {
     } satisfies Partial<AppException>);
   });
 
+  it('list: q filtresi bagli firma adina gore de arar', async () => {
+    const prisma = createPrisma();
+    const service = new ContactsService(prisma as never, fakeAudit);
+    await service.list({
+      page: 1,
+      pageSize: 25,
+      q: 'Acme',
+    } as never);
+    expect(prisma.contact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            {
+              account: {
+                deletedAt: null,
+                name: { contains: 'Acme', mode: 'insensitive' },
+              },
+            },
+          ]),
+        }),
+      }),
+    );
+  });
+
   it('list: status filtresi where kosuluna eklenir', async () => {
     const prisma = createPrisma();
     const service = new ContactsService(prisma as never, fakeAudit);

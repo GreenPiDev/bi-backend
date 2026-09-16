@@ -107,6 +107,24 @@ describe('Contacts (e2e)', () => {
     expect(found?.account.id).toBe(accountId);
   });
 
+  it('GET /contacts?q= bagli firma adina gore de arar', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/contacts')
+      .query({ q: 'Acme' })
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(200);
+    const found = (res.body.data as { id: string }[]).find(
+      (c) => c.id === contactId,
+    );
+    expect(found).toBeDefined();
+
+    const noMatch = await request(app.getHttpServer())
+      .get('/api/v1/contacts')
+      .query({ q: 'Baska-Firma-Yok' })
+      .set('Cookie', cookiesA);
+    expect(noMatch.body.data).toHaveLength(0);
+  });
+
   it('B tenanti A tenantinin kisisine erisemez (404)', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/contacts/${contactId}`)
