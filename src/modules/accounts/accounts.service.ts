@@ -17,23 +17,33 @@ const SORTABLE_FIELDS = ['name', 'city', 'createdAt'] as const;
 
 /**
  * A5: "kesin bilmek istedigimiz" alanlar (bkz. VARSAYIMLAR V18) - bu alanlardan
- * biri bossa firma listesinde uyari ikonu gosterilir.
+ * biri bossa firma listesinde uyari ikonu gosterilir. Formdaki tum metin
+ * alanlarini kapsar (accountTypes ayri, dizi oldugu icin asagida ayrica
+ * kontrol edilir).
  */
 const CRITICAL_FIELDS = [
   'taxNumber',
-  'phone',
-  'email',
+  'taxOffice',
   'sector',
+  'website',
+  'phone',
+  'landlinePhone',
+  'email',
+  'address',
   'city',
+  'district',
 ] as const;
 
 export type AccountWithMeta = Account & { missingCriticalFields: string[] };
 
 function withMissingCriticalFields(account: Account): AccountWithMeta {
-  const missing = CRITICAL_FIELDS.filter((field) => {
+  const missing: string[] = CRITICAL_FIELDS.filter((field) => {
     const value = account[field as keyof Account];
     return value === null || value === undefined || value === '';
   });
+  if ((account.accountTypes ?? []).length === 0) {
+    missing.push('accountTypes');
+  }
   return { ...account, missingCriticalFields: missing };
 }
 

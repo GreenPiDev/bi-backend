@@ -123,10 +123,16 @@ describe('AccountsService', () => {
     const prisma = createPrisma(
       createAccountRow({
         taxNumber: '1234567890',
+        taxOffice: 'Kizilay',
         phone: '+90 555 000 0000',
+        landlinePhone: '03122605125',
         email: 'a@b.com',
+        website: 'https://acme.com',
+        address: 'Merkez Mah.',
         sector: 'Yazilim',
         city: 'Istanbul',
+        district: 'Kadikoy',
+        accountTypes: ['CUSTOMER'],
       }),
     );
     const service = new AccountsService(prisma as never, fakeAudit);
