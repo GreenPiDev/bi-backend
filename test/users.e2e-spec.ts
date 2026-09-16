@@ -305,6 +305,24 @@ describe('Kullanici profili (e2e)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('kullanici kolon tercihini gunceller', async () => {
+    const res = await request(app.getHttpServer())
+      .patch('/api/v1/users/me')
+      .set('Cookie', cookies)
+      .send({ columnPreferences: { accounts: ['name', 'city', 'actions'] } });
+    expect(res.status).toBe(200);
+    expect(res.body.columnPreferences).toEqual({
+      accounts: ['name', 'city', 'actions'],
+    });
+
+    const meRes = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Cookie', cookies);
+    expect(meRes.body.columnPreferences).toEqual({
+      accounts: ['name', 'city', 'actions'],
+    });
+  });
+
   it('baskasina ait e-postaya gecemez (EMAIL_TAKEN)', async () => {
     const res = await request(app.getHttpServer())
       .patch('/api/v1/users/me')

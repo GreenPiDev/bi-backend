@@ -29,6 +29,7 @@ export interface SafeUser {
   isPlatformAdmin: boolean;
   avatarUrl: string | null;
   defaultPageSize: number;
+  columnPreferences: Record<string, string[]> | null;
 }
 
 /** /auth/me ve login/register/refresh yanitlarindaki "su an giris yapmis kullanici"
@@ -238,5 +239,7 @@ export function toSafeUser(
     isPlatformAdmin: user.isPlatformAdmin,
     avatarUrl: fileUrl.build(user.avatarKey, user.updatedAt),
     defaultPageSize: user.defaultPageSize,
+    columnPreferences:
+      (user.columnPreferences as Record<string, string[]> | null) ?? null,
   };
 }

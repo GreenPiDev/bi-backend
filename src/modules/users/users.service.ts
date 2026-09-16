@@ -243,6 +243,9 @@ export class UsersService {
         ...(dto.defaultPageSize !== undefined
           ? { defaultPageSize: dto.defaultPageSize }
           : {}),
+        ...(dto.columnPreferences !== undefined
+          ? { columnPreferences: dto.columnPreferences }
+          : {}),
       },
       include: USER_WITH_ROLES_INCLUDE,
     });

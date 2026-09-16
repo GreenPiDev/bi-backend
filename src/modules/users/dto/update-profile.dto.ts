@@ -9,12 +9,17 @@ export const UpdateProfileSchema = z
     defaultPageSize: z
       .union([z.literal(10), z.literal(25), z.literal(50)])
       .optional(),
+    /** Liste sayfalarindaki "Gosterilecek kolonlar" secicisi - pageKey -> gorunur
+     * kolon anahtarlari. Frontend her zaman butun objeyi (mevcut + guncellenen sayfa
+     * anahtari) gonderir, backend opak JSON olarak oldugu gibi yazar. */
+    columnPreferences: z.record(z.string(), z.array(z.string())).optional(),
   })
   .refine(
     (data) =>
       data.name !== undefined ||
       data.email !== undefined ||
-      data.defaultPageSize !== undefined,
+      data.defaultPageSize !== undefined ||
+      data.columnPreferences !== undefined,
     { message: 'En az bir alan gonderilmeli.' },
   );
 
