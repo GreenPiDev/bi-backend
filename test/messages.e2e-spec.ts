@@ -112,17 +112,30 @@ describe('Messages (e2e)', () => {
     });
   });
 
+  it('POST /messages: yeni konusma baslatirken konu zorunludur (400)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/messages')
+      .set('Cookie', cookiesA)
+      .send({
+        body: 'Konusuz mesaj',
+        toUserIds: [recipientIdA],
+      });
+    expect(res.status).toBe(400);
+  });
+
   it('POST /messages: TO + CC ile mesaj olusturur', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/messages')
       .set('Cookie', cookiesA)
       .send({
+        subject: 'Teklif hakkinda',
         body: 'Bu ay ki teklif hakkinda konusalim.',
         toUserIds: [recipientIdA],
         ccUserIds: [],
       });
     expect(res.status).toBe(201);
     expect(res.body.senderId).toBe(ownerIdA);
+    expect(res.body.subject).toBe('Teklif hakkinda');
     expect(res.body.recipients).toHaveLength(1);
     expect(res.body.recipients[0]).toMatchObject({
       userId: recipientIdA,
@@ -205,6 +218,7 @@ describe('Messages (e2e)', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.conversationId).toBe(conversationId);
+    expect(res.body.subject).toBe('Teklif hakkinda');
 
     const detail = await request(app.getHttpServer())
       .get(`/api/v1/messages/${conversationId}`)

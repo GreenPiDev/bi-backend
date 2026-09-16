@@ -18,6 +18,7 @@ function createMessageRow(overrides: Partial<Record<string, unknown>> = {}) {
     id: 'message-1',
     conversationId: CONVERSATION_ID,
     senderId: SENDER_ID,
+    subject: 'Konu',
     body: 'Merhaba',
     sentAt: new Date('2026-01-01'),
     relatedEntity: null,
@@ -111,6 +112,7 @@ describe('MessagesService', () => {
       fakeRealtime,
     );
     await service.create(TENANT_ID, SENDER_ID, {
+      subject: 'Konu',
       body: 'Merhaba',
       toUserIds: [RECIPIENT_ID],
       ccUserIds: [BYSTANDER_ID],
@@ -121,6 +123,7 @@ describe('MessagesService', () => {
         data: expect.objectContaining({
           tenantId: TENANT_ID,
           senderId: SENDER_ID,
+          subject: 'Konu',
           conversationId: undefined,
           recipients: {
             create: [
@@ -159,6 +162,7 @@ describe('MessagesService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           conversationId: CONVERSATION_ID,
+          subject: 'Konu',
         }),
       }),
     );

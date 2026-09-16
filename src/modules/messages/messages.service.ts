@@ -74,7 +74,16 @@ export class MessagesService {
         boxCondition,
         ...(relatedEntity ? [{ relatedEntity }] : []),
         ...(relatedEntityId ? [{ relatedEntityId }] : []),
-        ...(q ? [{ body: { contains: q, mode: 'insensitive' as const } }] : []),
+        ...(q
+          ? [
+              {
+                OR: [
+                  { subject: { contains: q, mode: 'insensitive' as const } },
+                  { body: { contains: q, mode: 'insensitive' as const } },
+                ],
+              },
+            ]
+          : []),
       ],
     };
 
@@ -182,6 +191,7 @@ export class MessagesService {
   ): Promise<MessageWithRecipients> {
     let relatedEntity = dto.relatedEntity;
     let relatedEntityId = dto.relatedEntityId;
+    let subject = dto.subject;
 
     if (dto.conversationId) {
       // Yaniti mevcut konusmaya baglamadan once kullanicinin o konusmanin
@@ -193,6 +203,9 @@ export class MessagesService {
       );
       relatedEntity = existing!.relatedEntity ?? undefined;
       relatedEntityId = existing!.relatedEntityId ?? undefined;
+      // Konu, konusmanin ilk mesajindan miras alinir - yaniti yazarken
+      // kullaniciya ayrica konu sorulmaz (bkz. CreateMessageSchema refine).
+      subject = existing!.subject;
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -201,6 +214,7 @@ export class MessagesService {
           tenantId,
           createdById: senderId,
           senderId,
+          subject: subject!,
           body: dto.body,
           relatedEntity,
           relatedEntityId,
@@ -232,6 +246,7 @@ export class MessagesService {
       id: created.id,
       conversationId: created.conversationId,
       senderId: created.senderId,
+      subject: created.subject,
       body: created.body.slice(0, 140),
       sentAt: created.sentAt,
       relatedEntity: created.relatedEntity,

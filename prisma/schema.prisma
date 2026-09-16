@@ -1028,6 +1028,7 @@ model Message {
   tenantId        String
   conversationId  String                @default(uuid())
   senderId        String
+  subject         String
   body            String
   sentAt          DateTime              @default(now())
   relatedEntity   MessageRelatedEntity?

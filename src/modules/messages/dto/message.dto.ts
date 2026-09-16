@@ -9,6 +9,7 @@ export const MessageRelatedEntitySchema = z.enum([
 
 export const CreateMessageSchema = z
   .object({
+    subject: z.string().trim().max(200).optional(),
     body: z.string().trim().min(1, 'Mesaj metni bos birakilamaz.'),
     toUserIds: z
       .array(z.string().uuid())
@@ -25,7 +26,13 @@ export const CreateMessageSchema = z
         'relatedEntity ve relatedEntityId birlikte verilmeli ya da ikisi de bos olmalidir.',
       path: ['relatedEntity'],
     },
-  );
+  )
+  .refine((dto) => Boolean(dto.conversationId) || Boolean(dto.subject), {
+    // Yaniti mevcut konusmaya bagliyorsak konu ilk mesajdan miras alinir
+    // (bkz. messages.service.ts create()), sadece yeni konusma baslatirken zorunlu.
+    message: 'Konu gereklidir.',
+    path: ['subject'],
+  });
 export type CreateMessageDto = z.infer<typeof CreateMessageSchema>;
 
 export const MessageQuerySchema = ListQuerySchema.extend({
