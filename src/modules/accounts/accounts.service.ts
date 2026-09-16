@@ -65,7 +65,17 @@ export class AccountsService {
   ) {}
 
   async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
-    const { page, pageSize, q, city, sector, ownerId, from, to } = query;
+    const {
+      page,
+      pageSize,
+      q,
+      city,
+      sector,
+      ownerId,
+      from,
+      to,
+      notContactedDays,
+    } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'name',
       direction: 'asc',
@@ -80,6 +90,20 @@ export class AccountsService {
             createdAt: {
               ...(from ? { gte: from } : {}),
               ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+      ...(notContactedDays
+        ? {
+            interactions: {
+              none: {
+                deletedAt: null,
+                occurredAt: {
+                  gte: new Date(
+                    Date.now() - notContactedDays * 24 * 60 * 60 * 1000,
+                  ),
+                },
+              },
             },
           }
         : {}),

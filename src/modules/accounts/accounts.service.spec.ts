@@ -132,6 +132,24 @@ describe('AccountsService', () => {
     );
   });
 
+  it('list: notContactedDays verilirse son X gunde gorusmesi olmayan firmalari filtreler', async () => {
+    const prisma = createPrisma();
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await service.list({ page: 1, pageSize: 10, notContactedDays: 7 } as never);
+    expect(prisma.account.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          interactions: {
+            none: {
+              deletedAt: null,
+              occurredAt: { gte: expect.any(Date) },
+            },
+          },
+        }),
+      }),
+    );
+  });
+
   it('getById: kritik alanlar bossa missingCriticalFields listeler', async () => {
     const prisma = createPrisma(
       createAccountRow({ taxNumber: null, phone: null, email: null }),

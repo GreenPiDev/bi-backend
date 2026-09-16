@@ -136,6 +136,32 @@ describe('Accounts (e2e)', () => {
     expect(res.body.data).toEqual([]);
   });
 
+  it('GET /accounts?notContactedDays= son X gunde gorusme olmayan firmalari listeler', async () => {
+    const recentlyContacted = await prisma.account.create({
+      data: { tenantId: tenantIdA, name: 'Yakinda Gorusulen A.S.' },
+    });
+    await prisma.interaction.create({
+      data: {
+        tenantId: tenantIdA,
+        accountId: recentlyContacted.id,
+        type: 'CALL',
+        notes: 'Dun arandi',
+        occurredAt: new Date(),
+        createdById: (
+          await prisma.user.findFirstOrThrow({ where: { email: ownerEmailA } })
+        ).id,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/accounts?page=1&pageSize=100&notContactedDays=7')
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(200);
+    const ids = (res.body.data as { id: string }[]).map((a) => a.id);
+    expect(ids).toContain(accountId);
+    expect(ids).not.toContain(recentlyContacted.id);
+  });
+
   it('GET /accounts/:id firmayi kisileriyle doner', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/accounts/${accountId}`)

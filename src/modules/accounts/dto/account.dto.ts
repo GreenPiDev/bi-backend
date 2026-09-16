@@ -68,5 +68,9 @@ export const AccountQuerySchema = ListQuerySchema.extend({
    * cevrilir. */
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  /** "Son X gundur gorusme yapilmayanlar" filtresi - son X gun icinde en az bir
+   * Interaction'i olan firmalar listeden cikarilir (hic gorusmesi olmayanlar dahil
+   * edilir). */
+  notContactedDays: z.coerce.number().int().positive().optional(),
 });
 export type AccountQueryDto = z.infer<typeof AccountQuerySchema>;
