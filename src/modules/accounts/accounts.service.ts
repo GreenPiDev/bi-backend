@@ -65,16 +65,24 @@ export class AccountsService {
   ) {}
 
   async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
-    const { page, pageSize, q, city, sector, ownerId } = query;
+    const { page, pageSize, q, city, sector, ownerId, from, to } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
-      field: 'createdAt',
-      direction: 'desc',
+      field: 'name',
+      direction: 'asc',
     });
 
     const where = {
       ...(city ? { city } : {}),
       ...(sector ? { sector } : {}),
       ...(ownerId ? { ownerId } : {}),
+      ...(from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
       ...(q
         ? {
             OR: [

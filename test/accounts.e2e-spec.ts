@@ -113,6 +113,29 @@ describe('Accounts (e2e)', () => {
     );
   });
 
+  it('GET /accounts varsayilan olarak isme gore alfabetik siralar', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Cookie', cookiesA)
+      .send({ name: 'A Once Gelen A.S.' });
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/accounts?page=1&pageSize=100')
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(200);
+    const names = (res.body.data as { name: string }[]).map((a) => a.name);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b));
+    expect(names).toEqual(sorted);
+  });
+
+  it('GET /accounts?from= gelecekteki bir tarihten filtreleyince bos liste doner', async () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/accounts?page=1&pageSize=25&from=${future}`)
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
   it('GET /accounts/:id firmayi kisileriyle doner', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/accounts/${accountId}`)

@@ -108,6 +108,30 @@ describe('AccountsService', () => {
     });
   });
 
+  it('list: varsayilan siralama isme gore alfabetiktir', async () => {
+    const prisma = createPrisma();
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await service.list({ page: 1, pageSize: 10, sort: undefined } as never);
+    expect(prisma.account.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { name: 'asc' } }),
+    );
+  });
+
+  it('list: from/to verilirse createdAt araligina gore filtreler', async () => {
+    const prisma = createPrisma();
+    const service = new AccountsService(prisma as never, fakeAudit);
+    const from = new Date('2026-01-01');
+    const to = new Date('2026-01-31');
+    await service.list({ page: 1, pageSize: 10, from, to } as never);
+    expect(prisma.account.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { gte: from, lte: to },
+        }),
+      }),
+    );
+  });
+
   it('getById: kritik alanlar bossa missingCriticalFields listeler', async () => {
     const prisma = createPrisma(
       createAccountRow({ taxNumber: null, phone: null, email: null }),
