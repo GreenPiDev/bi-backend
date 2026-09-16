@@ -126,11 +126,66 @@ export class AccountsService {
     }
   }
 
+  /** Ayni A2 deseni, yetkili kisi nested-create'inde departman/unvan icin -
+   * ContactsService'teki karsiligiyla kasitli olarak ayni (bkz. V-yeni,
+   * AccountsModule <-> ContactsModule baglantisi kurulmasin diye kucuk bir
+   * mantik tekrar edilir). */
+  private async assertValidContactDepartment(
+    department: string | undefined,
+  ): Promise<void> {
+    if (!department) {
+      return;
+    }
+    const options = await this.prisma.departmentOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === department)) {
+      throw new AppException(
+        'INVALID_DEPARTMENT',
+        'Belirtilen departman tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private async assertValidContactTitle(
+    title: string | undefined,
+  ): Promise<void> {
+    if (!title) {
+      return;
+    }
+    const options = await this.prisma.titleOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === title)) {
+      throw new AppException(
+        'INVALID_TITLE',
+        'Belirtilen unvan tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   async create(dto: CreateAccountDto): Promise<Account> {
-    await this.assertValidSector(dto.sector);
-    const account = await this.prisma.account.create({
-      // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
-      data: normalize(dto) as never,
+    const { contact, ...accountFields } = dto;
+    await this.assertValidSector(accountFields.sector);
+    if (contact) {
+      await this.assertValidContactDepartment(contact.department);
+      await this.assertValidContactTitle(contact.title);
+    }
+    const account = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.account.create({
+        // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
+        data: normalize(accountFields) as never,
+      });
+      if (contact) {
+        await tx.contact.create({
+          data: { ...contact, accountId: created.id } as never,
+        });
+      }
+      return created;
     });
     await this.audit.log({
       action: 'CREATE',

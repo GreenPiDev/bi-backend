@@ -18,7 +18,7 @@ function createAccountRow(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 function createPrisma(accountRow: unknown = createAccountRow()) {
-  return {
+  const prisma = {
     account: {
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
@@ -27,10 +27,23 @@ function createPrisma(accountRow: unknown = createAccountRow()) {
       update: vi.fn().mockResolvedValue(accountRow),
       delete: vi.fn().mockResolvedValue(accountRow),
     },
+    contact: {
+      create: vi.fn(),
+    },
     sectorOption: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    departmentOption: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    titleOption: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    $transaction: vi.fn((callback: (tx: unknown) => unknown) =>
+      callback(prisma),
+    ),
   };
+  return prisma;
 }
 
 describe('AccountsService', () => {
@@ -151,5 +164,44 @@ describe('AccountsService', () => {
     await expect(
       service.create({ name: 'Acme', sector: 'Yazilim' } as never),
     ).resolves.toBeDefined();
+  });
+
+  it('create: yetkili kisi (contact) birlikte gonderilirse ayni transaction icinde olusturulur', async () => {
+    const prisma = createPrisma();
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await service.create({
+      name: 'Acme',
+      contact: {
+        firstName: 'Ayse',
+        lastName: 'Yilmaz',
+        phone: '+90 555 000 0000',
+      },
+    } as never);
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(prisma.contact.create).toHaveBeenCalledWith({
+      data: {
+        firstName: 'Ayse',
+        lastName: 'Yilmaz',
+        phone: '+90 555 000 0000',
+        accountId: ACCOUNT_ID,
+      },
+    });
+  });
+
+  it('create: yetkili kisinin unvani tanimli degilse INVALID_TITLE firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.titleOption.findMany.mockResolvedValue([
+      { id: 't1', label: 'Satis Muduru' },
+    ]);
+    const service = new AccountsService(prisma as never, fakeAudit);
+    await expect(
+      service.create({
+        name: 'Acme',
+        contact: { firstName: 'Ayse', lastName: 'Yilmaz', title: 'Uydurma' },
+      } as never),
+    ).rejects.toMatchObject({
+      code: 'INVALID_TITLE',
+    } satisfies Partial<AppException>);
+    expect(prisma.contact.create).not.toHaveBeenCalled();
   });
 });

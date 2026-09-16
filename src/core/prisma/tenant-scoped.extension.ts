@@ -16,6 +16,8 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Account',
   'Contact',
   'SectorOption',
+  'DepartmentOption',
+  'TitleOption',
   'TenantSetting',
   'Role',
   'CalendarEvent',

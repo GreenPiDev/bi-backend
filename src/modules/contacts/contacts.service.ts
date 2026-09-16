@@ -101,8 +101,48 @@ export class ContactsService {
     }
   }
 
+  /** Sektor (A2) ile ayni desen: tenant henuz departman tanimlamadiysa serbest
+   * metin kabul edilir, tanimladiysa sadece listeden secim gecerlidir. */
+  private async assertValidDepartment(
+    department: string | undefined,
+  ): Promise<void> {
+    if (!department) {
+      return;
+    }
+    const options = await this.prisma.departmentOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === department)) {
+      throw new AppException(
+        'INVALID_DEPARTMENT',
+        'Belirtilen departman tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private async assertValidTitle(title: string | undefined): Promise<void> {
+    if (!title) {
+      return;
+    }
+    const options = await this.prisma.titleOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === title)) {
+      throw new AppException(
+        'INVALID_TITLE',
+        'Belirtilen unvan tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   async create(dto: CreateContactDto): Promise<Contact> {
     await this.assertAccountExists(dto.accountId);
+    await this.assertValidDepartment(dto.department);
+    await this.assertValidTitle(dto.title);
     const contact = await this.prisma.contact.create({
       // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
       data: normalize(dto) as never,
@@ -119,6 +159,8 @@ export class ContactsService {
   async update(id: string, dto: UpdateContactDto): Promise<Contact> {
     await this.getById(id);
     await this.assertAccountExists(dto.accountId);
+    await this.assertValidDepartment(dto.department);
+    await this.assertValidTitle(dto.title);
     const data = normalize(dto) as Record<string, unknown>;
     // K2: iletisim tarihi elle guncellenince inaktivite bildirimi sifirlanir,
     // esik tekrar asilirsa yeni bir bildirim gonderilebilsin.

@@ -20,6 +20,8 @@ enum PermissionAction {
 enum AccountType {
   CUSTOMER
   SUPPLIER
+  CONTRACTOR
+  SUBCONTRACTOR
 }
 
 enum PurchaseOrderStatus {
@@ -135,6 +137,8 @@ model Tenant {
   accounts         Account[]
   contacts         Contact[]
   sectorOptions    SectorOption[]
+  departmentOptions DepartmentOption[]
+  titleOptions     TitleOption[]
   settings         TenantSetting[]
   roles            Role[]
   calendarEvents   CalendarEvent[]
@@ -417,9 +421,11 @@ model Account {
   accountTypes AccountType[] @default([])
   website      String?
   phone        String?
+  landlinePhone String?
   email        String?
   address      String?
   city         String?
+  district     String?
   ownerId      String?
   customFields Json          @default("{}")
   createdAt    DateTime      @default(now())
@@ -445,9 +451,11 @@ model Contact {
   accountId            String?
   firstName            String
   lastName             String
+  department           String?
   title                String?
   email                String?
   phone                String?
+  extension            String?
   ownerId              String?
   status               ContactStatus @default(ACTIVE)
   lastContactedAt      DateTime?
@@ -484,6 +492,30 @@ model SectorOption {
 
   @@unique([tenantId, label])
   @@map("crm_sector_options")
+}
+
+model DepartmentOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_department_options")
+}
+
+model TitleOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_title_options")
 }
 
 /**

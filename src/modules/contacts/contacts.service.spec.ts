@@ -30,6 +30,12 @@ function createPrisma(contactRow: unknown = createContactRow()) {
     account: {
       findFirst: vi.fn().mockResolvedValue({ id: ACCOUNT_ID }),
     },
+    departmentOption: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    titleOption: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   };
 }
 
@@ -105,6 +111,40 @@ describe('ContactsService', () => {
       where: { id: CONTACT_ID },
       data: { title: 'Satis Muduru' },
     });
+  });
+
+  it('create: tenant unvan tanimliysa listede olmayan unvan icin INVALID_TITLE firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.titleOption.findMany.mockResolvedValue([
+      { id: 't1', label: 'Satis Muduru' },
+    ]);
+    const service = new ContactsService(prisma as never, fakeAudit);
+    await expect(
+      service.create({
+        firstName: 'Ayse',
+        lastName: 'Yilmaz',
+        title: 'Uydurma Unvan',
+      } as never),
+    ).rejects.toMatchObject({
+      code: 'INVALID_TITLE',
+    } satisfies Partial<AppException>);
+  });
+
+  it('create: tenant departman tanimliysa listede olmayan departman icin INVALID_DEPARTMENT firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.departmentOption.findMany.mockResolvedValue([
+      { id: 'd1', label: 'Muhasebe' },
+    ]);
+    const service = new ContactsService(prisma as never, fakeAudit);
+    await expect(
+      service.create({
+        firstName: 'Ayse',
+        lastName: 'Yilmaz',
+        department: 'Uydurma Departman',
+      } as never),
+    ).rejects.toMatchObject({
+      code: 'INVALID_DEPARTMENT',
+    } satisfies Partial<AppException>);
   });
 
   it('list: status filtresi where kosuluna eklenir', async () => {

@@ -22,6 +22,7 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
+import { DepartmentOptionsModule } from './modules/department-options/department-options.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
 import { ImportsModule } from './modules/imports/imports.module';
@@ -44,6 +45,7 @@ import { SectorOptionsModule } from './modules/sector-options/sector-options.mod
 import { StockItemsModule } from './modules/stock-items/stock-items.module';
 import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
+import { TitleOptionsModule } from './modules/title-options/title-options.module';
 import { UsersModule } from './modules/users/users.module';
 import { WidgetsModule } from './modules/widgets/widgets.module';
 
@@ -80,6 +82,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ContactsModule,
     ImportsModule,
     SectorOptionsModule,
+    DepartmentOptionsModule,
+    TitleOptionsModule,
     TenantSettingsModule,
     CalendarEventsModule,
     InteractionsModule,

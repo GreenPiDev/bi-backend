@@ -130,6 +130,36 @@ describe('Accounts (e2e)', () => {
     expect(res.body.city).toBe('Istanbul');
   });
 
+  it('POST /accounts yetkili kisi (contact) ile birlikte gonderilirse ikisi de olusur', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/accounts')
+      .set('Cookie', cookiesA)
+      .send({
+        name: 'Yetkilili A.S.',
+        contact: {
+          firstName: 'Ayse',
+          lastName: 'Yilmaz',
+          department: 'Muhasebe',
+          title: 'Muhasebe Muduru',
+          phone: '+90 555 000 0000',
+          extension: '1234',
+        },
+      });
+    expect(res.status).toBe(201);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/accounts/${res.body.id as string}`)
+      .set('Cookie', cookiesA);
+    expect(detail.body.contacts).toHaveLength(1);
+    expect(detail.body.contacts[0]).toMatchObject({
+      firstName: 'Ayse',
+      lastName: 'Yilmaz',
+      department: 'Muhasebe',
+      title: 'Muhasebe Muduru',
+      extension: '1234',
+    });
+  });
+
   it('izinsiz kullanici firma olusturamaz (403)', async () => {
     const viewerCookies = await inviteUserWithNoPermissions(
       app,

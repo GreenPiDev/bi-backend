@@ -7,6 +7,7 @@ export const CreateContactSchema = z.object({
   firstName: z.string().trim().min(1, 'Ad zorunludur.'),
   lastName: z.string().trim().min(1, 'Soyad zorunludur.'),
   accountId: z.string().uuid().optional(),
+  department: z.string().trim().max(200).optional(),
   title: z.string().trim().max(200).optional(),
   email: z
     .string()
@@ -15,6 +16,7 @@ export const CreateContactSchema = z.object({
     .optional()
     .or(z.literal('')),
   phone: z.string().trim().max(50).optional(),
+  extension: z.string().trim().max(20).optional(),
   ownerId: z.string().uuid().optional(),
   status: ContactStatusSchema.optional(),
   lastContactedAt: z.coerce.date().optional(),
