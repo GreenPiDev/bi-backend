@@ -252,7 +252,7 @@ describe('Messages (e2e)', () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/messages/${conversationId}/read`)
       .set('Cookie', recipientCookiesA);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
 
     const detail = await request(app.getHttpServer())
       .get(`/api/v1/messages/${conversationId}`)
@@ -273,7 +273,7 @@ describe('Messages (e2e)', () => {
       .patch(`/api/v1/messages/${conversationId}/read`)
       .set('Cookie', recipientCookiesA)
       .send({ read: false });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
 
     const detail = await request(app.getHttpServer())
       .get(`/api/v1/messages/${conversationId}`)
@@ -318,7 +318,7 @@ describe('Messages (e2e)', () => {
         .patch(`/api/v1/messages/${conversationId}/star`)
         .set('Cookie', recipientCookiesA)
         .send({ starred: true });
-      expect(starRes.status).toBe(200);
+      expect(starRes.status).toBe(204);
 
       const listRes = await request(app.getHttpServer())
         .get('/api/v1/messages?box=inbox')
@@ -345,7 +345,7 @@ describe('Messages (e2e)', () => {
         .patch(`/api/v1/messages/${conversationId}/star`)
         .set('Cookie', recipientCookiesA)
         .send({ starred: false });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(204);
 
       const detailRes = await request(app.getHttpServer())
         .get(`/api/v1/messages/${conversationId}`)

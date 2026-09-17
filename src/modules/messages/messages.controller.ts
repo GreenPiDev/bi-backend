@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -71,6 +72,7 @@ export class MessagesController {
   }
 
   @Patch(':conversationId/read')
+  @HttpCode(204)
   @RequiresPermission('messages', 'VIEW')
   setRead(
     @Param('conversationId') conversationId: string,
@@ -82,6 +84,7 @@ export class MessagesController {
   }
 
   @Patch(':conversationId/star')
+  @HttpCode(204)
   @RequiresPermission('messages', 'VIEW')
   setStar(
     @Param('conversationId') conversationId: string,
