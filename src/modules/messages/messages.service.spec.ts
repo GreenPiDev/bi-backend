@@ -49,6 +49,15 @@ function createPrisma(messageRows: unknown[] = [createMessageRow()]) {
     user: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    quote: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    project: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    interaction: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(client)),
   };
   return client;
@@ -80,6 +89,26 @@ describe('MessagesService', () => {
     await expect(
       service.getById(CONVERSATION_ID, RECIPIENT_ID),
     ).resolves.toMatchObject({ conversationId: CONVERSATION_ID });
+  });
+
+  it('getById: iliskili PROJECT icin relatedEntityLabel proje adini doldurur', async () => {
+    const prisma = createPrisma([
+      createMessageRow({
+        relatedEntity: 'PROJECT',
+        relatedEntityId: 'project-1',
+      }),
+    ]);
+    prisma.project.findMany.mockResolvedValue([
+      { id: 'project-1', name: 'Depo Yenileme' },
+    ]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await expect(
+      service.getById(CONVERSATION_ID, SENDER_ID),
+    ).resolves.toMatchObject({ relatedEntityLabel: 'Depo Yenileme' });
   });
 
   it('getById: ilgisiz kullanici NOT_FOUND alir', async () => {
@@ -132,6 +161,165 @@ describe('MessagesService', () => {
         }),
       }),
     );
+  });
+
+  it('list: q kisi adiyla eslesirse eslesen kullanicilarin gonderen/alici oldugu mesajlari da kapsar', async () => {
+    const prisma = createPrisma();
+    prisma.user.findMany.mockResolvedValue([{ id: RECIPIENT_ID }]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+      q: 'Ahmet',
+    } as never);
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { name: { contains: 'Ahmet', mode: 'insensitive' } },
+      }),
+    );
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({
+              OR: expect.arrayContaining([
+                { senderId: { in: [RECIPIENT_ID] } },
+                { recipients: { some: { userId: { in: [RECIPIENT_ID] } } } },
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('list: q eslesen kullanici yoksa sadece subject/body OR kosulunu kullanir', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+      q: 'fatura',
+    } as never);
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            {
+              OR: [
+                { subject: { contains: 'fatura', mode: 'insensitive' } },
+                { body: { contains: 'fatura', mode: 'insensitive' } },
+              ],
+            },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('list: relatedEntity QUOTE ise relatedEntityLabel quoteNumber olur', async () => {
+    const prisma = createPrisma([
+      createMessageRow({ relatedEntity: 'QUOTE', relatedEntityId: 'quote-1' }),
+    ]);
+    prisma.quote.findMany.mockResolvedValue([
+      { id: 'quote-1', quoteNumber: 'TEK-2026-01-01-001' },
+    ]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+
+    const result = await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+    } as never);
+
+    expect(prisma.quote.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['quote-1'] } } }),
+    );
+    expect(result.data[0]).toMatchObject({
+      relatedEntityLabel: 'TEK-2026-01-01-001',
+    });
+  });
+
+  it('list: relatedEntity PROJECT ise relatedEntityLabel proje adi olur', async () => {
+    const prisma = createPrisma([
+      createMessageRow({
+        relatedEntity: 'PROJECT',
+        relatedEntityId: 'project-1',
+      }),
+    ]);
+    prisma.project.findMany.mockResolvedValue([
+      { id: 'project-1', name: 'Depo Yenileme' },
+    ]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+
+    const result = await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+    } as never);
+
+    expect(result.data[0]).toMatchObject({
+      relatedEntityLabel: 'Depo Yenileme',
+    });
+  });
+
+  it('list: relatedEntity INTERACTION ise relatedEntityLabel bagli carinin adi olur', async () => {
+    const prisma = createPrisma([
+      createMessageRow({
+        relatedEntity: 'INTERACTION',
+        relatedEntityId: 'interaction-1',
+      }),
+    ]);
+    prisma.interaction.findMany.mockResolvedValue([
+      { id: 'interaction-1', account: { name: 'ABC Ticaret' } },
+    ]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+
+    const result = await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+    } as never);
+
+    expect(result.data[0]).toMatchObject({ relatedEntityLabel: 'ABC Ticaret' });
+  });
+
+  it('list: iliskili kayit yoksa relatedEntityLabel null kalir ve ekstra sorgu atilmaz', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+
+    const result = await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+    } as never);
+
+    expect(prisma.quote.findMany).not.toHaveBeenCalled();
+    expect(prisma.project.findMany).not.toHaveBeenCalled();
+    expect(prisma.interaction.findMany).not.toHaveBeenCalled();
+    expect(result.data[0]).toMatchObject({ relatedEntityLabel: null });
   });
 
   it('list: sadece relatedEntity turu verilince o turdeki TUM mesajlari kapsayan genel filtre uygular', async () => {

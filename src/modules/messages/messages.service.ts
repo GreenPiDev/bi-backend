@@ -26,6 +26,10 @@ export interface ConversationSummary {
   conversationId: string;
   relatedEntity: MessageRelatedEntity | null;
   relatedEntityId: string | null;
+  /** Iliskili kaydin gorunur adi (Quote.quoteNumber, Project.name, Interaction icin
+   * bagli carinin adi) - widget/liste satirinda sadece tur degil, hangi kayit oldugu
+   * da gorunsun diye. Kayit silinmisse/bulunamazsa null. */
+  relatedEntityLabel: string | null;
   lastMessage: MessageWithRecipients;
   messageCount: number;
   unreadCount: number;
@@ -36,8 +40,15 @@ export interface ConversationDetail {
   conversationId: string;
   relatedEntity: MessageRelatedEntity | null;
   relatedEntityId: string | null;
+  relatedEntityLabel: string | null;
   messages: MessageWithRecipients[];
   starred: boolean;
+}
+
+interface RelatedEntityRef {
+  relatedEntity: MessageRelatedEntity | null;
+  relatedEntityId: string | null;
+  relatedEntityLabel: string | null;
 }
 
 const MESSAGE_INCLUDE = {
@@ -71,6 +82,17 @@ export class MessagesService {
       field: 'sentAt',
       direction: 'desc',
     });
+
+    // q ayni zamanda kisiye gore de arar: gonderen/alici adi eslesirse o
+    // konusma da sonuca girer (subject/body'ye ek olarak, tek bir OR icinde).
+    const matchedUserIds = q
+      ? (
+          await this.prisma.user.findMany({
+            where: { name: { contains: q, mode: 'insensitive' } },
+            select: { id: true },
+          })
+        ).map((user) => user.id)
+      : [];
 
     const boxCondition: Prisma.MessageWhereInput =
       box === 'sent'
@@ -130,6 +152,16 @@ export class MessagesService {
                 OR: [
                   { subject: { contains: q, mode: 'insensitive' as const } },
                   { body: { contains: q, mode: 'insensitive' as const } },
+                  ...(matchedUserIds.length
+                    ? [
+                        { senderId: { in: matchedUserIds } },
+                        {
+                          recipients: {
+                            some: { userId: { in: matchedUserIds } },
+                          },
+                        },
+                      ]
+                    : []),
                 ],
               },
             ]
@@ -173,11 +205,12 @@ export class MessagesService {
         conversationId,
         relatedEntity: lastMessage.relatedEntity,
         relatedEntityId: lastMessage.relatedEntityId,
+        // Asagida sadece sayfalanmis dilim icin dolduruluyor - tum taranan
+        // konusmalar icin yildiz/etiket sorgusu atmak gereksiz (bkz. asagidaki dongüler).
+        relatedEntityLabel: null,
         lastMessage,
         messageCount: messages.length,
         unreadCount,
-        // Asagida sadece sayfalanmis dilim icin dolduruluyor - tum taranan
-        // konusmalar icin yildiz sorgusu atmak gereksiz (bkz. asagidaki dongü).
         starred: false,
       };
     });
@@ -209,10 +242,70 @@ export class MessagesService {
       summary.starred = starredConversationIds.has(summary.conversationId);
     }
 
+    await this.attachRelatedEntityLabels(data);
+
     return {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+  }
+
+  /** Verilen konusma(lar) icin `relatedEntityLabel`'i doldurur - Quote icin numara,
+   * Project icin ad, Interaction icin bagli carinin adi (kendi adi yok). Hem liste
+   * (`list`, sayfalanmis dilim) hem tekil konusma (`getById`) tarafindan paylasilir;
+   * kayit turu basina tek toplu sorgu, N+1 yok. */
+  private async attachRelatedEntityLabels(
+    refs: RelatedEntityRef[],
+  ): Promise<void> {
+    const quoteIds = refs
+      .filter((r) => r.relatedEntity === 'QUOTE' && r.relatedEntityId)
+      .map((r) => r.relatedEntityId!);
+    const projectIds = refs
+      .filter((r) => r.relatedEntity === 'PROJECT' && r.relatedEntityId)
+      .map((r) => r.relatedEntityId!);
+    const interactionIds = refs
+      .filter((r) => r.relatedEntity === 'INTERACTION' && r.relatedEntityId)
+      .map((r) => r.relatedEntityId!);
+
+    if (!quoteIds.length && !projectIds.length && !interactionIds.length) {
+      return;
+    }
+
+    const [quotes, projects, interactions] = await Promise.all([
+      quoteIds.length
+        ? this.prisma.quote.findMany({
+            where: { id: { in: quoteIds } },
+            select: { id: true, quoteNumber: true },
+          })
+        : [],
+      projectIds.length
+        ? this.prisma.project.findMany({
+            where: { id: { in: projectIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+      interactionIds.length
+        ? this.prisma.interaction.findMany({
+            where: { id: { in: interactionIds } },
+            select: { id: true, account: { select: { name: true } } },
+          })
+        : [],
+    ]);
+
+    const labelById = new Map<string, string>();
+    for (const quote of quotes) labelById.set(quote.id, quote.quoteNumber);
+    for (const project of projects) labelById.set(project.id, project.name);
+    for (const interaction of interactions) {
+      if (interaction.account?.name) {
+        labelById.set(interaction.id, interaction.account.name);
+      }
+    }
+
+    for (const ref of refs) {
+      ref.relatedEntityLabel = ref.relatedEntityId
+        ? (labelById.get(ref.relatedEntityId) ?? null)
+        : null;
+    }
   }
 
   private async getVisibleConversationMessages(
@@ -249,13 +342,16 @@ export class MessagesService {
     const star = await this.prisma.messageStar.findFirst({
       where: { userId, conversationId },
     });
-    return {
+    const detail: ConversationDetail = {
       conversationId,
       relatedEntity: first.relatedEntity,
       relatedEntityId: first.relatedEntityId,
+      relatedEntityLabel: null,
       messages,
       starred: Boolean(star),
     };
+    await this.attachRelatedEntityLabels([detail]);
+    return detail;
   }
 
   async create(
