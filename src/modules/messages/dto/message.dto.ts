@@ -38,6 +38,16 @@ export const CreateMessageSchema = z
   });
 export type CreateMessageDto = z.infer<typeof CreateMessageSchema>;
 
+export const SetConversationReadSchema = z.object({
+  read: z.boolean().default(true),
+});
+export type SetConversationReadDto = z.infer<typeof SetConversationReadSchema>;
+
+export const SetConversationStarSchema = z.object({
+  starred: z.boolean(),
+});
+export type SetConversationStarDto = z.infer<typeof SetConversationStarSchema>;
+
 export const MessageQuerySchema = ListQuerySchema.extend({
   box: z.enum(['inbox', 'sent']).optional(),
   // Ilgili kayit turu (F: kompozit filtre) coklu secilebilir; belirli kayitlar

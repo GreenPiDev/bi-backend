@@ -29,6 +29,7 @@ export interface ConversationSummary {
   lastMessage: MessageWithRecipients;
   messageCount: number;
   unreadCount: number;
+  starred: boolean;
 }
 
 export interface ConversationDetail {
@@ -36,6 +37,7 @@ export interface ConversationDetail {
   relatedEntity: MessageRelatedEntity | null;
   relatedEntityId: string | null;
   messages: MessageWithRecipients[];
+  starred: boolean;
 }
 
 const MESSAGE_INCLUDE = {
@@ -174,6 +176,9 @@ export class MessagesService {
         lastMessage,
         messageCount: messages.length,
         unreadCount,
+        // Asagida sadece sayfalanmis dilim icin dolduruluyor - tum taranan
+        // konusmalar icin yildiz sorgusu atmak gereksiz (bkz. asagidaki dongü).
+        starred: false,
       };
     });
 
@@ -186,6 +191,23 @@ export class MessagesService {
     const total = summaries.length;
     const start = (page - 1) * pageSize;
     const data = summaries.slice(start, start + pageSize);
+
+    const starredConversationIds = new Set(
+      (
+        await this.prisma.messageStar.findMany({
+          where: {
+            userId,
+            conversationId: {
+              in: data.map((summary) => summary.conversationId),
+            },
+          },
+          select: { conversationId: true },
+        })
+      ).map((row) => row.conversationId),
+    );
+    for (const summary of data) {
+      summary.starred = starredConversationIds.has(summary.conversationId);
+    }
 
     return {
       data,
@@ -224,11 +246,15 @@ export class MessagesService {
       userId,
     );
     const first = messages[0]!;
+    const star = await this.prisma.messageStar.findFirst({
+      where: { userId, conversationId },
+    });
     return {
       conversationId,
       relatedEntity: first.relatedEntity,
       relatedEntityId: first.relatedEntityId,
       messages,
+      starred: Boolean(star),
     };
   }
 
@@ -305,9 +331,12 @@ export class MessagesService {
     return created;
   }
 
-  async markConversationRead(
+  /** `read=true` (varsayilan): konusmadaki tum okunmamis mesajlari okundu isaretler.
+   * `read=false`: manuel "okunmadi yap" - tum okunmus mesajlari tekrar okunmadi yapar. */
+  async setConversationRead(
     conversationId: string,
     userId: string,
+    read = true,
   ): Promise<void> {
     const messages = await this.getVisibleConversationMessages(
       conversationId,
@@ -317,10 +346,36 @@ export class MessagesService {
       where: {
         messageId: { in: messages.map((message) => message.id) },
         userId,
-        readAt: null,
+        readAt: read ? null : { not: null },
       },
-      data: { readAt: new Date() },
+      data: { readAt: read ? new Date() : null },
     });
+  }
+
+  /** Kisisel yildizlama - konusma bazli (bkz. MessageStar model yorumu). Once
+   * kullanicinin bu konusmayi gorebildigi (gonderen/alici oldugu) dogrulanir. */
+  async setConversationStar(
+    conversationId: string,
+    userId: string,
+    tenantId: string,
+    starred: boolean,
+  ): Promise<void> {
+    await this.getVisibleConversationMessages(conversationId, userId);
+
+    if (starred) {
+      const existing = await this.prisma.messageStar.findFirst({
+        where: { userId, conversationId },
+      });
+      if (!existing) {
+        await this.prisma.messageStar.create({
+          data: { tenantId, userId, conversationId },
+        });
+      }
+    } else {
+      await this.prisma.messageStar.deleteMany({
+        where: { userId, conversationId },
+      });
+    }
   }
 
   async listAssignableUsers(): Promise<{ id: string; name: string }[]> {

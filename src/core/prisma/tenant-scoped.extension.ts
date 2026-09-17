@@ -33,6 +33,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'PurchaseOrder',
   'StockItem',
   'Message',
+  'MessageStar',
 ]);
 
 /**

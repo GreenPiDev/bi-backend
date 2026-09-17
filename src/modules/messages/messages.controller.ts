@@ -18,8 +18,12 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateMessageSchema,
   MessageQuerySchema,
+  SetConversationReadSchema,
+  SetConversationStarSchema,
   type CreateMessageDto,
   type MessageQueryDto,
+  type SetConversationReadDto,
+  type SetConversationStarDto,
 } from './dto/message.dto';
 import {
   MessagesService,
@@ -68,10 +72,28 @@ export class MessagesController {
 
   @Patch(':conversationId/read')
   @RequiresPermission('messages', 'VIEW')
-  markRead(
+  setRead(
     @Param('conversationId') conversationId: string,
+    @Body(new ZodValidationPipe(SetConversationReadSchema))
+    dto: SetConversationReadDto,
     @CurrentUser() user: RequestUser,
   ): Promise<void> {
-    return this.messages.markConversationRead(conversationId, user.id);
+    return this.messages.setConversationRead(conversationId, user.id, dto.read);
+  }
+
+  @Patch(':conversationId/star')
+  @RequiresPermission('messages', 'VIEW')
+  setStar(
+    @Param('conversationId') conversationId: string,
+    @Body(new ZodValidationPipe(SetConversationStarSchema))
+    dto: SetConversationStarDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.messages.setConversationStar(
+      conversationId,
+      user.id,
+      user.tenantId,
+      dto.starred,
+    );
   }
 }

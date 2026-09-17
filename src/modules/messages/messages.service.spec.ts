@@ -40,6 +40,12 @@ function createPrisma(messageRows: unknown[] = [createMessageRow()]) {
     messageRecipient: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
+    messageStar: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     user: {
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -303,7 +309,7 @@ describe('MessagesService', () => {
     } satisfies Partial<AppException>);
   });
 
-  it('markConversationRead: ilgisiz kullanici icin NOT_FOUND firlatir', async () => {
+  it('setConversationRead: ilgisiz kullanici icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma([]);
     const service = new MessagesService(
       prisma as never,
@@ -311,20 +317,20 @@ describe('MessagesService', () => {
       fakeRealtime,
     );
     await expect(
-      service.markConversationRead(CONVERSATION_ID, BYSTANDER_ID),
+      service.setConversationRead(CONVERSATION_ID, BYSTANDER_ID),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
   });
 
-  it('markConversationRead: alici konusmadaki okunmamis mesajlari okundu isaretler', async () => {
+  it('setConversationRead: varsayilan (read=true) okunmamis mesajlari okundu isaretler', async () => {
     const prisma = createPrisma();
     const service = new MessagesService(
       prisma as never,
       fakeAudit,
       fakeRealtime,
     );
-    await service.markConversationRead(CONVERSATION_ID, RECIPIENT_ID);
+    await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
       where: {
         messageId: { in: ['message-1'] },
@@ -333,5 +339,116 @@ describe('MessagesService', () => {
       },
       data: { readAt: expect.any(Date) },
     });
+  });
+
+  it('setConversationRead: read=false verilince okunmus mesajlari tekrar okunmadi yapar', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID, false);
+    expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
+      where: {
+        messageId: { in: ['message-1'] },
+        userId: RECIPIENT_ID,
+        readAt: { not: null },
+      },
+      data: { readAt: null },
+    });
+  });
+
+  it('setConversationStar: konusmayi goremeyen kullanici NOT_FOUND alir', async () => {
+    const prisma = createPrisma([]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await expect(
+      service.setConversationStar(
+        CONVERSATION_ID,
+        BYSTANDER_ID,
+        TENANT_ID,
+        true,
+      ),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    } satisfies Partial<AppException>);
+  });
+
+  it('setConversationStar: starred=true ve daha once yildizlanmamissa yeni kayit olusturur', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.setConversationStar(
+      CONVERSATION_ID,
+      RECIPIENT_ID,
+      TENANT_ID,
+      true,
+    );
+    expect(prisma.messageStar.create).toHaveBeenCalledWith({
+      data: {
+        tenantId: TENANT_ID,
+        userId: RECIPIENT_ID,
+        conversationId: CONVERSATION_ID,
+      },
+    });
+  });
+
+  it('setConversationStar: zaten yildizliysa tekrar create cagirmaz', async () => {
+    const prisma = createPrisma();
+    prisma.messageStar.findFirst = vi.fn().mockResolvedValue({ id: 'star-1' });
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.setConversationStar(
+      CONVERSATION_ID,
+      RECIPIENT_ID,
+      TENANT_ID,
+      true,
+    );
+    expect(prisma.messageStar.create).not.toHaveBeenCalled();
+  });
+
+  it('setConversationStar: starred=false verilince yildiz kaydini siler', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.setConversationStar(
+      CONVERSATION_ID,
+      RECIPIENT_ID,
+      TENANT_ID,
+      false,
+    );
+    expect(prisma.messageStar.deleteMany).toHaveBeenCalledWith({
+      where: { userId: RECIPIENT_ID, conversationId: CONVERSATION_ID },
+    });
+  });
+
+  it('list: sonuclara sadece yildizlanan konusmalar icin starred=true ekler', async () => {
+    const prisma = createPrisma();
+    prisma.messageStar.findMany = vi
+      .fn()
+      .mockResolvedValue([{ conversationId: CONVERSATION_ID }]);
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    const result = await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+    } as never);
+    expect(result.data[0]?.starred).toBe(true);
   });
 });

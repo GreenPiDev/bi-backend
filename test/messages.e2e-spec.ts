@@ -268,6 +268,92 @@ describe('Messages (e2e)', () => {
     expect(recipient?.readAt).not.toBeNull();
   });
 
+  it('PATCH /messages/:conversationId/read: { read: false } konusmayi tekrar okunmadi yapar', async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/messages/${conversationId}/read`)
+      .set('Cookie', recipientCookiesA)
+      .send({ read: false });
+    expect(res.status).toBe(200);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/messages/${conversationId}`)
+      .set('Cookie', recipientCookiesA);
+    const firstMessage = (
+      detail.body.messages as {
+        recipients: { userId: string; readAt: string | null }[];
+      }[]
+    )[0];
+    const recipient = firstMessage.recipients.find(
+      (r) => r.userId === recipientIdA,
+    );
+    expect(recipient?.readAt).toBeNull();
+  });
+
+  describe('kisisel yildizlama', () => {
+    it('PATCH /messages/:conversationId/star: konusmayi goremeyen kullanici 404 alir', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/messages/${conversationId}/star`)
+        .set('Cookie', bystanderCookiesA)
+        .send({ starred: true });
+      expect(res.status).toBe(404);
+    });
+
+    it('yildizlama once GET listede ve detayda starred=false gorunur', async () => {
+      const listRes = await request(app.getHttpServer())
+        .get('/api/v1/messages?box=inbox')
+        .set('Cookie', recipientCookiesA);
+      const summary = (
+        listRes.body.data as { conversationId: string; starred: boolean }[]
+      ).find((c) => c.conversationId === conversationId);
+      expect(summary?.starred).toBe(false);
+
+      const detailRes = await request(app.getHttpServer())
+        .get(`/api/v1/messages/${conversationId}`)
+        .set('Cookie', recipientCookiesA);
+      expect(detailRes.body.starred).toBe(false);
+    });
+
+    it('PATCH /messages/:conversationId/star: { starred: true } sonrasi GET listede ve detayda starred=true gorunur, kisiseldir (baska kullaniciyi etkilemez)', async () => {
+      const starRes = await request(app.getHttpServer())
+        .patch(`/api/v1/messages/${conversationId}/star`)
+        .set('Cookie', recipientCookiesA)
+        .send({ starred: true });
+      expect(starRes.status).toBe(200);
+
+      const listRes = await request(app.getHttpServer())
+        .get('/api/v1/messages?box=inbox')
+        .set('Cookie', recipientCookiesA);
+      const summary = (
+        listRes.body.data as { conversationId: string; starred: boolean }[]
+      ).find((c) => c.conversationId === conversationId);
+      expect(summary?.starred).toBe(true);
+
+      const detailRes = await request(app.getHttpServer())
+        .get(`/api/v1/messages/${conversationId}`)
+        .set('Cookie', recipientCookiesA);
+      expect(detailRes.body.starred).toBe(true);
+
+      // Gonderen ayni konusmayi kendi tarafindan yildizlamamis - kisisel oldugu dogrulanir.
+      const senderDetailRes = await request(app.getHttpServer())
+        .get(`/api/v1/messages/${conversationId}`)
+        .set('Cookie', cookiesA);
+      expect(senderDetailRes.body.starred).toBe(false);
+    });
+
+    it('PATCH /messages/:conversationId/star: { starred: false } yildizi kaldirir', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/messages/${conversationId}/star`)
+        .set('Cookie', recipientCookiesA)
+        .send({ starred: false });
+      expect(res.status).toBe(200);
+
+      const detailRes = await request(app.getHttpServer())
+        .get(`/api/v1/messages/${conversationId}`)
+        .set('Cookie', recipientCookiesA);
+      expect(detailRes.body.starred).toBe(false);
+    });
+  });
+
   describe('kompozit ilgili-kayit filtresi', () => {
     const quoteId = randomUUID();
     const projectId = randomUUID();

@@ -154,6 +154,7 @@ model Tenant {
   purchaseOrders    PurchaseOrder[]
   stockItems        StockItem[]
   messages          Message[]
+  messageStars      MessageStar[]
 
   @@map("tenants")
 }
@@ -1063,4 +1064,25 @@ model MessageRecipient {
 
   @@unique([messageId, userId, kind])
   @@map("crm_message_recipients")
+}
+
+/**
+ * Kisisel yildizlama (mesaj degil, KONUSMA bazli - conversationId gercek bir FK
+ * degil, sadece Message.conversationId'deki mantiksal gruplama anahtari). Ayri bir
+ * tablo secildi cunku MessageRecipient'a baglamak, gonderenin kendi "Gonderilen"
+ * kutusundaki konusmalari yildizlamasini imkansiz kilardi (o konusmalarda kendisi
+ * icin MessageRecipient satiri yok).
+ */
+model MessageStar {
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String
+  conversationId String
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, userId, conversationId])
+  @@index([tenantId, userId])
+  @@map("crm_message_stars")
 }
