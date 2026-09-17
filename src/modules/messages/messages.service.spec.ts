@@ -104,6 +104,30 @@ describe('MessagesService', () => {
     } satisfies Partial<AppException>);
   });
 
+  it('list: recipientUserId verilince where kosuluna alici filtresi ekler', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+      recipientUserId: RECIPIENT_ID,
+    } as never);
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            { recipients: { some: { userId: RECIPIENT_ID } } },
+          ]),
+        }),
+      }),
+    );
+  });
+
   it('create: TO+CC nested recipients ile mesaj olusturur ve realtime yayinlar', async () => {
     const prisma = createPrisma();
     const service = new MessagesService(

@@ -39,5 +39,6 @@ export const MessageQuerySchema = ListQuerySchema.extend({
   box: z.enum(['inbox', 'sent']).optional(),
   relatedEntity: MessageRelatedEntitySchema.optional(),
   relatedEntityId: z.string().uuid().optional(),
+  recipientUserId: z.string().uuid().optional(),
 });
 export type MessageQueryDto = z.infer<typeof MessageQuerySchema>;

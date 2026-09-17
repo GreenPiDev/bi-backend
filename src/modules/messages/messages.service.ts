@@ -54,7 +54,15 @@ export class MessagesService {
     userId: string,
     query: MessageQueryDto,
   ): Promise<PagedResult<ConversationSummary>> {
-    const { page, pageSize, box, relatedEntity, relatedEntityId, q } = query;
+    const {
+      page,
+      pageSize,
+      box,
+      relatedEntity,
+      relatedEntityId,
+      q,
+      recipientUserId,
+    } = query;
     const { direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'sentAt',
       direction: 'desc',
@@ -74,6 +82,9 @@ export class MessagesService {
         boxCondition,
         ...(relatedEntity ? [{ relatedEntity }] : []),
         ...(relatedEntityId ? [{ relatedEntityId }] : []),
+        ...(recipientUserId
+          ? [{ recipients: { some: { userId: recipientUserId } } }]
+          : []),
         ...(q
           ? [
               {
