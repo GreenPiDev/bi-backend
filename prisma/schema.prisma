@@ -71,6 +71,15 @@ enum OpportunityStage {
   LOST
 }
 
+enum CurrencyCode {
+  TRY
+  USD
+  EUR
+  GBP
+  CHF
+  JPY
+}
+
 /**
  * Bkz. docs/VARSAYIMLAR.md V27: politika asimi yoksa olusturma aninda dogrudan APPROVED,
  * asim varsa PENDING_APPROVAL (APPROVE izniyle sonuclanir). DRAFT sema uyumlulugu icin
@@ -659,6 +668,9 @@ model Opportunity {
   name           String
   stage          OpportunityStage @default(NEW)
   estimatedValue Decimal?         @db.Decimal(14, 2)
+  estimatedValueCurrency CurrencyCode @default(TRY)
+  description    String?
+  occurredAt     DateTime         @default(now())
   createdById    String
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt

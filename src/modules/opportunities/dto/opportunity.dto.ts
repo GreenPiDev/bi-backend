@@ -9,11 +9,41 @@ export const OpportunityStageSchema = z.enum([
   'LOST',
 ]);
 
+export const CurrencyCodeSchema = z.enum([
+  'TRY',
+  'USD',
+  'EUR',
+  'GBP',
+  'CHF',
+  'JPY',
+]);
+
+/** Interactions'daki ReminderSchema ile ayni sekil - opportunity.dto.ts <-> interaction.dto.ts
+ * dongusel importa girmemek icin (interaction.dto.ts zaten OpportunityStageSchema'yi buradan
+ * aliyor) kasitli olarak tekrar tanimlandi. */
+const OpportunityReminderSchema = z.object({
+  startAt: z.coerce.date(),
+  title: z.string().trim().max(200).optional(),
+  assignees: z
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        note: z.string().trim().max(1000).optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
 export const CreateOpportunitySchema = z.object({
   accountId: z.string().uuid(),
   name: z.string().trim().min(2, 'Firsat adi en az 2 karakter olmalidir.'),
   stage: OpportunityStageSchema.optional(),
   estimatedValue: z.number().nonnegative().optional(),
+  estimatedValueCurrency: CurrencyCodeSchema.optional(),
+  description: z.string().trim().max(2000).optional(),
+  occurredAt: z.coerce.date().optional(),
+  reminder: OpportunityReminderSchema.optional(),
 });
 export type CreateOpportunityDto = z.infer<typeof CreateOpportunitySchema>;
 
@@ -21,6 +51,9 @@ export const UpdateOpportunitySchema = z.object({
   name: z.string().trim().min(2).optional(),
   stage: OpportunityStageSchema.optional(),
   estimatedValue: z.number().nonnegative().optional(),
+  estimatedValueCurrency: CurrencyCodeSchema.optional(),
+  description: z.string().trim().max(2000).optional(),
+  occurredAt: z.coerce.date().optional(),
 });
 export type UpdateOpportunityDto = z.infer<typeof UpdateOpportunitySchema>;
 

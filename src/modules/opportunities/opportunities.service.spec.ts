@@ -17,7 +17,7 @@ function createOpportunityRow(
 }
 
 function createPrisma(row: unknown = createOpportunityRow()) {
-  return {
+  const prisma = {
     opportunity: {
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
@@ -26,7 +26,17 @@ function createPrisma(row: unknown = createOpportunityRow()) {
       update: vi.fn().mockResolvedValue(row),
       delete: vi.fn().mockResolvedValue(row),
     },
+    calendarEvent: {
+      create: vi.fn().mockResolvedValue({}),
+    },
+    calendarEventAttendee: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    $transaction: vi.fn((callback: (tx: unknown) => unknown) =>
+      callback(prisma),
+    ),
   };
+  return prisma;
 }
 
 describe('OpportunitiesService', () => {
@@ -41,7 +51,7 @@ describe('OpportunitiesService', () => {
   it('create: firsati olusturur ve audit log yazar', async () => {
     const prisma = createPrisma();
     const service = new OpportunitiesService(prisma as never, fakeAudit);
-    await service.create('user-1', {
+    await service.create('tenant-1', 'user-1', {
       accountId: 'account-1',
       name: 'Yeni sunucu ihtiyaci',
     } as never);

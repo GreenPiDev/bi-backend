@@ -26,7 +26,10 @@ import {
   type OpportunityQueryDto,
   type UpdateOpportunityDto,
 } from './dto/opportunity.dto';
-import { OpportunitiesService } from './opportunities.service';
+import {
+  OpportunitiesService,
+  type CreateOpportunityResult,
+} from './opportunities.service';
 
 @ModulePage('opportunities')
 @Controller('opportunities')
@@ -54,8 +57,8 @@ export class OpportunitiesController {
     @Body(new ZodValidationPipe(CreateOpportunitySchema))
     dto: CreateOpportunityDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<Opportunity> {
-    return this.opportunities.create(user.id, dto);
+  ): Promise<CreateOpportunityResult> {
+    return this.opportunities.create(user.tenantId, user.id, dto);
   }
 
   @Patch(':id')

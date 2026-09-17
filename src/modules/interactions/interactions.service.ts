@@ -263,8 +263,7 @@ export class InteractionsService {
           data: {
             tenantId,
             createdById,
-            title:
-              dto.reminder.title ?? `Hatirlatma: ${dto.notes.slice(0, 60)}`,
+            title: dto.reminder.title ?? dto.notes.slice(0, 60),
             startAt: dto.reminder.startAt,
             endAt: dto.reminder.startAt,
             relatedEntityType: 'Interaction',

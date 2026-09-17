@@ -23,6 +23,7 @@ describe('Opportunities (e2e)', () => {
   let cookiesB: string[];
   let accountIdA: string;
   let opportunityId: string;
+  let userIdA: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -45,6 +46,7 @@ describe('Opportunities (e2e)', () => {
         password,
       });
     tenantIdA = registerA.body.user.tenantId as string;
+    userIdA = registerA.body.user.id as string;
     cookiesA = registerA.headers['set-cookie'] as unknown as string[];
 
     const registerB = await request(app.getHttpServer())
@@ -96,9 +98,53 @@ describe('Opportunities (e2e)', () => {
         estimatedValue: 50000,
       });
     expect(res.status).toBe(201);
-    expect(res.body.name).toBe('Yeni sunucu ihtiyaci');
-    expect(res.body.stage).toBe('NEW');
-    opportunityId = res.body.id as string;
+    expect(res.body.opportunity.name).toBe('Yeni sunucu ihtiyaci');
+    expect(res.body.opportunity.stage).toBe('NEW');
+    expect(res.body.reminderConflicts).toEqual([]);
+    opportunityId = res.body.opportunity.id as string;
+  });
+
+  it('POST /opportunities: gecmis tarihli hatirlatma 400 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/opportunities')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        name: 'Gecmis hatirlatmali firsat',
+        reminder: {
+          startAt: '2020-01-01T10:00:00.000Z',
+          assignees: [{ userId: userIdA }],
+        },
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('REMINDER_PAST_DATE');
+  });
+
+  it('POST /opportunities: hatirlatma etkinligi olusur, ikinci cakisan istek reminderConflicts doner', async () => {
+    const startAt = new Date(Date.now() + 60 * 60_000).toISOString();
+    const first = await request(app.getHttpServer())
+      .post('/api/v1/opportunities')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        name: 'Ilk hatirlatmali firsat',
+        reminder: { startAt, assignees: [{ userId: userIdA }] },
+      });
+    expect(first.status).toBe(201);
+    expect(first.body.reminderConflicts).toEqual([]);
+
+    const second = await request(app.getHttpServer())
+      .post('/api/v1/opportunities')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        name: 'Ikinci hatirlatmali firsat (cakisiyor)',
+        reminder: { startAt, assignees: [{ userId: userIdA }] },
+      });
+    expect(second.status).toBe(201);
+    expect(second.body.reminderConflicts).toEqual([
+      expect.objectContaining({ userId: userIdA }),
+    ]);
   });
 
   it('GET /opportunities: sayfali liste doner', async () => {
