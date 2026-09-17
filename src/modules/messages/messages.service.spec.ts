@@ -128,6 +128,98 @@ describe('MessagesService', () => {
     );
   });
 
+  it('list: sadece relatedEntity turu verilince o turdeki TUM mesajlari kapsayan genel filtre uygular', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+      relatedEntity: ['QUOTE', 'PROJECT'],
+    } as never);
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            { OR: [{ relatedEntity: { in: ['QUOTE', 'PROJECT'] } }] },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('list: quoteIds+projectIds verilince o turler icin sadece secili kayitlarla sinirlar', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+      relatedEntity: ['QUOTE', 'PROJECT'],
+      quoteIds: ['quote-1', 'quote-2'],
+      projectIds: ['project-1'],
+    } as never);
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            {
+              OR: [
+                {
+                  relatedEntity: 'QUOTE',
+                  relatedEntityId: { in: ['quote-1', 'quote-2'] },
+                },
+                {
+                  relatedEntity: 'PROJECT',
+                  relatedEntityId: { in: ['project-1'] },
+                },
+              ],
+            },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('list: relatedEntity turu secilmese bile belirli quoteIds ile filtreleyebilir', async () => {
+    const prisma = createPrisma();
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+    );
+    await service.list(SENDER_ID, {
+      page: 1,
+      pageSize: 25,
+      quoteIds: ['quote-1'],
+    } as never);
+
+    expect(prisma.message.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            {
+              OR: [
+                {
+                  relatedEntity: 'QUOTE',
+                  relatedEntityId: { in: ['quote-1'] },
+                },
+              ],
+            },
+          ]),
+        }),
+      }),
+    );
+  });
+
   it('create: TO+CC nested recipients ile mesaj olusturur ve realtime yayinlar', async () => {
     const prisma = createPrisma();
     const service = new MessagesService(

@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { ListQuerySchema } from '../../../core/dto/list-query.dto';
+import {
+  arrayQueryParam,
+  ListQuerySchema,
+} from '../../../core/dto/list-query.dto';
 
 export const MessageRelatedEntitySchema = z.enum([
   'PROJECT',
@@ -37,8 +40,13 @@ export type CreateMessageDto = z.infer<typeof CreateMessageSchema>;
 
 export const MessageQuerySchema = ListQuerySchema.extend({
   box: z.enum(['inbox', 'sent']).optional(),
-  relatedEntity: MessageRelatedEntitySchema.optional(),
-  relatedEntityId: z.string().uuid().optional(),
+  // Ilgili kayit turu (F: kompozit filtre) coklu secilebilir; belirli kayitlar
+  // (quoteIds/projectIds/interactionIds) secilirse o tur icin turu genel gecerli
+  // saymak yerine sadece o kayitlarla sinirlanir - bkz. messages.service.ts list().
+  relatedEntity: arrayQueryParam(MessageRelatedEntitySchema),
+  quoteIds: arrayQueryParam(z.string().uuid()),
+  projectIds: arrayQueryParam(z.string().uuid()),
+  interactionIds: arrayQueryParam(z.string().uuid()),
   recipientUserId: z.string().uuid().optional(),
 });
 export type MessageQueryDto = z.infer<typeof MessageQuerySchema>;

@@ -59,7 +59,9 @@ export class MessagesService {
       pageSize,
       box,
       relatedEntity,
-      relatedEntityId,
+      quoteIds,
+      projectIds,
+      interactionIds,
       q,
       recipientUserId,
     } = query;
@@ -77,11 +79,46 @@ export class MessagesService {
               OR: [{ senderId: userId }, { recipients: { some: { userId } } }],
             };
 
+    // Kompozit ilgili-kayit filtresi: belirli kayitlar (quoteIds/projectIds/
+    // interactionIds) secilirse o tur icin filtre sadece o kayitlarla sinirlanir;
+    // relatedEntity'de secili olup kendi kayit listesi bos olan turler icin ise
+    // genel tur filtresi (o turdeki TUM mesajlar) uygulanir. Ikisi birbirini
+    // dislamaz, sonuc OR ile birlestirilir (bkz. CLAUDE.md ilgili sohbet karari).
+    const remainingTypes = new Set(relatedEntity ?? []);
+    const relatedEntityConditions: Prisma.MessageWhereInput[] = [];
+    if (quoteIds?.length) {
+      relatedEntityConditions.push({
+        relatedEntity: 'QUOTE',
+        relatedEntityId: { in: quoteIds },
+      });
+      remainingTypes.delete('QUOTE');
+    }
+    if (projectIds?.length) {
+      relatedEntityConditions.push({
+        relatedEntity: 'PROJECT',
+        relatedEntityId: { in: projectIds },
+      });
+      remainingTypes.delete('PROJECT');
+    }
+    if (interactionIds?.length) {
+      relatedEntityConditions.push({
+        relatedEntity: 'INTERACTION',
+        relatedEntityId: { in: interactionIds },
+      });
+      remainingTypes.delete('INTERACTION');
+    }
+    if (remainingTypes.size > 0) {
+      relatedEntityConditions.push({
+        relatedEntity: { in: Array.from(remainingTypes) },
+      });
+    }
+
     const where: Prisma.MessageWhereInput = {
       AND: [
         boxCondition,
-        ...(relatedEntity ? [{ relatedEntity }] : []),
-        ...(relatedEntityId ? [{ relatedEntityId }] : []),
+        ...(relatedEntityConditions.length
+          ? [{ OR: relatedEntityConditions }]
+          : []),
         ...(recipientUserId
           ? [{ recipients: { some: { userId: recipientUserId } } }]
           : []),

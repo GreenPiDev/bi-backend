@@ -267,4 +267,74 @@ describe('Messages (e2e)', () => {
     );
     expect(recipient?.readAt).not.toBeNull();
   });
+
+  describe('kompozit ilgili-kayit filtresi', () => {
+    const quoteId = randomUUID();
+    const projectId = randomUUID();
+    let quoteConversationId: string;
+    let projectConversationId: string;
+
+    beforeAll(async () => {
+      const quoteRes = await request(app.getHttpServer())
+        .post('/api/v1/messages')
+        .set('Cookie', cookiesA)
+        .send({
+          subject: 'Teklife bagli mesaj',
+          body: 'Teklif hakkinda.',
+          toUserIds: [recipientIdA],
+          relatedEntity: 'QUOTE',
+          relatedEntityId: quoteId,
+        });
+      quoteConversationId = quoteRes.body.conversationId as string;
+
+      const projectRes = await request(app.getHttpServer())
+        .post('/api/v1/messages')
+        .set('Cookie', cookiesA)
+        .send({
+          subject: 'Projeye bagli mesaj',
+          body: 'Proje hakkinda.',
+          toUserIds: [recipientIdA],
+          relatedEntity: 'PROJECT',
+          relatedEntityId: projectId,
+        });
+      projectConversationId = projectRes.body.conversationId as string;
+    });
+
+    function conversationIdsIn(body: unknown): string[] {
+      return (body as { data: { conversationId: string }[] }).data.map(
+        (c) => c.conversationId,
+      );
+    }
+
+    it('relatedEntity coklu (?relatedEntity=QUOTE&relatedEntity=PROJECT) her iki turu de kapsar', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/messages?relatedEntity=QUOTE&relatedEntity=PROJECT')
+        .set('Cookie', cookiesA);
+      expect(res.status).toBe(200);
+      const ids = conversationIdsIn(res.body);
+      expect(ids).toContain(quoteConversationId);
+      expect(ids).toContain(projectConversationId);
+      expect(ids).not.toContain(conversationId);
+    });
+
+    it('quoteIds verilince sadece o teklife bagli konusmayi dondurur, digger tekliflerinki gelmez', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/messages?quoteIds=${quoteId}`)
+        .set('Cookie', cookiesA);
+      expect(res.status).toBe(200);
+      const ids = conversationIdsIn(res.body);
+      expect(ids).toContain(quoteConversationId);
+      expect(ids).not.toContain(projectConversationId);
+    });
+
+    it('relatedEntity=QUOTE + projectIds birlikte verilince VEYA ile birlesir', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/messages?relatedEntity=QUOTE&projectIds=${projectId}`)
+        .set('Cookie', cookiesA);
+      expect(res.status).toBe(200);
+      const ids = conversationIdsIn(res.body);
+      expect(ids).toContain(quoteConversationId);
+      expect(ids).toContain(projectConversationId);
+    });
+  });
 });
