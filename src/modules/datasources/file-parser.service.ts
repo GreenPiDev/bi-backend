@@ -57,20 +57,43 @@ function rowValuesToStrings(
 
 @Injectable()
 export class FileParserService {
-  async parse(filePath: string, type: DataSourceType): Promise<ParsedFile> {
-    return type === 'CSV' ? this.parseCsv(filePath) : this.parseXlsx(filePath);
+  /**
+   * headerRowIndex: 0-based, kac satirin baslik oncesi atlanacagini belirtir
+   * (0 = ilk satir baslik, varsayilan davranis). Faz B'de marka fiyat listesi
+   * export'larinda baslik satiri ilk satirda olmayabiliyor (orn. Schneider'da
+   * satir 3) - kullanici ice aktarma onizlemesinde bu satiri secer.
+   */
+  async parse(
+    filePath: string,
+    type: DataSourceType,
+    headerRowIndex = 0,
+  ): Promise<ParsedFile> {
+    return type === 'CSV'
+      ? this.parseCsv(filePath, headerRowIndex)
+      : this.parseXlsx(filePath, headerRowIndex);
   }
 
-  private async parseCsv(filePath: string): Promise<ParsedFile> {
-    const headers = await this.readCsvHeaders(filePath);
-    return { headers, rows: this.streamCsvRows(filePath) };
+  private async parseCsv(
+    filePath: string,
+    headerRowIndex: number,
+  ): Promise<ParsedFile> {
+    const headers = await this.readCsvHeaders(filePath, headerRowIndex);
+    return { headers, rows: this.streamCsvRows(filePath, headerRowIndex) };
   }
 
-  private async readCsvHeaders(filePath: string): Promise<string[]> {
+  private async readCsvHeaders(
+    filePath: string,
+    headerRowIndex: number,
+  ): Promise<string[]> {
     const input = fs.createReadStream(filePath, { encoding: 'utf-8' });
     const rl = readline.createInterface({ input, crlfDelay: Infinity });
     try {
+      let lineIndex = 0;
       for await (const line of rl) {
+        if (lineIndex < headerRowIndex) {
+          lineIndex++;
+          continue;
+        }
         const parsed = Papa.parse<string[]>(line);
         const headers = (parsed.data[0] ?? []) as string[];
         return headers.map((h) => h.trim());
@@ -82,15 +105,19 @@ export class FileParserService {
     }
   }
 
-  private streamCsvRows(filePath: string): AsyncIterable<string[]> {
+  private streamCsvRows(
+    filePath: string,
+    headerRowIndex: number,
+  ): AsyncIterable<string[]> {
     const queue = new AsyncRowQueue<string[]>();
     const input = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    const headerLineNumber = headerRowIndex + 1;
     let rowIndex = 0;
     Papa.parse<string[]>(input, {
       skipEmptyLines: true,
       step: (result, parser) => {
         rowIndex++;
-        if (rowIndex === 1) {
+        if (rowIndex <= headerLineNumber) {
           return;
         }
         const row = (result.data ?? []).map((v) => (v ?? '').trim());
@@ -110,20 +137,33 @@ export class FileParserService {
    * re-opening the same file for a second pass immediately after the
    * first, which caused intermittent empty reads in testing.
    */
-  private async parseXlsx(filePath: string): Promise<ParsedFile> {
+  private async parseXlsx(
+    filePath: string,
+    headerRowIndex: number,
+  ): Promise<ParsedFile> {
     const reader = new ExcelJS.stream.xlsx.WorkbookReader(filePath, {});
+    const headerLineNumber = headerRowIndex + 1;
     let headers: string[] | null = null;
     const rows: string[][] = [];
     for await (const worksheet of reader) {
       let rowIndex = 0;
       for await (const row of worksheet) {
         rowIndex++;
+        if (rowIndex < headerLineNumber) {
+          continue;
+        }
         const values = row.values as ExcelJS.CellValue[];
-        if (rowIndex === 1) {
+        if (rowIndex === headerLineNumber) {
           headers = rowValuesToStrings(values, values.length - 1);
           continue;
         }
-        rows.push(rowValuesToStrings(values, headers?.length ?? 0));
+        /**
+         * Satirin KENDI genisligini kullan, baslik satirinin genisligini degil - baslik
+         * satiri (orn. tek hucreli bir marka basligi) veri satirlarindan dar olabilir,
+         * headers.length kullanmak veri satirlarini yanlislikla kirpardi (bkz.
+         * docs/VARSAYIMLAR.md V40, gercek Schneider dosyasinda bulunan regresyon).
+         */
+        rows.push(rowValuesToStrings(values, values.length - 1));
       }
       break;
     }

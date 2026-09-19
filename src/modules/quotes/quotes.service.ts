@@ -5,7 +5,6 @@ import type {
   Account,
   Contact,
   Opportunity,
-  PriceList,
   Product,
   Quote,
   QuoteItem,
@@ -39,7 +38,6 @@ const QUOTE_NUMBER_CREATE_RETRIES = 5;
 const QUOTE_INCLUDE = {
   account: true,
   contact: true,
-  priceList: true,
   opportunity: true,
   items: { include: { product: true } },
 } as const;
@@ -47,7 +45,6 @@ const QUOTE_INCLUDE = {
 export type QuoteWithDetails = Quote & {
   account: Account;
   contact: Contact | null;
-  priceList: PriceList;
   opportunity: Opportunity | null;
   items: (QuoteItem & { product: Product })[];
 };
@@ -71,7 +68,7 @@ interface ResolvedQuoteItem {
   discountNote: string | null;
 }
 
-type ItemResolutionTx = Pick<TenantPrismaClient, 'product' | 'priceListItem'>;
+type ItemResolutionTx = Pick<TenantPrismaClient, 'product'>;
 
 function quoteNumberPrefix(date: Date): string {
   const yyyy = date.getFullYear();
@@ -137,13 +134,12 @@ export class QuotesService {
   }
 
   /**
-   * Q3/Q4/Q5/Q7: satir basina birim fiyati (fiyat listesi ya da manuel ezme) ve
+   * Q3/Q4/Q5/Q7: satir basina birim fiyati (Product.price ya da manuel ezme) ve
    * iskonto notunu belirler, ayrica ProductDiscountPolicy (Product.maxDiscountPct)
-   * asimi olup olmadigini doner - bkz. docs/VARSAYIMLAR.md V27.
+   * asimi olup olmadigini doner - bkz. docs/VARSAYIMLAR.md V27/V37.
    */
   private async resolveItems(
     tx: ItemResolutionTx,
-    priceListId: string,
     items: QuoteItemInputDto[],
   ): Promise<{ items: ResolvedQuoteItem[]; requiresApproval: boolean }> {
     const productIds = [...new Set(items.map((item) => item.productId))];
@@ -161,24 +157,14 @@ export class QuotesService {
       );
     }
 
-    const needsPriceLookup = items.some((item) => item.unitPrice === undefined);
-    const priceListItems = needsPriceLookup
-      ? await tx.priceListItem.findMany({
-          where: { priceListId, productId: { in: productIds } },
-        })
-      : [];
-    const priceByProduct = new Map(
-      priceListItems.map((pli) => [pli.productId, pli.unitPrice]),
-    );
-
     let requiresApproval = false;
     const resolved = items.map((item): ResolvedQuoteItem => {
       const product = productById.get(item.productId)!;
-      const unitPrice = item.unitPrice ?? priceByProduct.get(item.productId);
+      const unitPrice = item.unitPrice ?? product.price ?? undefined;
       if (unitPrice === undefined) {
         throw new AppException(
           'PRICE_NOT_FOUND',
-          `"${product.name}" urunu secilen fiyat listesinde tanimli degil, lutfen birim fiyat girin.`,
+          `"${product.name}" urununde tanimli bir fiyat yok, lutfen birim fiyat girin.`,
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -269,7 +255,6 @@ export class QuotesService {
 
         const { items, requiresApproval } = await this.resolveItems(
           tx,
-          dto.priceListId,
           dto.items,
         );
 
@@ -289,7 +274,6 @@ export class QuotesService {
               data: {
                 accountId: dto.accountId,
                 contactId: dto.contactId ?? null,
-                priceListId: dto.priceListId,
                 quoteNumber,
                 status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
                 createdById,
@@ -367,12 +351,9 @@ export class QuotesService {
     }
 
     const postSaleCase = await this.prisma.$transaction(async (tx) => {
-      const priceListId = dto.priceListId ?? existing.priceListId;
-
       if (dto.items) {
         const { items, requiresApproval } = await this.resolveItems(
           tx,
-          priceListId,
           dto.items,
         );
         await tx.quoteItem.deleteMany({ where: { quoteId: id } });
@@ -382,7 +363,6 @@ export class QuotesService {
         await tx.quote.update({
           where: { id },
           data: {
-            priceListId,
             status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
           },
         });
@@ -395,11 +375,6 @@ export class QuotesService {
             approvedAt: new Date(),
           });
         }
-      } else if (dto.priceListId) {
-        await tx.quote.update({
-          where: { id },
-          data: { priceListId: dto.priceListId },
-        });
       }
       return null;
     });

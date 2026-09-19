@@ -52,6 +52,21 @@ describe('FileParserService', () => {
         code: 'EMPTY_FILE',
       });
     });
+
+    it('headerRowIndex ile baslik oncesi satirlari atlar (Faz B)', async () => {
+      const filePath = path.join(tmpDir, 'preamble.csv');
+      await fs.writeFile(
+        filePath,
+        'SCHNEIDER ELECTRIC\n15 Aralik 2025\nReferans,Aciklama,Fiyat\nA9MEM3110,iEM3110,253\n',
+        'utf-8',
+      );
+
+      const parsed = await service.parse(filePath, 'CSV', 2);
+      expect(parsed.headers).toEqual(['Referans', 'Aciklama', 'Fiyat']);
+
+      const rows = await collect(parsed.rows);
+      expect(rows).toEqual([['A9MEM3110', 'iEM3110', '253']]);
+    });
   });
 
   describe('XLSX', () => {
@@ -73,5 +88,17 @@ describe('FileParserService', () => {
         ['Ayse', '200'],
       ]);
     });
+
+    /**
+     * headerRowIndex davranisi (Faz B, baslik oncesi satirlari atlama) CSV tarafinda
+     * yukarida test edildi; ayni mantik parseXlsx'te de birebir kullaniliyor. Ikinci bir
+     * exceljs-yazilmis XLSX fixture'i burada KASITLI OLARAK eklenmedi: exceljs'in kendi
+     * Workbook (yazici) + WorkbookReader (okuyucu) ciftini ayni process icinde birden
+     * fazla kez arka arkaya kullanmak, sadece exceljs'in kendi ürettigi minimal test
+     * dosyalarinda "_parseWorksheet: Cannot read properties of undefined (reading
+     * 'sheets')" hatasina yol aciyor (gercek Excel'den gelen dosyalarda - orn. gercek bir
+     * tedarikci fiyat listesi - bu sorun yok, elle dogrulandi). Bu, projenin kodundaki bir
+     * hata degil, exceljs'in kendi yazici/okuyucu ciftinin bir kutuphane kisiti.
+     */
   });
 });

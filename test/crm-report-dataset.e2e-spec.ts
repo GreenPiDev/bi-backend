@@ -85,14 +85,6 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
         unit: 'adet',
       },
     });
-    const priceList = await prisma.priceList.create({
-      data: {
-        tenantId: tenantAId,
-        productListId,
-        name: 'Liste',
-        items: { create: [{ productId: product.id, unitPrice: 100 }] },
-      },
-    });
     const salesRepB = await prisma.user.create({
       data: {
         tenantId: tenantAId,
@@ -107,7 +99,6 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
       data: {
         tenantId: tenantAId,
         accountId: account.id,
-        priceListId: priceList.id,
         quoteNumber: 'TEK-TEST-A-001',
         status: 'APPROVED',
         approvedAt: new Date(),
@@ -130,7 +121,6 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
       data: {
         tenantId: tenantAId,
         accountId: account.id,
-        priceListId: priceList.id,
         quoteNumber: 'TEK-TEST-A-002',
         status: 'APPROVED',
         approvedAt: new Date(),
@@ -153,7 +143,6 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
       data: {
         tenantId: tenantAId,
         accountId: account.id,
-        priceListId: priceList.id,
         quoteNumber: 'TEK-TEST-A-003',
         status: 'DRAFT',
         createdById: ownerAId,

@@ -12,7 +12,7 @@ export const QuoteStatusSchema = z.enum([
 const QuoteItemInputSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().positive(),
-  /** Q3: verilmezse fiyat listesinden alinir; verilirse manuel ezme sayilir. */
+  /** Q3: verilmezse Product.price'tan alinir; verilirse manuel ezme sayilir. */
   unitPrice: z.number().nonnegative().optional(),
   discountPct: z.number().min(0).max(100).default(0),
   vatPct: z.number().min(0).max(100).default(0),
@@ -30,7 +30,6 @@ export const CreateQuoteSchema = z.object({
   /** S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - opsiyonel, verilirse
    * accountId'ye ait bir kisi olmalidir. */
   contactId: z.string().uuid().optional(),
-  priceListId: z.string().uuid(),
   items: z
     .array(QuoteItemInputSchema)
     .min(1, 'En az bir urun satiri eklenmelidir.')
@@ -41,7 +40,6 @@ export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
 
 export const UpdateQuoteSchema = z.object({
-  priceListId: z.string().uuid().optional(),
   items: z.array(QuoteItemInputSchema).min(1).max(200).optional(),
 });
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;

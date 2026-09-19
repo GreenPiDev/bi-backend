@@ -12,12 +12,10 @@ function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
     quoteNumber: 'TEK-2026-09-06-001',
     accountId: 'account-1',
     contactId: null,
-    priceListId: 'price-list-1',
     status: 'APPROVED',
     items: [],
     account: {},
     contact: null,
-    priceList: {},
     opportunity: null,
     ...overrides,
   };
@@ -28,6 +26,7 @@ function createProduct(overrides: Partial<Record<string, unknown>> = {}) {
     id: 'product-1',
     name: 'Dizustu Bilgisayar',
     maxDiscountPct: null,
+    price: null,
     ...overrides,
   };
 }
@@ -35,21 +34,13 @@ function createProduct(overrides: Partial<Record<string, unknown>> = {}) {
 interface Setup {
   quoteRow: unknown;
   products: unknown[];
-  priceListItems: unknown[];
   contact?: unknown;
   postSaleCase?: unknown;
 }
 
-function createPrisma({
-  quoteRow,
-  products,
-  priceListItems,
-  contact,
-  postSaleCase,
-}: Setup) {
+function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
   const tx = {
     product: { findMany: vi.fn().mockResolvedValue(products) },
-    priceListItem: { findMany: vi.fn().mockResolvedValue(priceListItems) },
     contact: {
       findFirst: vi
         .fn()
@@ -93,11 +84,7 @@ describe('QuotesService', () => {
   });
 
   it('getById: bulunamayan teklif icin NOT_FOUND firlatir', async () => {
-    const prisma = createPrisma({
-      quoteRow: null,
-      products: [],
-      priceListItems: [],
-    });
+    const prisma = createPrisma({ quoteRow: null, products: [] });
     const service = new QuotesService(
       prisma as never,
       fakeAudit,
@@ -112,7 +99,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct({ maxDiscountPct: 10 })],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -121,7 +107,6 @@ describe('QuotesService', () => {
     );
     await service.create('user-1', {
       accountId: 'account-1',
-      priceListId: 'price-list-1',
       items: [
         {
           productId: 'product-1',
@@ -144,7 +129,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
       products: [createProduct({ maxDiscountPct: 10 })],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -153,7 +137,6 @@ describe('QuotesService', () => {
     );
     await service.create('user-1', {
       accountId: 'account-1',
-      priceListId: 'price-list-1',
       items: [
         {
           productId: 'product-1',
@@ -172,11 +155,10 @@ describe('QuotesService', () => {
     );
   });
 
-  it('create: manuel unitPrice verilmezse fiyat listesinden alir', async () => {
+  it('create: manuel unitPrice verilmezse Product.price kullanilir', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
-      products: [createProduct()],
-      priceListItems: [{ productId: 'product-1', unitPrice: 250 }],
+      products: [createProduct({ price: 250 })],
     });
     const service = new QuotesService(
       prisma as never,
@@ -185,7 +167,6 @@ describe('QuotesService', () => {
     );
     await service.create('user-1', {
       accountId: 'account-1',
-      priceListId: 'price-list-1',
       items: [
         { productId: 'product-1', quantity: 1, discountPct: 0, vatPct: 0 },
       ],
@@ -200,11 +181,10 @@ describe('QuotesService', () => {
     );
   });
 
-  it('create: fiyat listesinde olmayan ve manuel fiyati da girilmeyen urun icin PRICE_NOT_FOUND firlatir', async () => {
+  it('create: Product.price tanimli degil ve manuel fiyat da girilmezse PRICE_NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct()],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -214,7 +194,6 @@ describe('QuotesService', () => {
     await expect(
       service.create('user-1', {
         accountId: 'account-1',
-        priceListId: 'price-list-1',
         items: [
           { productId: 'product-1', quantity: 1, discountPct: 0, vatPct: 0 },
         ],
@@ -223,11 +202,7 @@ describe('QuotesService', () => {
   });
 
   it('create: bulunamayan urun icin PRODUCT_NOT_FOUND firlatir', async () => {
-    const prisma = createPrisma({
-      quoteRow: createQuoteRow(),
-      products: [],
-      priceListItems: [],
-    });
+    const prisma = createPrisma({ quoteRow: createQuoteRow(), products: [] });
     const service = new QuotesService(
       prisma as never,
       fakeAudit,
@@ -236,7 +211,6 @@ describe('QuotesService', () => {
     await expect(
       service.create('user-1', {
         accountId: 'account-1',
-        priceListId: 'price-list-1',
         items: [
           {
             productId: 'product-1',
@@ -254,7 +228,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct()],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -263,7 +236,6 @@ describe('QuotesService', () => {
     );
     await service.create('user-1', {
       accountId: 'account-1',
-      priceListId: 'price-list-1',
       items: [
         {
           productId: 'product-1',
@@ -290,7 +262,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct()],
-      priceListItems: [],
       contact: { id: 'contact-1', accountId: 'baska-firma' },
     });
     const service = new QuotesService(
@@ -302,7 +273,6 @@ describe('QuotesService', () => {
       service.create('user-1', {
         accountId: 'account-1',
         contactId: 'contact-1',
-        priceListId: 'price-list-1',
         items: [
           {
             productId: 'product-1',
@@ -320,7 +290,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ contactId: 'contact-1' }),
       products: [createProduct()],
-      priceListItems: [],
       postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
     });
     const service = new QuotesService(
@@ -331,7 +300,6 @@ describe('QuotesService', () => {
     await service.create('user-1', {
       accountId: 'account-1',
       contactId: 'contact-1',
-      priceListId: 'price-list-1',
       items: [
         {
           productId: 'product-1',
@@ -357,7 +325,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
       products: [createProduct({ maxDiscountPct: 10 })],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -366,7 +333,6 @@ describe('QuotesService', () => {
     );
     await service.create('user-1', {
       accountId: 'account-1',
-      priceListId: 'price-list-1',
       items: [
         {
           productId: 'product-1',
@@ -386,7 +352,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'APPROVED' }),
       products: [],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -405,7 +370,6 @@ describe('QuotesService', () => {
         contactId: 'contact-1',
       }),
       products: [createProduct({ maxDiscountPct: 10 })],
-      priceListItems: [],
       postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
     });
     const service = new QuotesService(
@@ -444,7 +408,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
       products: [],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -469,7 +432,6 @@ describe('QuotesService', () => {
         contactId: 'contact-1',
       }),
       products: [],
-      priceListItems: [],
       postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
     });
     const service = new QuotesService(
@@ -497,7 +459,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL', contactId: null }),
       products: [],
-      priceListItems: [],
       postSaleCase: { id: 'psc-1', contactId: null },
     });
     const service = new QuotesService(
@@ -514,7 +475,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'APPROVED' }),
       products: [],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -532,7 +492,6 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
       products: [],
-      priceListItems: [],
     });
     const service = new QuotesService(
       prisma as never,
@@ -548,11 +507,7 @@ describe('QuotesService', () => {
   });
 
   it('remove: teklifi siler ve audit log yazar', async () => {
-    const prisma = createPrisma({
-      quoteRow: createQuoteRow(),
-      products: [],
-      priceListItems: [],
-    });
+    const prisma = createPrisma({ quoteRow: createQuoteRow(), products: [] });
     const service = new QuotesService(
       prisma as never,
       fakeAudit,

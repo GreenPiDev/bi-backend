@@ -155,7 +155,6 @@ model Tenant {
   opportunities     Opportunity[]
   products          Product[]
   productLists      ProductList[]
-  priceLists        PriceList[]
   quotes            Quote[]
   postSaleCases     PostSaleCase[]
   feedbackSurveys   FeedbackSurvey[]
@@ -705,10 +704,18 @@ model Product {
   minStockLevel  Int?
   maxDiscountPct Decimal?  @db.Decimal(5, 2)
   /**
-   * Faz 11i: U1 katalog genislemesi. Satis fiyati kasitli olarak eklenmedi -
-   * teklif fiyati zaten PriceList'ten geliyor (Q3), ikinci bir fiyat kaynagi
-   * celiskiye yol acardi (bkz. docs/VARSAYIMLAR.md V32).
+   * Ad-hoc (2026-09-19, bkz. docs/VARSAYIMLAR.md V37): PriceList/PriceListItem
+   * kaldirildi, fiyat artik dogrudan Product uzerinde. currency ice aktarilan
+   * fiyatin oldugu gibi saklanmasi icin eklendi - kur cevrimi YOK.
    */
+  price          Decimal?  @db.Decimal(14, 2)
+  currency       String    @default("TRY")
+  /**
+   * Faz B (bkz. docs/VARSAYIMLAR.md V40): marka'ya ozgu, bilinen bir Product alanina
+   * eslenmeyen ice aktarma kolonlari icin catch-all (orn. Schneider'in "Seri" kolonu).
+   * Kaynak kolon basligi -> deger (string) seklinde saklanir.
+   */
+  attributes     Json?
   description    String?
   category       String?
   costPrice      Decimal?  @db.Decimal(12, 2)
@@ -722,7 +729,6 @@ model Product {
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
   productList        ProductList         @relation(fields: [productListId], references: [id])
-  priceListItems     PriceListItem[]
   quoteItems         QuoteItem[]
   purchaseOrderItems PurchaseOrderItem[]
   stockItems         StockItem[]
@@ -735,7 +741,7 @@ model Product {
 
 /**
  * Bir tenant'in birden fazla urun katalogu olabilmesi icin eklendi (ProductList).
- * Her Product/PriceList tam olarak bir ProductList'e aittir (1:N, N:M degil) - bkz.
+ * Her Product tam olarak bir ProductList'e aittir (1:N, N:M degil) - bkz.
  * docs/VARSAYIMLAR.md V36. Migration, mevcut tum urun/fiyat listesi kayitlarini
  * otomatik bir "Genel" ProductList'e tasir.
  */
@@ -750,54 +756,9 @@ model ProductList {
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
   products   Product[]
-  priceLists PriceList[]
 
   @@index([tenantId, deletedAt])
   @@map("crm_product_lists")
-}
-
-/**
- * Q3: teklif satirinda varsayilan birim fiyat buradan gelir, manuel ezilebilir.
- * productListId olusturulduktan sonra DEGISTIRILEMEZ (immutable) - bir fiyat listesi
- * kavramsal olarak tek bir urun katalogun aittir, kalemlerindeki urunler de o katalogdan
- * secilir (bkz. docs/VARSAYIMLAR.md V36).
- */
-model PriceList {
-  id            String    @id @default(uuid())
-  tenantId      String
-  productListId String
-  name          String
-  isDefault     Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-
-  tenant      Tenant          @relation(fields: [tenantId], references: [id])
-  productList ProductList     @relation(fields: [productListId], references: [id])
-  items       PriceListItem[]
-  quotes      Quote[]
-
-  @@index([tenantId, deletedAt])
-  @@index([tenantId, productListId])
-  @@map("crm_price_lists")
-}
-
-/**
- * tenantId tasimaz - InteractionParticipant/CalendarEventAttendee ile ayni desen, parent
- * (PriceList) uzerinden tenant izolasyonu saglanir, cascade silinir.
- */
-model PriceListItem {
-  id          String   @id @default(uuid())
-  priceListId String
-  productId   String
-  unitPrice   Decimal  @db.Decimal(14, 2)
-  createdAt   DateTime @default(now())
-
-  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
-  product   Product   @relation(fields: [productId], references: [id])
-
-  @@unique([priceListId, productId])
-  @@map("crm_price_list_items")
 }
 
 /**
@@ -814,7 +775,6 @@ model Quote {
    */
   contactId    String?
   quoteNumber  String
-  priceListId  String
   status       QuoteStatus @default(DRAFT)
   approvedAt   DateTime?
   approvedById String?
@@ -826,7 +786,6 @@ model Quote {
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   account        Account         @relation(fields: [accountId], references: [id])
   contact        Contact?        @relation(fields: [contactId], references: [id])
-  priceList      PriceList       @relation(fields: [priceListId], references: [id])
   items          QuoteItem[]
   opportunity    Opportunity?
   postSaleCase   PostSaleCase?
@@ -842,9 +801,10 @@ model Quote {
 }
 
 /**
- * tenantId tasimaz (PriceListItem ile ayni desen). unitPrice fiyat listesinden gelir ama
- * satir bazinda manuel ezilebilir (Q3) - burada saklanan deger PriceListItem'dan bagimsiz,
- * teklifin olusturuldugu andaki degeri korur. discountNote Q5'in otomatik notu.
+ * tenantId tasimaz (ayni desen, parent Quote uzerinden izolasyon). unitPrice teklif
+ * olusturuldugu anda Product.price'tan kopyalanir ama satir bazinda manuel ezilebilir (Q3) -
+ * burada saklanan deger Product.price'tan bagimsiz, teklifin olusturuldugu andaki degeri
+ * korur. discountNote Q5'in otomatik notu.
  */
 model QuoteItem {
   id           String   @id @default(uuid())

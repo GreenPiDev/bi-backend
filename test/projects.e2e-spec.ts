@@ -98,14 +98,11 @@ describe('Projects (e2e)', () => {
 
     const productListId = await createTestProductList(prisma, tenantIdA);
     const product = await prisma.product.create({
-      data: { tenantId: tenantIdA, productListId, name: 'Sunucu' },
-    });
-    const priceList = await prisma.priceList.create({
       data: {
         tenantId: tenantIdA,
         productListId,
-        name: 'Standart Fiyat Listesi',
-        items: { create: [{ productId: product.id, unitPrice: 20000 }] },
+        name: 'Sunucu',
+        price: 20000,
       },
     });
     const quoteRes = await request(app.getHttpServer())
@@ -113,7 +110,6 @@ describe('Projects (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceList.id,
         items: [
           { productId: product.id, quantity: 1, discountPct: 0, vatPct: 0 },
         ],

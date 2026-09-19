@@ -70,12 +70,7 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'products',
     label: 'Urunler',
-    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
-  },
-  {
-    key: 'price-lists',
-    label: 'Fiyat Listeleri',
-    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT'],
   },
   {
     key: 'quotes',

@@ -23,7 +23,6 @@ describe('Quotes (e2e)', () => {
   let cookiesA: string[];
   let cookiesB: string[];
   let accountIdA: string;
-  let priceListIdA: string;
   let limitedProductId: string;
   let unlistedProductId: string;
 
@@ -71,12 +70,12 @@ describe('Quotes (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/quotes')
       .set('Cookie', cookiesA)
-      .send({ accountId: randomUUID(), priceListId: randomUUID(), items: [] });
+      .send({ accountId: randomUUID(), items: [] });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('MODULE_NOT_ENABLED');
   });
 
-  it("tenant A ve B icin 'crm' modulunu etkinlestir, urun/fiyat listesi kur", async () => {
+  it("tenant A ve B icin 'crm' modulunu etkinlestir, urun kur", async () => {
     await prisma.tenantModule.create({
       data: { tenantId: tenantIdA, moduleKey: 'crm' },
     });
@@ -96,6 +95,7 @@ describe('Quotes (e2e)', () => {
         productListId,
         name: 'Dizustu Bilgisayar',
         maxDiscountPct: 10,
+        price: 20000,
       },
     });
     limitedProductId = limitedProduct.id;
@@ -104,27 +104,14 @@ describe('Quotes (e2e)', () => {
       data: { tenantId: tenantIdA, productListId, name: 'Klavye' },
     });
     unlistedProductId = unlistedProduct.id;
-
-    const priceList = await prisma.priceList.create({
-      data: {
-        tenantId: tenantIdA,
-        productListId,
-        name: 'Standart Fiyat Listesi',
-        items: {
-          create: [{ productId: limitedProductId, unitPrice: 20000 }],
-        },
-      },
-    });
-    priceListIdA = priceList.id;
   });
 
-  it('POST /quotes: fiyat listesinde olmayan ve manuel fiyati da girilmeyen urun icin 400 PRICE_NOT_FOUND doner', async () => {
+  it('POST /quotes: fiyati tanimli olmayan ve manuel fiyati da girilmeyen urun icin 400 PRICE_NOT_FOUND doner', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/quotes')
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: unlistedProductId,
@@ -144,7 +131,6 @@ describe('Quotes (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,
@@ -161,13 +147,12 @@ describe('Quotes (e2e)', () => {
     expect(res.body.items[0].discountNote).toBe('Iskonto uygulandi: %5');
   });
 
-  it('POST /quotes: manuel birim fiyat fiyat listesindeki degeri ezer', async () => {
+  it('POST /quotes: manuel birim fiyat Product.price degerini ezer', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/quotes')
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,
@@ -190,7 +175,6 @@ describe('Quotes (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,
@@ -257,7 +241,6 @@ describe('Quotes (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,
@@ -282,7 +265,6 @@ describe('Quotes (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,
@@ -315,7 +297,6 @@ describe('Quotes (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,

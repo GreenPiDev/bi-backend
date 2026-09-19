@@ -25,7 +25,6 @@ describe('Post-Sale Cases (e2e)', () => {
   let accountIdA: string;
   let contactIdA: string;
   let otherAccountContactId: string;
-  let priceListIdA: string;
   let productId: string;
   let limitedProductId: string;
 
@@ -117,7 +116,12 @@ describe('Post-Sale Cases (e2e)', () => {
     const productListId = await createTestProductList(prisma, tenantIdA);
 
     const product = await prisma.product.create({
-      data: { tenantId: tenantIdA, productListId, name: 'Dizustu Bilgisayar' },
+      data: {
+        tenantId: tenantIdA,
+        productListId,
+        name: 'Dizustu Bilgisayar',
+        price: 10000,
+      },
     });
     productId = product.id;
 
@@ -127,24 +131,10 @@ describe('Post-Sale Cases (e2e)', () => {
         productListId,
         name: 'Sunucu',
         maxDiscountPct: 10,
+        price: 50000,
       },
     });
     limitedProductId = limitedProduct.id;
-
-    const priceList = await prisma.priceList.create({
-      data: {
-        tenantId: tenantIdA,
-        productListId,
-        name: 'Standart Fiyat Listesi',
-        items: {
-          create: [
-            { productId, unitPrice: 10000 },
-            { productId: limitedProductId, unitPrice: 50000 },
-          ],
-        },
-      },
-    });
-    priceListIdA = priceList.id;
   });
 
   it('POST /quotes: baska firmaya ait kisi secilirse 400 CONTACT_ACCOUNT_MISMATCH doner', async () => {
@@ -154,7 +144,6 @@ describe('Post-Sale Cases (e2e)', () => {
       .send({
         accountId: accountIdA,
         contactId: otherAccountContactId,
-        priceListId: priceListIdA,
         items: [{ productId, quantity: 1, discountPct: 0, vatPct: 0 }],
       });
     expect(res.status).toBe(400);
@@ -170,7 +159,6 @@ describe('Post-Sale Cases (e2e)', () => {
       .send({
         accountId: accountIdA,
         contactId: contactIdA,
-        priceListId: priceListIdA,
         items: [{ productId, quantity: 1, discountPct: 0, vatPct: 0 }],
       });
     expect(res.status).toBe(201);
@@ -205,7 +193,6 @@ describe('Post-Sale Cases (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: limitedProductId,

@@ -23,7 +23,6 @@ describe('Purchase Orders & Stock (e2e)', () => {
   let cookiesA: string[];
   let cookiesB: string[];
   let accountIdA: string;
-  let priceListIdA: string;
   let productWithStockId: string;
   let productWithoutStockId: string;
   let productLowStockId: string;
@@ -81,12 +80,22 @@ describe('Purchase Orders & Stock (e2e)', () => {
     const productListId = await createTestProductList(prisma, tenantIdA);
 
     const productWithStock = await prisma.product.create({
-      data: { tenantId: tenantIdA, productListId, name: 'Sunucu' },
+      data: {
+        tenantId: tenantIdA,
+        productListId,
+        name: 'Sunucu',
+        price: 10000,
+      },
     });
     productWithStockId = productWithStock.id;
 
     const productWithoutStock = await prisma.product.create({
-      data: { tenantId: tenantIdA, productListId, name: 'Klavye' },
+      data: {
+        tenantId: tenantIdA,
+        productListId,
+        name: 'Klavye',
+        price: 500,
+      },
     });
     productWithoutStockId = productWithoutStock.id;
 
@@ -108,21 +117,6 @@ describe('Purchase Orders & Stock (e2e)', () => {
     await prisma.stockItem.create({
       data: { tenantId: tenantIdA, productId: productLowStockId, quantity: 2 },
     });
-
-    const priceList = await prisma.priceList.create({
-      data: {
-        tenantId: tenantIdA,
-        productListId,
-        name: 'Standart Fiyat Listesi',
-        items: {
-          create: [
-            { productId: productWithStockId, unitPrice: 10000 },
-            { productId: productWithoutStockId, unitPrice: 500 },
-          ],
-        },
-      },
-    });
-    priceListIdA = priceList.id;
   }, 30_000);
 
   afterAll(async () => {
@@ -137,7 +131,6 @@ describe('Purchase Orders & Stock (e2e)', () => {
       data: {
         tenantId: tenantIdA,
         accountId: accountIdA,
-        priceListId: priceListIdA,
         quoteNumber: `TEK-TEST-${randomUUID()}`,
         status: 'DRAFT',
         createdById: (
@@ -160,7 +153,6 @@ describe('Purchase Orders & Stock (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        priceListId: priceListIdA,
         items: [
           {
             productId: productWithStockId,
