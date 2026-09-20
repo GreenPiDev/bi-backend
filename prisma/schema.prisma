@@ -719,10 +719,6 @@ model Product {
   description    String?
   category       String?
   costPrice      Decimal?  @db.Decimal(12, 2)
-  /**
-   * Cloudflare R2'deki nesne anahtari; herkese acik URL yanitta hesaplanir.
-   */
-  imageKey       String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?

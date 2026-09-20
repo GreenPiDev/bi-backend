@@ -105,7 +105,6 @@ describe('Products (e2e)', () => {
     );
     expect(res.body.category).toBe('Elektronik');
     expect(res.body.costPrice).toBe('12500.5');
-    expect(res.body.imageUrl).toBeNull();
     productId = res.body.id as string;
   });
 
@@ -126,62 +125,6 @@ describe('Products (e2e)', () => {
       .send({ maxDiscountPct: 15 });
     expect(res.status).toBe(200);
     expect(res.body.maxDiscountPct).toBe('15');
-  });
-
-  // R2 ortam degiskenleri yerelde/CI'da tanimli olmayabilir (bkz. .env.example) - o
-  // durumda bu test atlanir, konfigurasyon-yoksa-STORAGE_NOT_CONFIGURED davranisi
-  // core/storage/r2-storage.service.spec.ts'te ag'a cikmadan test ediliyor.
-  it.runIf(Boolean(process.env.R2_ACCOUNT_ID))(
-    'POST /products/:id/image + DELETE: gercek R2 bucket ina yukler, herkese acik URL doner, kaldirir',
-    async () => {
-      // gecerli bir 1x1 PNG (magic-byte dogrulamasini gecmesi icin)
-      const pngBuffer = Buffer.from(
-        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100e221bc330000000049454e44ae426082',
-        'hex',
-      );
-      const uploadRes = await request(app.getHttpServer())
-        .post(`/api/v1/products/${productId}/image`)
-        .set('Cookie', cookiesA)
-        .attach('file', pngBuffer, {
-          filename: 'urun.png',
-          contentType: 'image/png',
-        });
-      expect(uploadRes.status).toBe(201);
-      expect(uploadRes.body.imageUrl).toContain('/files?key=');
-      expect(uploadRes.body.imageUrl).toContain(
-        encodeURIComponent(`product-images/${productId}.png`),
-      );
-
-      const deleteRes = await request(app.getHttpServer())
-        .delete(`/api/v1/products/${productId}/image`)
-        .set('Cookie', cookiesA);
-      expect(deleteRes.status).toBe(200);
-      expect(deleteRes.body.imageUrl).toBeNull();
-    },
-  );
-
-  it('POST /products/:id/image: gecersiz magic-byte icin UNSUPPORTED_IMAGE_TYPE doner', async () => {
-    const res = await request(app.getHttpServer())
-      .post(`/api/v1/products/${productId}/image`)
-      .set('Cookie', cookiesA)
-      .attach('file', Buffer.from('not-a-real-image'), {
-        filename: 'urun.png',
-        contentType: 'image/png',
-      });
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('UNSUPPORTED_IMAGE_TYPE');
-  });
-
-  it('POST /products/:id/image: B tenanti A tenantinin urunune erisemez (404)', async () => {
-    const res = await request(app.getHttpServer())
-      .post(`/api/v1/products/${productId}/image`)
-      .set('Cookie', cookiesB)
-      .attach('file', Buffer.from('fake-png-bytes'), {
-        filename: 'urun.png',
-        contentType: 'image/png',
-      });
-    expect(res.status).toBe(404);
-    expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
   it('B tenanti A tenantinin urunune erisemez (404)', async () => {

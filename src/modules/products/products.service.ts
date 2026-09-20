@@ -6,44 +6,25 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
-import { FileUrlService } from '../../core/storage/file-url.service';
-import { R2StorageService } from '../../core/storage/r2-storage.service';
 import { AuditService } from '../audit/audit.service';
 import type {
   CreateProductDto,
   ProductQueryDto,
   UpdateProductDto,
 } from './dto/product.dto';
-import { detectProductImageExtension } from './product-image-validation';
 
 const SORTABLE_FIELDS = ['name', 'sku', 'createdAt'] as const;
 
 type ProductWithProductList = Product & { productList: ProductList };
 
-export type ProductView = Product & {
-  imageUrl: string | null;
-  productList: { id: string; name: string };
-};
+export type ProductView = ProductWithProductList;
 
 @Injectable()
 export class ProductsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
-    private readonly storage: R2StorageService,
-    private readonly fileUrl: FileUrlService,
   ) {}
-
-  private toView(product: ProductWithProductList): ProductView {
-    return {
-      ...product,
-      imageUrl: this.fileUrl.build(product.imageKey, product.updatedAt),
-      productList: {
-        id: product.productList.id,
-        name: product.productList.name,
-      },
-    };
-  }
 
   async list(query: ProductQueryDto): Promise<PagedResult<ProductView>> {
     const { page, pageSize, q, productListId } = query;
@@ -76,14 +57,13 @@ export class ProductsService {
     ]);
 
     return {
-      data: data.map((p) => this.toView(p)),
+      data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
   }
 
   async getById(id: string): Promise<ProductView> {
-    const product = await this.findOrThrow(id);
-    return this.toView(product);
+    return this.findOrThrow(id);
   }
 
   private async findOrThrow(id: string): Promise<ProductWithProductList> {
@@ -113,7 +93,7 @@ export class ProductsService {
       entityId: product.id,
       meta: { name: product.name },
     });
-    return this.toView(product);
+    return product;
   }
 
   async update(id: string, dto: UpdateProductDto): Promise<ProductView> {
@@ -124,68 +104,12 @@ export class ProductsService {
       include: { productList: true },
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Product', entityId: id });
-    return this.toView(product);
+    return product;
   }
 
   async remove(id: string): Promise<void> {
-    const product = await this.findOrThrow(id);
-    if (product.imageKey) {
-      await this.storage.delete(product.imageKey);
-    }
+    await this.findOrThrow(id);
     await this.prisma.product.delete({ where: { id } });
     await this.audit.log({ action: 'DELETE', entity: 'Product', entityId: id });
-  }
-
-  async uploadImage(
-    id: string,
-    tenantId: string,
-    file: { mimetype: string; buffer: Buffer },
-  ): Promise<ProductView> {
-    const product = await this.findOrThrow(id);
-    const ext = detectProductImageExtension(file.mimetype, file.buffer);
-    const env =
-      process.env.NODE_ENV === 'production' ? 'production' : 'development';
-    // Urun basina tek gorsel oldugu icin anahtar sabit (id.ext) - ekstra bir klasor/uuid
-    // gerekmiyor. Onceki yukleme farkli bir uzantiylaysa (orn. png -> jpg) eski anahtar
-    // asagida ayrica silinir; ayni uzantida ise R2'deki nesne zaten uzerine yazilir.
-    // Tarayici/CDN cache'i toView()'daki ?v=updatedAt sorgu parametresiyle atlatilir.
-    const key = `PILENS/${env}/${tenantId}/product-images/${id}.${ext}`;
-
-    await this.storage.upload(key, file.buffer, file.mimetype);
-    if (product.imageKey && product.imageKey !== key) {
-      await this.storage.delete(product.imageKey);
-    }
-
-    const updated = await this.prisma.product.update({
-      where: { id },
-      data: { imageKey: key },
-      include: { productList: true },
-    });
-    await this.audit.log({
-      action: 'UPDATE',
-      entity: 'Product',
-      entityId: id,
-      meta: { imageUploaded: true },
-    });
-    return this.toView(updated);
-  }
-
-  async removeImage(id: string): Promise<ProductView> {
-    const product = await this.findOrThrow(id);
-    if (product.imageKey) {
-      await this.storage.delete(product.imageKey);
-    }
-    const updated = await this.prisma.product.update({
-      where: { id },
-      data: { imageKey: null },
-      include: { productList: true },
-    });
-    await this.audit.log({
-      action: 'UPDATE',
-      entity: 'Product',
-      entityId: id,
-      meta: { imageRemoved: true },
-    });
-    return this.toView(updated);
   }
 }
