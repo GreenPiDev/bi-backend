@@ -39,7 +39,12 @@ export const CreateOpportunitySchema = z.object({
   accountId: z.string().uuid(),
   name: z.string().trim().min(2, 'Firsat adi en az 2 karakter olmalidir.'),
   stage: OpportunityStageSchema.optional(),
-  estimatedValue: z.number().nonnegative().optional(),
+  // Opportunity.estimatedValue @db.Decimal(14, 2) - DB'nin kabul edebilecegi ust sinir.
+  estimatedValue: z
+    .number()
+    .nonnegative()
+    .max(999_999_999_999.99, 'Tahmini deger cok buyuk.')
+    .optional(),
   estimatedValueCurrency: CurrencyCodeSchema.optional(),
   description: z.string().trim().max(2000).optional(),
   occurredAt: z.coerce.date().optional(),
@@ -50,7 +55,12 @@ export type CreateOpportunityDto = z.infer<typeof CreateOpportunitySchema>;
 export const UpdateOpportunitySchema = z.object({
   name: z.string().trim().min(2).optional(),
   stage: OpportunityStageSchema.optional(),
-  estimatedValue: z.number().nonnegative().optional(),
+  // Opportunity.estimatedValue @db.Decimal(14, 2) - DB'nin kabul edebilecegi ust sinir.
+  estimatedValue: z
+    .number()
+    .nonnegative()
+    .max(999_999_999_999.99, 'Tahmini deger cok buyuk.')
+    .optional(),
   estimatedValueCurrency: CurrencyCodeSchema.optional(),
   description: z.string().trim().max(2000).optional(),
   occurredAt: z.coerce.date().optional(),

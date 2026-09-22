@@ -254,6 +254,7 @@ export class InteractionsService {
             name: dto.opportunity.name,
             stage: dto.opportunity.stage,
             estimatedValue: dto.opportunity.estimatedValue,
+            estimatedValueCurrency: dto.opportunity.estimatedValueCurrency,
           } as never,
         });
       }

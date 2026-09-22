@@ -12,8 +12,13 @@ export const QuoteStatusSchema = z.enum([
 const QuoteItemInputSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().positive(),
-  /** Q3: verilmezse Product.price'tan alinir; verilirse manuel ezme sayilir. */
-  unitPrice: z.number().nonnegative().optional(),
+  /** Q3: verilmezse Product.price'tan alinir; verilirse manuel ezme sayilir.
+   * QuoteItem.unitPrice @db.Decimal(14, 2) - DB'nin kabul edebilecegi ust sinir. */
+  unitPrice: z
+    .number()
+    .nonnegative()
+    .max(999_999_999_999.99, 'Birim fiyat cok buyuk.')
+    .optional(),
   discountPct: z.number().min(0).max(100).default(0),
   vatPct: z.number().min(0).max(100).default(0),
 });
@@ -22,7 +27,12 @@ const QuoteItemInputSchema = z.object({
 const QuoteOpportunityInputSchema = z.object({
   name: z.string().trim().min(2, 'Firsat adi en az 2 karakter olmalidir.'),
   stage: OpportunityStageSchema.optional(),
-  estimatedValue: z.number().nonnegative().optional(),
+  // Opportunity.estimatedValue @db.Decimal(14, 2) - DB'nin kabul edebilecegi ust sinir.
+  estimatedValue: z
+    .number()
+    .nonnegative()
+    .max(999_999_999_999.99, 'Tahmini deger cok buyuk.')
+    .optional(),
 });
 
 export const CreateQuoteSchema = z.object({

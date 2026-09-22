@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
-import { OpportunityStageSchema } from '../../opportunities/dto/opportunity.dto';
+import {
+  CurrencyCodeSchema,
+  OpportunityStageSchema,
+} from '../../opportunities/dto/opportunity.dto';
 
 export const InteractionTypeSchema = z.enum([
   'CALL',
@@ -20,7 +23,13 @@ const ParticipantSchema = z.object({
 const NestedOpportunitySchema = z.object({
   name: z.string().trim().min(2, 'Firsat adi en az 2 karakter olmalidir.'),
   stage: OpportunityStageSchema.optional(),
-  estimatedValue: z.number().nonnegative().optional(),
+  // Opportunity.estimatedValue @db.Decimal(14, 2) - DB'nin kabul edebilecegi ust sinir.
+  estimatedValue: z
+    .number()
+    .nonnegative()
+    .max(999_999_999_999.99, 'Tahmini deger cok buyuk.')
+    .optional(),
+  estimatedValueCurrency: CurrencyCodeSchema.optional(),
 });
 
 /** M4-M6: hatirlatma - her atanan kullaniciya kendi notu, M9 gecmis tarih kisitina
