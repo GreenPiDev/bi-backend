@@ -6,6 +6,7 @@ const fakeAudit = { log: auditLog } as never;
 
 const emitToTenant = vi.fn();
 const fakeRealtime = { emitToTenant } as never;
+const fakeFileUrl = { build: vi.fn(() => null) } as never;
 
 const TENANT_ID = 'tenant-1';
 const SENDER_ID = '11111111-1111-1111-1111-111111111111';
@@ -70,6 +71,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.getById(CONVERSATION_ID, SENDER_ID),
@@ -85,6 +87,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.getById(CONVERSATION_ID, RECIPIENT_ID),
@@ -105,6 +108,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.getById(CONVERSATION_ID, SENDER_ID),
@@ -119,6 +123,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.getById(CONVERSATION_ID, BYSTANDER_ID),
@@ -133,6 +138,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(service.getById('yok', SENDER_ID)).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -145,6 +151,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -170,6 +177,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -204,6 +212,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -238,6 +247,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -267,6 +277,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -293,6 +304,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -309,6 +321,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -328,6 +341,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -352,6 +366,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -389,6 +404,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -420,6 +436,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.create(TENANT_ID, SENDER_ID, {
       subject: 'Konu',
@@ -460,6 +477,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.create(TENANT_ID, RECIPIENT_ID, {
       body: 'Cevap',
@@ -484,6 +502,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.create(TENANT_ID, BYSTANDER_ID, {
@@ -503,6 +522,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.setConversationRead(CONVERSATION_ID, BYSTANDER_ID),
@@ -517,6 +537,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
@@ -535,6 +556,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID, false);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
@@ -553,6 +575,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await expect(
       service.setConversationStar(
@@ -572,6 +595,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -595,6 +619,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -611,6 +636,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -632,6 +658,7 @@ describe('MessagesService', () => {
       prisma as never,
       fakeAudit,
       fakeRealtime,
+      fakeFileUrl,
     );
     const result = await service.list(SENDER_ID, {
       page: 1,

@@ -12,6 +12,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { RealtimeService } from '../../core/realtime/realtime.service';
+import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
 import type { CreateMessageDto, MessageQueryDto } from './dto/message.dto';
 
@@ -61,6 +62,7 @@ export class MessagesService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
     private readonly realtime: RealtimeService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   async list(
@@ -474,11 +476,18 @@ export class MessagesService {
     }
   }
 
-  async listAssignableUsers(): Promise<{ id: string; name: string }[]> {
-    return this.prisma.user.findMany({
+  async listAssignableUsers(): Promise<
+    { id: string; name: string; avatarUrl: string | null }[]
+  > {
+    const users = await this.prisma.user.findMany({
       where: { isActive: true, isPlatformAdmin: false },
-      select: { id: true, name: true },
+      select: { id: true, name: true, avatarKey: true, updatedAt: true },
       orderBy: { name: 'asc' },
     });
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      avatarUrl: this.fileUrl.build(user.avatarKey, user.updatedAt),
+    }));
   }
 }

@@ -45,7 +45,9 @@ export class CalendarEventsController {
 
   @Get('assignable-users')
   @RequiresPermission('calendar', 'VIEW')
-  listAssignableUsers(): Promise<{ id: string; name: string }[]> {
+  listAssignableUsers(): Promise<
+    { id: string; name: string; avatarUrl: string | null }[]
+  > {
     return this.calendarEvents.listAssignableUsers();
   }
 

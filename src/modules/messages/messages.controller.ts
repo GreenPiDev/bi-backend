@@ -49,7 +49,9 @@ export class MessagesController {
 
   @Get('assignable-users')
   @RequiresPermission('messages', 'VIEW')
-  listAssignableUsers(): Promise<{ id: string; name: string }[]> {
+  listAssignableUsers(): Promise<
+    { id: string; name: string; avatarUrl: string | null }[]
+  > {
     return this.messages.listAssignableUsers();
   }
 

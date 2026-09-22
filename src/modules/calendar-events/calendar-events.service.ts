@@ -5,6 +5,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
 import type {
   CalendarEventQueryDto,
@@ -21,6 +22,7 @@ export class CalendarEventsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   /**
@@ -28,14 +30,23 @@ export class CalendarEventsService {
    * 'users' tab izni gerektirir (bkz. users.controller.ts), bu yuzden CREATE/UPDATE
    * izni olmayan bir satis temsilcisi oradan kullanici listesi cekemez. Takvimde
    * herkesin birbirine gorev atayabilmesi icin (bkz. docs/VARSAYIMLAR.md V23,
-   * madde 2) sadece isim/id doner, ayri ve hafif bir uc.
+   * madde 2) sadece isim/id doner, ayri ve hafif bir uc. avatarUrl, gorusme
+   * detayinda katilimci avatarini gostermek icin eklendi (Interaction katilimcilari
+   * bu listeden secilen isimle eslesiyor).
    */
-  async listAssignableUsers(): Promise<{ id: string; name: string }[]> {
-    return this.prisma.user.findMany({
+  async listAssignableUsers(): Promise<
+    { id: string; name: string; avatarUrl: string | null }[]
+  > {
+    const users = await this.prisma.user.findMany({
       where: { isActive: true, isPlatformAdmin: false },
-      select: { id: true, name: true },
+      select: { id: true, name: true, avatarKey: true, updatedAt: true },
       orderBy: { name: 'asc' },
     });
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      avatarUrl: this.fileUrl.build(user.avatarKey, user.updatedAt),
+    }));
   }
 
   /**

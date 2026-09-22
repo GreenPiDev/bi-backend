@@ -2,6 +2,7 @@ import { AppException } from '../../core/errors/app.exception';
 import { CalendarEventsService } from './calendar-events.service';
 
 const fakeAudit = { log: vi.fn() } as never;
+const fakeFileUrl = { build: vi.fn(() => null) } as never;
 
 const EVENT_ID = '11111111-1111-1111-1111-111111111111';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -21,9 +22,14 @@ function createEventRow(overrides: Partial<Record<string, unknown>> = {}) {
 function createPrisma(eventRow: unknown = createEventRow()) {
   const client = {
     user: {
-      findMany: vi
-        .fn()
-        .mockResolvedValue([{ id: USER_ID, name: 'Ayse Yilmaz' }]),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: USER_ID,
+          name: 'Ayse Yilmaz',
+          avatarKey: null,
+          updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+        },
+      ]),
     },
     calendarEvent: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -43,7 +49,11 @@ function createPrisma(eventRow: unknown = createEventRow()) {
 describe('CalendarEventsService', () => {
   it('getById: bulunamayan etkinlik icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -51,7 +61,11 @@ describe('CalendarEventsService', () => {
 
   it('create: attendee verilmezse olusturan kullaniciyi tek katilimci olarak ekler', async () => {
     const prisma = createPrisma();
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
       startAt: new Date('2026-09-10T10:00:00.000Z'),
@@ -68,7 +82,11 @@ describe('CalendarEventsService', () => {
 
   it('create: verilen attendee listesini kullanir', async () => {
     const prisma = createPrisma();
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
       startAt: new Date('2026-09-10T10:00:00.000Z'),
@@ -86,7 +104,11 @@ describe('CalendarEventsService', () => {
 
   it('update: bulunamayan etkinlik icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await expect(
       service.update('yok', { title: 'x' } as never),
     ).rejects.toMatchObject({
@@ -96,7 +118,11 @@ describe('CalendarEventsService', () => {
 
   it('update: attendees verilirse once eskileri siler sonra yenilerini ekler', async () => {
     const prisma = createPrisma();
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await service.update(EVENT_ID, {
       attendees: [{ userId: USER_ID }],
     } as never);
@@ -114,7 +140,11 @@ describe('CalendarEventsService', () => {
 
   it('update: attendees verilmezse mevcut katilimcilara dokunmaz', async () => {
     const prisma = createPrisma();
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await service.update(EVENT_ID, { title: 'Yeni baslik' } as never);
     expect(prisma.calendarEventAttendee.deleteMany).not.toHaveBeenCalled();
     expect(prisma.calendarEvent.update).toHaveBeenCalledWith(
@@ -126,30 +156,44 @@ describe('CalendarEventsService', () => {
 
   it('remove: etkinligi siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await service.remove(EVENT_ID);
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({
       where: { id: EVENT_ID },
     });
   });
 
-  it('listAssignableUsers: aktif kullanicilari isim/id ile doner', async () => {
+  it('listAssignableUsers: aktif kullanicilari isim/id/avatarUrl ile doner', async () => {
     const prisma = createPrisma();
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     const result = await service.listAssignableUsers();
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { isActive: true, isPlatformAdmin: false },
-      select: { id: true, name: true },
+      select: { id: true, name: true, avatarKey: true, updatedAt: true },
       orderBy: { name: 'asc' },
     });
-    expect(result).toEqual([{ id: USER_ID, name: 'Ayse Yilmaz' }]);
+    expect(result).toEqual([
+      { id: USER_ID, name: 'Ayse Yilmaz', avatarUrl: null },
+    ]);
   });
 
   it('list: from/to araligini ortusme sorgusuna cevirir', async () => {
     const prisma = createPrisma();
     const from = new Date('2026-09-01T00:00:00.000Z');
     const to = new Date('2026-09-30T23:59:59.000Z');
-    const service = new CalendarEventsService(prisma as never, fakeAudit);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+    );
     await service.list({ from, to, order: 'asc' });
     expect(prisma.calendarEvent.findMany).toHaveBeenCalledWith({
       where: { startAt: { lte: to }, endAt: { gte: from } },
