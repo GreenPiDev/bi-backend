@@ -14,6 +14,13 @@ import type {
 } from './dto/contact.dto';
 
 const SORTABLE_FIELDS = ['lastName', 'firstName', 'createdAt'] as const;
+// Bu projenin Prisma surumunde orderBy `mode: 'insensitive'` desteklemiyor (sadece
+// where filtrelerinde var) ve DB'nin varsayilan collation'i ASCII sirasi kullaniyor
+// ("M" < "a"), o yuzden bu alanlar icin DB-seviyesi siralamaya guvenilmiyor -
+// eslesen tum kayitlar cekilip Intl.Collator ile JS tarafinda siralanip sonra
+// sayfalaniyor (bkz. asagidaki list()).
+const CASE_INSENSITIVE_SORT_FIELDS = new Set<string>(['firstName', 'lastName']);
+const nameCollator = new Intl.Collator('tr', { sensitivity: 'base' });
 
 function normalize<T extends object>(dto: T): T {
   const result = { ...dto } as Record<string, unknown>;
@@ -58,6 +65,32 @@ export class ContactsService {
           }
         : {}),
     };
+
+    if (CASE_INSENSITIVE_SORT_FIELDS.has(field)) {
+      const sortField = field as 'firstName' | 'lastName';
+      const all = await this.prisma.contact.findMany({
+        where,
+        include: { account: { select: { id: true, name: true } } },
+      });
+      all.sort((a, b) => {
+        const cmp = nameCollator.compare(a[sortField], b[sortField]);
+        return direction === 'asc' ? cmp : -cmp;
+      });
+      const total = all.length;
+      const data = all.slice(
+        (page - 1) * pageSize,
+        (page - 1) * pageSize + pageSize,
+      );
+      return {
+        data,
+        meta: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.contact.findMany({
