@@ -60,5 +60,11 @@ export type UpdateOpportunityDto = z.infer<typeof UpdateOpportunitySchema>;
 export const OpportunityQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   stage: OpportunityStageSchema.optional(),
+  minEstimatedValue: z.coerce.number().nonnegative().optional(),
+  /** Olusma tarihi filtresi (liste sayfasi filtre penceresi) - hem tek tarih ("su
+   * tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de bu ayni
+   * from/to ciftine cevrilir - bkz. accounts.dto.ts'teki ayni desen. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 export type OpportunityQueryDto = z.infer<typeof OpportunityQuerySchema>;

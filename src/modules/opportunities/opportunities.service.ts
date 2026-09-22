@@ -36,7 +36,8 @@ export class OpportunitiesService {
   ) {}
 
   async list(query: OpportunityQueryDto): Promise<PagedResult<Opportunity>> {
-    const { page, pageSize, accountId, stage } = query;
+    const { page, pageSize, accountId, stage, minEstimatedValue, from, to } =
+      query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -45,6 +46,17 @@ export class OpportunitiesService {
     const where = {
       ...(accountId ? { accountId } : {}),
       ...(stage ? { stage } : {}),
+      ...(minEstimatedValue !== undefined
+        ? { estimatedValue: { gte: minEstimatedValue } }
+        : {}),
+      ...(from || to
+        ? {
+            occurredAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([
