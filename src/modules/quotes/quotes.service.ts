@@ -238,109 +238,99 @@ export class QuotesService {
     createdById: string,
     dto: CreateQuoteDto,
   ): Promise<QuoteWithDetails> {
-    const { quoteId, postSaleCase } = await this.prisma.$transaction(
-      async (tx) => {
-        if (dto.contactId) {
-          const contact = await tx.contact.findFirst({
-            where: { id: dto.contactId },
-          });
-          if (!contact || contact.accountId !== dto.accountId) {
-            throw new AppException(
-              'CONTACT_ACCOUNT_MISMATCH',
-              'Secilen kisi bu firmaya ait degil.',
-              HttpStatus.BAD_REQUEST,
-            );
-          }
-        }
-
-        const { items, requiresApproval } = await this.resolveItems(
-          tx,
-          dto.items,
-        );
-
-        let created: Quote | undefined;
-        for (
-          let attempt = 0;
-          attempt < QUOTE_NUMBER_CREATE_RETRIES;
-          attempt += 1
-        ) {
-          const prefix = quoteNumberPrefix(new Date());
-          const countToday = await tx.quote.count({
-            where: { quoteNumber: { startsWith: prefix } },
-          });
-          const quoteNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
-          try {
-            created = await tx.quote.create({
-              data: {
-                accountId: dto.accountId,
-                contactId: dto.contactId ?? null,
-                quoteNumber,
-                status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
-                createdById,
-                items: { create: items },
-              } as never,
-            });
-            break;
-          } catch (error) {
-            const isDuplicateNumber =
-              error instanceof Prisma.PrismaClientKnownRequestError &&
-              error.code === 'P2002';
-            if (
-              !isDuplicateNumber ||
-              attempt === QUOTE_NUMBER_CREATE_RETRIES - 1
-            ) {
-              throw error;
-            }
-          }
-        }
-        if (!created) {
+    const { quoteId } = await this.prisma.$transaction(async (tx) => {
+      if (dto.contactId) {
+        const contact = await tx.contact.findFirst({
+          where: { id: dto.contactId },
+        });
+        if (!contact || contact.accountId !== dto.accountId) {
           throw new AppException(
-            'QUOTE_NUMBER_CONFLICT',
-            'Teklif numarasi olusturulamadi, lutfen tekrar deneyin.',
-            HttpStatus.CONFLICT,
+            'CONTACT_ACCOUNT_MISMATCH',
+            'Secilen kisi bu firmaya ait degil.',
+            HttpStatus.BAD_REQUEST,
           );
         }
+      }
 
-        if (dto.opportunity) {
-          await tx.opportunity.create({
+      const { items } = await this.resolveItems(tx, dto.items);
+
+      let created: Quote | undefined;
+      for (
+        let attempt = 0;
+        attempt < QUOTE_NUMBER_CREATE_RETRIES;
+        attempt += 1
+      ) {
+        const prefix = quoteNumberPrefix(new Date());
+        const countToday = await tx.quote.count({
+          where: { quoteNumber: { startsWith: prefix } },
+        });
+        const quoteNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
+        try {
+          created = await tx.quote.create({
             data: {
               accountId: dto.accountId,
-              quoteId: created.id,
-              name: dto.opportunity.name,
-              stage: dto.opportunity.stage,
-              estimatedValue: dto.opportunity.estimatedValue,
+              contactId: dto.contactId ?? null,
+              quoteNumber,
+              status: 'DRAFT',
               createdById,
+              items: { create: items },
             } as never,
           });
+          break;
+        } catch (error) {
+          const isDuplicateNumber =
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2002';
+          if (
+            !isDuplicateNumber ||
+            attempt === QUOTE_NUMBER_CREATE_RETRIES - 1
+          ) {
+            throw error;
+          }
         }
+      }
+      if (!created) {
+        throw new AppException(
+          'QUOTE_NUMBER_CONFLICT',
+          'Teklif numarasi olusturulamadi, lutfen tekrar deneyin.',
+          HttpStatus.CONFLICT,
+        );
+      }
 
-        const postSaleCase: EnsuredPostSaleCase | null = requiresApproval
-          ? null
-          : await this.ensurePostSaleCase(tx, {
-              quoteId: created.id,
-              accountId: dto.accountId,
-              contactId: dto.contactId ?? null,
-              approvedAt: new Date(),
-            });
+      if (dto.opportunity) {
+        await tx.opportunity.create({
+          data: {
+            accountId: dto.accountId,
+            quoteId: created.id,
+            name: dto.opportunity.name,
+            stage: dto.opportunity.stage,
+            estimatedValue: dto.opportunity.estimatedValue,
+            createdById,
+          } as never,
+        });
+      }
 
-        return { quoteId: created.id, postSaleCase };
-      },
-    );
+      return { quoteId: created.id };
+    });
 
     await this.audit.log({
       action: 'CREATE',
       entity: 'Quote',
       entityId: quoteId,
     });
-    if (postSaleCase?.contactId) {
-      await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
-        postSaleCaseId: postSaleCase.id,
-      });
-    }
     return this.getById(quoteId);
   }
 
-  async update(id: string, dto: UpdateQuoteDto): Promise<QuoteWithDetails> {
+  /**
+   * `dto.status` verilirse /teklifler listesindeki durum dropdown'undan gelen
+   * dogrudan durum degisikligi uygulanir (APPROVED'a gecis S1/ensurePostSaleCase'i
+   * tetikler, dedicated approve() ucuyla ayni davranis).
+   */
+  async update(
+    id: string,
+    dto: UpdateQuoteDto,
+    actingUserId: string,
+  ): Promise<QuoteWithDetails> {
     const existing = await this.getById(id);
     if (existing.status === 'APPROVED' || existing.status === 'REJECTED') {
       throw new AppException(
@@ -352,30 +342,45 @@ export class QuotesService {
 
     const postSaleCase = await this.prisma.$transaction(async (tx) => {
       if (dto.items) {
-        const { items, requiresApproval } = await this.resolveItems(
-          tx,
-          dto.items,
-        );
+        const { items } = await this.resolveItems(tx, dto.items);
         await tx.quoteItem.deleteMany({ where: { quoteId: id } });
         await tx.quoteItem.createMany({
           data: items.map((item) => ({ ...item, quoteId: id })),
         });
+      }
+
+      const nextStatus = dto.status ?? existing.status;
+      if (nextStatus === existing.status) {
+        return null;
+      }
+
+      if (nextStatus === 'APPROVED') {
+        const approvedAt = new Date();
+        await tx.quote.update({
+          where: { id },
+          data: { status: 'APPROVED', approvedAt, approvedById: actingUserId },
+        });
+        return this.ensurePostSaleCase(tx, {
+          quoteId: id,
+          accountId: existing.accountId,
+          contactId: existing.contactId,
+          approvedAt,
+        });
+      }
+
+      if (nextStatus === 'REJECTED') {
         await tx.quote.update({
           where: { id },
           data: {
-            status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
+            status: 'REJECTED',
+            approvedAt: new Date(),
+            approvedById: actingUserId,
           },
         });
-
-        if (!requiresApproval) {
-          return this.ensurePostSaleCase(tx, {
-            quoteId: id,
-            accountId: existing.accountId,
-            contactId: existing.contactId,
-            approvedAt: new Date(),
-          });
-        }
+        return null;
       }
+
+      await tx.quote.update({ where: { id }, data: { status: nextStatus } });
       return null;
     });
 

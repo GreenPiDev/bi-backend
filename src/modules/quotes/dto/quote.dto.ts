@@ -51,6 +51,8 @@ export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
 
 export const UpdateQuoteSchema = z.object({
   items: z.array(QuoteItemInputSchema).min(1).max(200).optional(),
+  /** /teklifler listesindeki durum dropdown'undan gelen dogrudan durum degisikligi. */
+  status: QuoteStatusSchema.optional(),
 });
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
 

@@ -95,39 +95,9 @@ describe('QuotesService', () => {
     } satisfies Partial<AppException>);
   });
 
-  it('create: iskonto politikasi asilmiyorsa dogrudan APPROVED olusturur', async () => {
+  it('create: iskonto sinirindan bagimsiz her zaman DRAFT olusturur', async () => {
     const prisma = createPrisma({
-      quoteRow: createQuoteRow(),
-      products: [createProduct({ maxDiscountPct: 10 })],
-    });
-    const service = new QuotesService(
-      prisma as never,
-      fakeAudit,
-      fakeSurveyQueue,
-    );
-    await service.create('user-1', {
-      accountId: 'account-1',
-      items: [
-        {
-          productId: 'product-1',
-          quantity: 2,
-          unitPrice: 100,
-          discountPct: 5,
-          vatPct: 20,
-        },
-      ],
-    } as never);
-
-    expect(prisma.__tx.quote.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ status: 'APPROVED' }),
-      }),
-    );
-  });
-
-  it('create: iskonto politikasi asilirsa PENDING_APPROVAL olusturur', async () => {
-    const prisma = createPrisma({
-      quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
+      quoteRow: createQuoteRow({ status: 'DRAFT' }),
       products: [createProduct({ maxDiscountPct: 10 })],
     });
     const service = new QuotesService(
@@ -150,7 +120,7 @@ describe('QuotesService', () => {
 
     expect(prisma.__tx.quote.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'PENDING_APPROVAL' }),
+        data: expect.objectContaining({ status: 'DRAFT' }),
       }),
     );
   });
@@ -286,11 +256,10 @@ describe('QuotesService', () => {
     ).rejects.toMatchObject({ code: 'CONTACT_ACCOUNT_MISMATCH' });
   });
 
-  it('create: S1 - dogrudan APPROVED olan teklif icin PostSaleCase acar ve contactId varsa anket kuyruguna ekler', async () => {
+  it('create: DRAFT olusturulan teklif icin PostSaleCase acmaz (S1 sadece APPROVED icin)', async () => {
     const prisma = createPrisma({
-      quoteRow: createQuoteRow({ contactId: 'contact-1' }),
+      quoteRow: createQuoteRow({ status: 'DRAFT', contactId: 'contact-1' }),
       products: [createProduct()],
-      postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
     });
     const service = new QuotesService(
       prisma as never,
@@ -311,39 +280,6 @@ describe('QuotesService', () => {
       ],
     } as never);
 
-    expect(prisma.__tx.postSaleCase.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ quoteId: 'quote-1' }),
-      }),
-    );
-    expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
-      postSaleCaseId: 'psc-1',
-    });
-  });
-
-  it('create: PENDING_APPROVAL olusan teklif icin PostSaleCase acmaz (S1 sadece APPROVED icin)', async () => {
-    const prisma = createPrisma({
-      quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
-      products: [createProduct({ maxDiscountPct: 10 })],
-    });
-    const service = new QuotesService(
-      prisma as never,
-      fakeAudit,
-      fakeSurveyQueue,
-    );
-    await service.create('user-1', {
-      accountId: 'account-1',
-      items: [
-        {
-          productId: 'product-1',
-          quantity: 1,
-          unitPrice: 100,
-          discountPct: 25,
-          vatPct: 20,
-        },
-      ],
-    } as never);
-
     expect(prisma.__tx.postSaleCase.create).not.toHaveBeenCalled();
     expect(surveyQueueAdd).not.toHaveBeenCalled();
   });
@@ -359,17 +295,17 @@ describe('QuotesService', () => {
       fakeSurveyQueue,
     );
     await expect(
-      service.update('quote-1', { items: [] } as never),
+      service.update('quote-1', { items: [] } as never, 'user-1'),
     ).rejects.toMatchObject({ code: 'QUOTE_NOT_EDITABLE' });
   });
 
-  it('update: S1 - PENDING_APPROVAL teklif iskonto sinirinin altina cekilince APPROVED olur ve PostSaleCase acar', async () => {
+  it('update: /teklifler listesindeki durum dropdown status: APPROVED gonderince PostSaleCase acar', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({
-        status: 'PENDING_APPROVAL',
+        status: 'DRAFT',
         contactId: 'contact-1',
       }),
-      products: [createProduct({ maxDiscountPct: 10 })],
+      products: [],
       postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
     });
     const service = new QuotesService(
@@ -377,21 +313,18 @@ describe('QuotesService', () => {
       fakeAudit,
       fakeSurveyQueue,
     );
-    await service.update('quote-1', {
-      items: [
-        {
-          productId: 'product-1',
-          quantity: 1,
-          unitPrice: 100,
-          discountPct: 5,
-          vatPct: 20,
-        },
-      ],
-    } as never);
+    await service.update(
+      'quote-1',
+      { status: 'APPROVED' } as never,
+      'manager-1',
+    );
 
     expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'APPROVED' }),
+        data: expect.objectContaining({
+          status: 'APPROVED',
+          approvedById: 'manager-1',
+        }),
       }),
     );
     expect(prisma.__tx.postSaleCase.create).toHaveBeenCalledWith(
@@ -402,6 +335,33 @@ describe('QuotesService', () => {
     expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
       postSaleCaseId: 'psc-1',
     });
+  });
+
+  it('update: dropdown status: REJECTED gonderince PostSaleCase acmadan reddeder', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'DRAFT' }),
+      products: [],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.update(
+      'quote-1',
+      { status: 'REJECTED' } as never,
+      'manager-1',
+    );
+
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'REJECTED',
+          approvedById: 'manager-1',
+        }),
+      }),
+    );
+    expect(prisma.__tx.postSaleCase.create).not.toHaveBeenCalled();
   });
 
   it('approve: onay bekleyen teklifi onaylar', async () => {

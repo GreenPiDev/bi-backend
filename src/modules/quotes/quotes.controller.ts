@@ -67,8 +67,9 @@ export class QuotesController {
   update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateQuoteSchema)) dto: UpdateQuoteDto,
+    @CurrentUser() user: RequestUser,
   ): Promise<QuoteWithDetails> {
-    return this.quotes.update(id, dto);
+    return this.quotes.update(id, dto, user.id);
   }
 
   @Delete(':id')
