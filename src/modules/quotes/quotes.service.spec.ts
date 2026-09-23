@@ -364,6 +364,65 @@ describe('QuotesService', () => {
     expect(prisma.__tx.postSaleCase.create).not.toHaveBeenCalled();
   });
 
+  it('update: durum degismeden contactId gonderilirse yine de yazilir', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'DRAFT' }),
+      products: [],
+      contact: { id: 'contact-2', accountId: 'account-1' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.update(
+      'quote-1',
+      { contactId: 'contact-2' } as never,
+      'user-1',
+    );
+
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { contactId: 'contact-2' },
+      }),
+    );
+  });
+
+  it('update: contactId null gonderilirse muhatap kisi kaldirilir', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'DRAFT', contactId: 'contact-1' }),
+      products: [],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await service.update('quote-1', { contactId: null } as never, 'user-1');
+
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { contactId: null },
+      }),
+    );
+  });
+
+  it('update: contactId secilen firmaya ait degilse CONTACT_ACCOUNT_MISMATCH firlatir', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'DRAFT' }),
+      products: [],
+      contact: { id: 'contact-2', accountId: 'other-account' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+    );
+    await expect(
+      service.update('quote-1', { contactId: 'contact-2' } as never, 'user-1'),
+    ).rejects.toMatchObject({ code: 'CONTACT_ACCOUNT_MISMATCH' });
+  });
+
   it('approve: onay bekleyen teklifi onaylar', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),

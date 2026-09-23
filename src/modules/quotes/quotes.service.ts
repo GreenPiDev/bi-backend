@@ -341,7 +341,25 @@ export class QuotesService {
       );
     }
 
+    const contactIdProvided = dto.contactId !== undefined;
+    const contactUpdateData = contactIdProvided
+      ? { contactId: dto.contactId ?? null }
+      : {};
+
     const postSaleCase = await this.prisma.$transaction(async (tx) => {
+      if (contactIdProvided && dto.contactId) {
+        const contact = await tx.contact.findFirst({
+          where: { id: dto.contactId },
+        });
+        if (!contact || contact.accountId !== existing.accountId) {
+          throw new AppException(
+            'CONTACT_ACCOUNT_MISMATCH',
+            'Secilen kisi bu firmaya ait degil.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      }
+
       if (dto.items) {
         const { items } = await this.resolveItems(tx, dto.items);
         await tx.quoteItem.deleteMany({ where: { quoteId: id } });
@@ -352,6 +370,9 @@ export class QuotesService {
 
       const nextStatus = dto.status ?? existing.status;
       if (nextStatus === existing.status) {
+        if (contactIdProvided) {
+          await tx.quote.update({ where: { id }, data: contactUpdateData });
+        }
         return null;
       }
 
@@ -359,12 +380,19 @@ export class QuotesService {
         const approvedAt = new Date();
         await tx.quote.update({
           where: { id },
-          data: { status: 'APPROVED', approvedAt, approvedById: actingUserId },
+          data: {
+            status: 'APPROVED',
+            approvedAt,
+            approvedById: actingUserId,
+            ...contactUpdateData,
+          },
         });
         return this.ensurePostSaleCase(tx, {
           quoteId: id,
           accountId: existing.accountId,
-          contactId: existing.contactId,
+          contactId: contactIdProvided
+            ? (dto.contactId ?? null)
+            : existing.contactId,
           approvedAt,
         });
       }
@@ -376,12 +404,16 @@ export class QuotesService {
             status: 'REJECTED',
             approvedAt: new Date(),
             approvedById: actingUserId,
+            ...contactUpdateData,
           },
         });
         return null;
       }
 
-      await tx.quote.update({ where: { id }, data: { status: nextStatus } });
+      await tx.quote.update({
+        where: { id },
+        data: { status: nextStatus, ...contactUpdateData },
+      });
       return null;
     });
 
