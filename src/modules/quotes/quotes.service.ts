@@ -6,6 +6,7 @@ import type {
   Contact,
   Opportunity,
   Product,
+  ProductList,
   Quote,
   QuoteItem,
 } from '@prisma/client';
@@ -39,14 +40,14 @@ const QUOTE_INCLUDE = {
   account: true,
   contact: true,
   opportunity: true,
-  items: { include: { product: true } },
+  items: { include: { product: { include: { productList: true } } } },
 } as const;
 
 export type QuoteWithDetails = Quote & {
   account: Account;
   contact: Contact | null;
   opportunity: Opportunity | null;
-  items: (QuoteItem & { product: Product })[];
+  items: (QuoteItem & { product: Product & { productList: ProductList } })[];
 };
 
 interface EnsuredPostSaleCase {
