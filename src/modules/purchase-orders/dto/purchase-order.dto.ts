@@ -8,7 +8,7 @@ const PurchaseOrderItemInputSchema = z
   .object({
     id: z.string().uuid().optional(),
     productId: z.string().uuid().optional(),
-    description: z.string().trim().min(1, 'Kalem aciklamasi bos birakilamaz.'),
+    description: z.string().trim().max(300).default(''),
     quantity: z.number().nonnegative(),
     source: PurchaseOrderItemSourceSchema,
   })

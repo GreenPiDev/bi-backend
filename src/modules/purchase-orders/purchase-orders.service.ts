@@ -138,7 +138,7 @@ export class PurchaseOrdersService {
       );
       return {
         productId: quoteItem.productId,
-        description: quoteItem.product.name,
+        description: '',
         quantity: neededQuantity,
         source: 'QUOTE' as const,
       };

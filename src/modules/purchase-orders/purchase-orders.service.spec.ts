@@ -133,13 +133,13 @@ describe('PurchaseOrdersService', () => {
             create: [
               {
                 productId: 'product-1',
-                description: 'Sunucu',
+                description: '',
                 quantity: 5,
                 source: 'QUOTE',
               },
               {
                 productId: 'product-2',
-                description: 'Klavye',
+                description: '',
                 quantity: 2,
                 source: 'QUOTE',
               },
