@@ -2,6 +2,11 @@ import { AppException } from '../../core/errors/app.exception';
 import { AccountsService } from './accounts.service';
 
 const fakeAudit = { log: vi.fn() } as never;
+const fakeCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 const ACCOUNT_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -49,7 +54,7 @@ function createPrisma(accountRow: unknown = createAccountRow()) {
 describe('AccountsService', () => {
   it('getById: bulunamayan firma icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -57,7 +62,7 @@ describe('AccountsService', () => {
 
   it('create: bos string alanlari null yapar', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await service.create({
       name: 'Acme A.S.',
       website: '',
@@ -70,7 +75,7 @@ describe('AccountsService', () => {
 
   it('update: bulunamayan firma icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.update(ACCOUNT_ID, { name: 'x' } as never),
     ).rejects.toMatchObject({
@@ -81,7 +86,7 @@ describe('AccountsService', () => {
 
   it('remove: mevcut firmayi siler', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await service.remove(ACCOUNT_ID);
     expect(prisma.account.delete).toHaveBeenCalledWith({
       where: { id: ACCOUNT_ID },
@@ -90,7 +95,7 @@ describe('AccountsService', () => {
 
   it('list: arama, sayfalama ve toplam sayfa hesaplar', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     prisma.account.count.mockResolvedValue(30);
     const result = await service.list({
       page: 2,
@@ -110,7 +115,7 @@ describe('AccountsService', () => {
 
   it('list: varsayilan siralama isme gore alfabetiktir', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await service.list({ page: 1, pageSize: 10, sort: undefined } as never);
     expect(prisma.account.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { name: 'asc' } }),
@@ -119,7 +124,7 @@ describe('AccountsService', () => {
 
   it('list: from/to verilirse createdAt araligina gore filtreler', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     const from = new Date('2026-01-01');
     const to = new Date('2026-01-31');
     await service.list({ page: 1, pageSize: 10, from, to } as never);
@@ -134,7 +139,7 @@ describe('AccountsService', () => {
 
   it('list: notContactedDays verilirse son X gunde gorusmesi olmayan firmalari filtreler', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await service.list({ page: 1, pageSize: 10, notContactedDays: 7 } as never);
     expect(prisma.account.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -154,7 +159,7 @@ describe('AccountsService', () => {
     const prisma = createPrisma(
       createAccountRow({ taxNumber: null, phone: null, email: null }),
     );
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     const result = await service.getById(ACCOUNT_ID);
     expect(result.missingCriticalFields).toEqual(
       expect.arrayContaining(['taxNumber', 'phone', 'email', 'sector']),
@@ -177,14 +182,14 @@ describe('AccountsService', () => {
         accountTypes: ['CUSTOMER'],
       }),
     );
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     const result = await service.getById(ACCOUNT_ID);
     expect(result.missingCriticalFields).toEqual([]);
   });
 
   it('create: tenant sektor tanimlamamissa herhangi bir sektor kabul edilir', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create({ name: 'Acme', sector: 'Herhangi' } as never),
     ).resolves.toBeDefined();
@@ -195,7 +200,7 @@ describe('AccountsService', () => {
     prisma.sectorOption.findMany.mockResolvedValue([
       { id: 's1', label: 'Yazilim' },
     ]);
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create({ name: 'Acme', sector: 'Tarim' } as never),
     ).rejects.toMatchObject({
@@ -208,7 +213,7 @@ describe('AccountsService', () => {
     prisma.sectorOption.findMany.mockResolvedValue([
       { id: 's1', label: 'Yazilim' },
     ]);
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create({ name: 'Acme', sector: 'Yazilim' } as never),
     ).resolves.toBeDefined();
@@ -216,7 +221,7 @@ describe('AccountsService', () => {
 
   it('create: yetkili kisi (contact) birlikte gonderilirse ayni transaction icinde olusturulur', async () => {
     const prisma = createPrisma();
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await service.create({
       name: 'Acme',
       contact: {
@@ -241,7 +246,7 @@ describe('AccountsService', () => {
     prisma.titleOption.findMany.mockResolvedValue([
       { id: 't1', label: 'Satis Muduru' },
     ]);
-    const service = new AccountsService(prisma as never, fakeAudit);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create({
         name: 'Acme',

@@ -19,9 +19,17 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import { AppException } from '../../core/errors/app.exception';
 import { MAX_UPLOAD_SIZE_BYTES } from '../datasources/datasources.constants';
 import { detectDataSourceType } from '../datasources/file-signature';
-import type { ImportPreview, ImportResult } from './imports.service';
+import type {
+  ImportPreview,
+  ImportRawPreview,
+  ImportResult,
+} from './imports.service';
 import { ImportsService } from './imports.service';
-import { ImportMappingSchema } from './dto/import-mapping.dto';
+import {
+  AccountImportAttributeColumnsSchema,
+  HeaderRowIndexSchema,
+  ImportMappingSchema,
+} from './dto/import-mapping.dto';
 
 const UPLOAD_INTERCEPTOR = FileInterceptor('file', {
   limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
@@ -64,6 +72,39 @@ function parseMapping(raw: string | undefined): Record<string, string> {
   return result.data;
 }
 
+function parseJsonBody<T>(
+  raw: string | undefined,
+  schema: { safeParse: (v: unknown) => { success: boolean; data?: T } },
+  fieldLabel: string,
+): T {
+  if (!raw) {
+    throw new AppException(
+      'VALIDATION_ERROR',
+      `'${fieldLabel}' alani zorunludur.`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new AppException(
+      'VALIDATION_ERROR',
+      `'${fieldLabel}' alani gecerli JSON olmalidir.`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  const result = schema.safeParse(json);
+  if (!result.success || result.data === undefined) {
+    throw new AppException(
+      'VALIDATION_ERROR',
+      `'${fieldLabel}' alani gecersiz.`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return result.data;
+}
+
 @Controller('imports')
 export class ImportsController {
   constructor(private readonly imports: ImportsService) {}
@@ -79,16 +120,53 @@ export class ImportsController {
     );
   }
 
+  /**
+   * headerRowIndex verilmemisse ham satirlar doner (kullanici baslik satirini secer);
+   * verilmisse o satir baslik kabul edilip eslesme onizlemesi doner - product-imports'un
+   * preview ucuyla ayni desen (bkz. docs/VARSAYIMLAR.md V40).
+   */
+  @Post('accounts/preview')
+  @RequiresPermission('accounts', 'IMPORT')
+  @UseInterceptors(UPLOAD_INTERCEPTOR)
+  async previewAccounts(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('headerRowIndex') headerRowIndexRaw: string | undefined,
+  ): Promise<ImportRawPreview | ImportPreview> {
+    return this.withUploadedFile(file, async (filePath, type) => {
+      if (headerRowIndexRaw === undefined || headerRowIndexRaw === '') {
+        return this.imports.previewAccountsRaw(filePath, type);
+      }
+      const headerRowIndex = HeaderRowIndexSchema.parse(headerRowIndexRaw);
+      return this.imports.previewAccountsMapped(filePath, type, headerRowIndex);
+    });
+  }
+
   @Post('accounts')
   @RequiresPermission('accounts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importAccounts(
     @UploadedFile() file: Express.Multer.File,
+    @Body('headerRowIndex') headerRowIndexRaw: string | undefined,
     @Body('mapping') mappingRaw: string | undefined,
+    @Body('attributeColumns') attributeColumnsRaw: string | undefined,
   ): Promise<ImportResult> {
+    const headerRowIndex = HeaderRowIndexSchema.parse(headerRowIndexRaw ?? '0');
     const mapping = parseMapping(mappingRaw);
+    const attributeColumns = attributeColumnsRaw
+      ? parseJsonBody(
+          attributeColumnsRaw,
+          AccountImportAttributeColumnsSchema,
+          'attributeColumns',
+        )
+      : [];
     return this.withUploadedFile(file, (filePath, type) =>
-      this.imports.importAccounts(filePath, type, mapping),
+      this.imports.importAccounts(
+        filePath,
+        type,
+        headerRowIndex,
+        mapping,
+        attributeColumns,
+      ),
     );
   }
 

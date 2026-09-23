@@ -7,6 +7,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { AccountsCacheService } from './accounts-cache.service';
 import type {
   AccountQueryDto,
   CreateAccountDto,
@@ -62,9 +63,15 @@ export class AccountsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly cache: AccountsCacheService,
   ) {}
 
   async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const {
       page,
       pageSize,
@@ -128,10 +135,12 @@ export class AccountsService {
       this.prisma.account.count({ where }),
     ]);
 
-    return {
+    const result = {
       data: data.map(withMissingCriticalFields),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<AccountWithMeta> {
@@ -235,6 +244,7 @@ export class AccountsService {
       entityId: account.id,
       meta: { name: account.name },
     });
+    await this.cache.invalidate();
     return account;
   }
 
@@ -246,6 +256,7 @@ export class AccountsService {
       data: normalize(dto) as never,
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Account', entityId: id });
+    await this.cache.invalidate();
     return account;
   }
 
@@ -253,5 +264,6 @@ export class AccountsService {
     await this.getById(id);
     await this.prisma.account.delete({ where: { id } });
     await this.audit.log({ action: 'DELETE', entity: 'Account', entityId: id });
+    await this.cache.invalidate();
   }
 }

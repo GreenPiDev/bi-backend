@@ -3,6 +3,7 @@ import { InteractionsService } from './interactions.service';
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
+const fakeAccountsCache = { invalidate: vi.fn() } as never;
 
 const TENANT_ID = 'tenant-1';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -57,7 +58,11 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
 describe('InteractionsService', () => {
   it('getById: bulunamayan gorusme icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -65,7 +70,11 @@ describe('InteractionsService', () => {
 
   it('create: accountId verilmisse yeni cari olusturmaz', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
       type: 'CALL',
@@ -85,7 +94,11 @@ describe('InteractionsService', () => {
 
   it('create: M2 - accountName verilmisse otomatik cari olusturur ve isaretler', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.create(TENANT_ID, USER_ID, {
       accountName: 'Yeni Firma',
       type: 'VISIT',
@@ -104,7 +117,11 @@ describe('InteractionsService', () => {
 
   it('create: M1 - contactName verilmisse otomatik kontak olusturur', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
       contactName: 'Ahmet Yilmaz',
@@ -119,7 +136,11 @@ describe('InteractionsService', () => {
 
   it('create: firma bos, mevcut contactId verilmisse firma o kisinin carisinden alinir', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.create(TENANT_ID, USER_ID, {
       contactId: 'contact-1',
       type: 'CALL',
@@ -143,7 +164,11 @@ describe('InteractionsService', () => {
   it('create: firma bos, yeni contactName verilmisse firmasiz kisi olusturur', async () => {
     const prisma = createPrisma();
     prisma.contact.findUnique = vi.fn().mockResolvedValue({ accountId: null });
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.create(TENANT_ID, USER_ID, {
       contactName: 'Ahmet Yilmaz',
       type: 'CALL',
@@ -163,7 +188,11 @@ describe('InteractionsService', () => {
   it('create: firma yokken opportunity istenirse VALIDATION_ERROR firlatir', async () => {
     const prisma = createPrisma();
     prisma.contact.findUnique = vi.fn().mockResolvedValue({ accountId: null });
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await expect(
       service.create(TENANT_ID, USER_ID, {
         contactName: 'Ahmet Yilmaz',
@@ -178,7 +207,11 @@ describe('InteractionsService', () => {
 
   it('create: M3/O1 - opportunity verilmisse gomulu firsat olusturur ve baglar', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
       type: 'MEETING',
@@ -198,7 +231,11 @@ describe('InteractionsService', () => {
 
   it('create: M9 - gecmis tarihli hatirlatma REMINDER_PAST_DATE firlatir', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await expect(
       service.create(TENANT_ID, USER_ID, {
         accountId: ACCOUNT_ID,
@@ -216,7 +253,11 @@ describe('InteractionsService', () => {
 
   it('create: M4-M6 - cakisma yoksa hatirlatma etkinligi ve katilimcilari olusturur', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     const startAt = new Date(Date.now() + 60 * 60_000);
     const result = await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -243,7 +284,11 @@ describe('InteractionsService', () => {
       .fn()
       .mockResolvedValueOnce({ id: 'attendee-1' }) // ilk denemede meslgul
       .mockResolvedValue(null); // sonraki oneri slotu bos
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     const startAt = new Date(Date.now() + 60 * 60_000);
     const result = await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -259,7 +304,11 @@ describe('InteractionsService', () => {
 
   it('remove: gorusmeyi siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new InteractionsService(prisma as never, fakeAudit);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+    );
     await service.remove('interaction-1');
     expect(prisma.interaction.delete).toHaveBeenCalledWith({
       where: { id: 'interaction-1' },

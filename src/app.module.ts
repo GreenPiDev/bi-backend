@@ -17,6 +17,7 @@ import { AlertsModule } from './modules/alerts/alerts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CalendarEventsModule } from './modules/calendar-events/calendar-events.module';
+import { CacheModule } from './modules/cache/cache.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
@@ -81,6 +82,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     AccountsModule,
     ContactsModule,
     ImportsModule,
+    CacheModule,
     SectorOptionsModule,
     DepartmentOptionsModule,
     TitleOptionsModule,

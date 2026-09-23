@@ -12,6 +12,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { AuditService } from '../audit/audit.service';
 import type {
   CreateInteractionDto,
@@ -70,6 +71,7 @@ export class InteractionsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly accountsCache: AccountsCacheService,
   ) {}
 
   async list(
@@ -187,6 +189,7 @@ export class InteractionsService {
         )
       : [];
 
+    let accountWasCreated = false;
     const interaction = await this.prisma.$transaction(async (tx) => {
       let accountId = dto.accountId;
       let accountAutoCreated = false;
@@ -196,6 +199,7 @@ export class InteractionsService {
         });
         accountId = account.id;
         accountAutoCreated = true;
+        accountWasCreated = true;
       }
 
       let contactId = dto.contactId;
@@ -282,6 +286,9 @@ export class InteractionsService {
       entity: 'Interaction',
       entityId: interaction,
     });
+    if (accountWasCreated) {
+      await this.accountsCache.invalidate();
+    }
 
     return {
       interaction: await this.getById(interaction),

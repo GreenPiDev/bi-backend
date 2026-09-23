@@ -6,12 +6,17 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { CreateAccountSchema } from '../accounts/dto/account.dto';
 import { CreateContactSchema } from '../contacts/dto/contact.dto';
 import { FileParserService } from '../datasources/file-parser.service';
-import type { ImportMappingDto } from './dto/import-mapping.dto';
+import type {
+  AccountImportAttributeColumnsDto,
+  ImportMappingDto,
+} from './dto/import-mapping.dto';
 
 const PREVIEW_SAMPLE_SIZE = 10;
+const RAW_PREVIEW_ROW_COUNT = 14;
 
 export interface ImportRowError {
   row: number;
@@ -28,6 +33,10 @@ export interface ImportPreview {
   headers: string[];
   sampleRows: Record<string, string>[];
   totalRows: number;
+}
+
+export interface ImportRawPreview {
+  rows: string[][];
 }
 
 function rowsToRecords(
@@ -58,6 +67,18 @@ function applyMapping(
   return mapped;
 }
 
+/** Firma adlari ice aktarilirken TR locale'e gore buyuk harfe cevrilir (orn.
+ * "Abc Sirketi" -> "ABC ŞİRKETİ") - kullanici karari, farkli musteri
+ * dosyalarinda tutarli/aranabilir firma adlari icin. toLocaleUpperCase('tr-TR')
+ * kullanilir, JS'in varsayilan toUpperCase()'i degil - "i" harfini yanlis
+ * ("I" yerine "İ" olmasi gerekirken) buyutur (bkz. CLAUDE.md SS11 TR karakter
+ * tuzagi notu). */
+function uppercaseAccountName(mapped: Record<string, unknown>): void {
+  if (typeof mapped.name === 'string') {
+    mapped.name = mapped.name.toLocaleUpperCase('tr-TR');
+  }
+}
+
 function mappingIncompleteError(message: string): AppException {
   return new AppException(
     'MAPPING_INCOMPLETE',
@@ -71,13 +92,15 @@ export class ImportsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly fileParser: FileParserService,
+    private readonly accountsCache: AccountsCacheService,
   ) {}
 
   private async readRows(
     filePath: string,
     type: DataSourceType,
+    headerRowIndex = 0,
   ): Promise<{ headers: string[]; rows: string[][] }> {
-    const parsed = await this.fileParser.parse(filePath, type);
+    const parsed = await this.fileParser.parse(filePath, type, headerRowIndex);
     const rows: string[][] = [];
     for await (const row of parsed.rows) {
       rows.push(row);
@@ -98,25 +121,84 @@ export class ImportsService {
     };
   }
 
+  /**
+   * headerRowIndex secilmeden once ham onizleme - product-imports.service.ts'teki
+   * previewRaw ile birebir ayni desen (bkz. docs/VARSAYIMLAR.md V40).
+   */
+  async previewAccountsRaw(
+    filePath: string,
+    type: DataSourceType,
+  ): Promise<ImportRawPreview> {
+    const parsed = await this.fileParser.parse(filePath, type, 0);
+    const rows: string[][] = [parsed.headers];
+    let count = 0;
+    for await (const row of parsed.rows) {
+      if (count >= RAW_PREVIEW_ROW_COUNT) {
+        break;
+      }
+      rows.push(row);
+      count++;
+    }
+    return { rows };
+  }
+
+  async previewAccountsMapped(
+    filePath: string,
+    type: DataSourceType,
+    headerRowIndex: number,
+  ): Promise<ImportPreview> {
+    const { headers, rows } = await this.readRows(
+      filePath,
+      type,
+      headerRowIndex,
+    );
+    const records = rowsToRecords(headers, rows);
+    return {
+      headers,
+      sampleRows: records.slice(0, PREVIEW_SAMPLE_SIZE),
+      totalRows: records.length,
+    };
+  }
+
   async importAccounts(
     filePath: string,
     type: DataSourceType,
+    headerRowIndex: number,
     mapping: ImportMappingDto,
+    attributeColumns: AccountImportAttributeColumnsDto,
   ): Promise<ImportResult> {
     if (!mapping.name) {
       throw mappingIncompleteError("'name' alani bir sutuna eslenmelidir.");
     }
-    const { headers, rows } = await this.readRows(filePath, type);
+    const { headers, rows } = await this.readRows(
+      filePath,
+      type,
+      headerRowIndex,
+    );
     const records = rowsToRecords(headers, rows);
     const errors: ImportRowError[] = [];
     const validRows: Record<string, unknown>[] = [];
 
     records.forEach((record, index) => {
       const mapped = applyMapping(record, mapping);
+      uppercaseAccountName(mapped);
+
+      const customFields: Record<string, string> = {};
+      for (const column of attributeColumns) {
+        const value = record[column];
+        if (value) {
+          customFields[column] = value;
+        }
+      }
+      if (Object.keys(customFields).length > 0) {
+        mapped.customFields = customFields;
+      }
+
       const result = CreateAccountSchema.safeParse(mapped);
+      const fileRow = headerRowIndex + 2 + index;
       if (!result.success) {
         errors.push({
-          row: index + 2,
+          row: fileRow,
           messages: result.error.issues.map(
             (issue) => `${issue.path.join('.')}: ${issue.message}`,
           ),
@@ -128,6 +210,7 @@ export class ImportsService {
 
     if (validRows.length > 0) {
       await this.prisma.account.createMany({ data: validRows as never });
+      await this.accountsCache.invalidate();
     }
 
     return { totalRows: records.length, imported: validRows.length, errors };
