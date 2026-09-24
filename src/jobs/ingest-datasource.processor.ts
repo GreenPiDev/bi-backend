@@ -28,8 +28,14 @@ export class IngestDatasourceProcessor extends WorkerHost {
   }
 
   async process(job: Job<IngestJobPayload>): Promise<void> {
-    const { dataSourceId, tenantId, filePath, dataSourceType, datasetName } =
-      job.data;
+    const {
+      dataSourceId,
+      tenantId,
+      filePath,
+      dataSourceType,
+      datasetName,
+      headerRowIndex,
+    } = job.data;
     const datasetId = randomUUID();
 
     try {
@@ -38,7 +44,11 @@ export class IngestDatasourceProcessor extends WorkerHost {
         data: { status: 'PROCESSING' },
       });
 
-      const parsed = await this.fileParser.parse(filePath, dataSourceType);
+      const parsed = await this.fileParser.parse(
+        filePath,
+        dataSourceType,
+        headerRowIndex,
+      );
       const { sample, all } = await splitSample(
         parsed.rows,
         TYPE_INFERENCE_SAMPLE_SIZE,

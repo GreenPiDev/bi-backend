@@ -9,4 +9,5 @@ export interface IngestJobPayload {
   filePath: string;
   dataSourceType: DataSourceType;
   datasetName: string;
+  headerRowIndex: number;
 }

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import type { Dataset } from '@prisma/client';
 import {
   CurrentUser,
@@ -52,5 +62,15 @@ export class DatasetsController {
     @CurrentUser() user: RequestUser,
   ): Promise<DatasetWithFields> {
     return this.datasets.updateFields(id, user.tenantId, dto.fields);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequiresPermission('datasets', 'DELETE')
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.datasets.remove(id, user.tenantId);
   }
 }

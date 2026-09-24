@@ -294,6 +294,7 @@ model DataSource {
   sizeBytes        Int
   status           DataSourceStatus @default(PENDING)
   errorMessage     String?
+  headerRowIndex   Int              @default(0)
   createdById      String
   createdAt        DateTime         @default(now())
 

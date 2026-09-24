@@ -14,12 +14,19 @@ import {
 } from '../../jobs/ingest-queue.constants';
 import { AuditService } from '../audit/audit.service';
 import { detectDataSourceType } from './file-signature';
+import { FileParserService } from './file-parser.service';
+
+const RAW_PREVIEW_ROW_COUNT = 14;
 
 export interface DataSourceStatusView {
   id: string;
   status: DataSourceStatus;
   errorMessage: string | null;
   datasetId: string | null;
+}
+
+export interface DataSourceRawPreview {
+  rows: string[][];
 }
 
 @Injectable()
@@ -29,11 +36,42 @@ export class DatasourcesService {
     @InjectQueue(INGEST_QUEUE)
     private readonly ingestQueue: Queue<IngestJobPayload>,
     private readonly audit: AuditService,
+    private readonly fileParser: FileParserService,
   ) {}
+
+  /**
+   * headerRowIndex secilmeden once ham onizleme: satir 1 baslik varsayimiyla okunur,
+   * ilk satirlarin tumu (baslik dahil) aynen gosterilir - kullanici hangi satirin
+   * gercek baslik oldugunu goze bakarak secer (product-imports.service.ts'teki
+   * previewRaw ile ayni desen, bkz. docs/VARSAYIMLAR.md V40).
+   */
+  async previewRaw(file: Express.Multer.File): Promise<DataSourceRawPreview> {
+    try {
+      const type = await detectDataSourceType(
+        file.originalname,
+        file.mimetype,
+        file.path,
+      );
+      const parsed = await this.fileParser.parse(file.path, type, 0);
+      const rows: string[][] = [parsed.headers];
+      let count = 0;
+      for await (const row of parsed.rows) {
+        if (count >= RAW_PREVIEW_ROW_COUNT) {
+          break;
+        }
+        rows.push(row);
+        count++;
+      }
+      return { rows };
+    } finally {
+      await fsPromises.unlink(file.path).catch(() => undefined);
+    }
+  }
 
   async upload(
     file: Express.Multer.File,
     name: string | undefined,
+    headerRowIndex: number,
     tenantId: string,
     userId: string,
   ): Promise<{ id: string }> {
@@ -59,6 +97,7 @@ export class DatasourcesService {
         originalFileName: file.originalname,
         sizeBytes: file.size,
         status: 'PENDING',
+        headerRowIndex,
         createdById: userId,
       },
     });
@@ -70,6 +109,7 @@ export class DatasourcesService {
       filePath: file.path,
       dataSourceType: type,
       datasetName,
+      headerRowIndex,
     });
 
     await this.audit.log({

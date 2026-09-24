@@ -35,7 +35,7 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'datasets',
     label: 'Veri Kumeleri',
-    supportedActions: ['CREATE', 'UPDATE'],
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
   {
     key: 'accounts',

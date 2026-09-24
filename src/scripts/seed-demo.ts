@@ -319,6 +319,7 @@ async function ingestSector(
     filePath,
     dataSourceType: 'CSV',
     datasetName: plan.datasetName,
+    headerRowIndex: 0,
   };
   await processor.process({ data: payload } as Job<IngestJobPayload>);
 

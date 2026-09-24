@@ -123,6 +123,45 @@ export class DatasetsService {
     return this.requireDataset(id);
   }
 
+  async remove(id: string, tenantId: string): Promise<void> {
+    const dataset = await this.requireDataset(id);
+
+    if (dataset.sourceKind === 'CRM_TABLE') {
+      throw new AppException(
+        'CRM_DATASET_READONLY',
+        'Bu veri kumesi sistem tarafindan yonetilir, elle silinemez.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const widgetUsingDataset = await this.prisma.widget.findFirst({
+      where: {
+        querySpec: { path: ['datasetId'], equals: id },
+        dashboard: { tenantId },
+      },
+    });
+    if (widgetUsingDataset) {
+      throw new AppException(
+        'DATASET_IN_USE',
+        "Bu veri kumesi bir veya daha fazla panoda kullaniliyor. Silmeden once ilgili widget'lari kaldirin.",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.rawSql.dropTable(tenantId, id);
+    await this.prisma.$transaction([
+      this.prisma.datasetField.deleteMany({ where: { datasetId: id } }),
+      this.prisma.dataset.delete({ where: { id } }),
+    ]);
+    await this.queryCache.invalidateDataset(tenantId, id);
+    await this.audit.log({
+      action: 'DELETE',
+      entity: 'Dataset',
+      entityId: id,
+      meta: { name: dataset.name },
+    });
+  }
+
   private async requireDataset(id: string): Promise<DatasetWithFields> {
     const dataset = await this.prisma.dataset.findFirst({
       where: { id },

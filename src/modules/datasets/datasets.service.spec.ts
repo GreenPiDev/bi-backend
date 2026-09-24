@@ -36,10 +36,16 @@ function createPrisma(datasetRow: unknown = createDatasetRow()) {
     dataset: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(datasetRow),
+      delete: vi.fn().mockResolvedValue({}),
     },
     datasetField: {
       update: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({}),
     },
+    widget: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
 }
 
@@ -49,6 +55,7 @@ function createRawSql() {
     alterColumnType: vi.fn().mockResolvedValue(undefined),
     previewRows: vi.fn().mockResolvedValue({ columns: [], rows: [] }),
     previewView: vi.fn().mockResolvedValue({ columns: [], rows: [] }),
+    dropTable: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -258,5 +265,61 @@ describe('DatasetsService', () => {
         isVisible: false,
       }),
     });
+  });
+
+  it('remove: kullanimda olmayan UPLOAD dataset icin tabloyu ve kayitlari siler', async () => {
+    const prisma = createPrisma();
+    const rawSql = createRawSql();
+    const queryCache = createQueryCache();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      queryCache as never,
+      fakeAudit,
+    );
+    await service.remove(DATASET_ID, TENANT_ID);
+    expect(rawSql.dropTable).toHaveBeenCalledWith(TENANT_ID, DATASET_ID);
+    expect(prisma.datasetField.deleteMany).toHaveBeenCalledWith({
+      where: { datasetId: DATASET_ID },
+    });
+    expect(prisma.dataset.delete).toHaveBeenCalledWith({
+      where: { id: DATASET_ID },
+    });
+    expect(queryCache.invalidateDataset).toHaveBeenCalledWith(
+      TENANT_ID,
+      DATASET_ID,
+    );
+  });
+
+  it('remove: CRM_TABLE dataset icin CRM_DATASET_READONLY firlatir', async () => {
+    const prisma = createPrisma(createCrmDatasetRow());
+    const rawSql = createRawSql();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+      fakeAudit,
+    );
+    await expect(service.remove(DATASET_ID, TENANT_ID)).rejects.toMatchObject({
+      code: 'CRM_DATASET_READONLY',
+    } satisfies Partial<AppException>);
+    expect(rawSql.dropTable).not.toHaveBeenCalled();
+  });
+
+  it('remove: bir widget tarafindan kullaniliyorsa DATASET_IN_USE firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.widget.findFirst.mockResolvedValue({ id: 'w1' });
+    const rawSql = createRawSql();
+    const service = new DatasetsService(
+      prisma as never,
+      rawSql as never,
+      createQueryCache() as never,
+      fakeAudit,
+    );
+    await expect(service.remove(DATASET_ID, TENANT_ID)).rejects.toMatchObject({
+      code: 'DATASET_IN_USE',
+    } satisfies Partial<AppException>);
+    expect(rawSql.dropTable).not.toHaveBeenCalled();
+    expect(prisma.dataset.delete).not.toHaveBeenCalled();
   });
 });

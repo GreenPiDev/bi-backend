@@ -64,6 +64,7 @@ export class OnboardingService {
       filePath,
       dataSourceType: 'CSV',
       datasetName: DEMO_DATASET_NAME,
+      headerRowIndex: 0,
     });
 
     return { id: dataSource.id };
