@@ -14,6 +14,10 @@ import {
 } from '../../core/permissions/system-role-names';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { generateTemporaryPassword } from '../../core/security/temporary-password';
+import { FileUrlService } from '../../core/storage/file-url.service';
+import { R2StorageService } from '../../core/storage/r2-storage.service';
+import { detectImageExtension } from '../../core/validators/image-upload-validation';
+import { AuditService } from '../audit/audit.service';
 import { slugify } from './slugify';
 
 export interface CreateTenantWithAdminInput {
@@ -44,11 +48,20 @@ export interface TenantModuleStatus {
   enabled: boolean;
 }
 
+export interface TenantProfile {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
+
 @Injectable()
 export class TenantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pageModules: PageModulesService,
+    private readonly audit: AuditService,
+    private readonly storage: R2StorageService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   async createTenantWithUniqueSlug(
@@ -248,6 +261,78 @@ export class TenantsService {
       create: { tenantId, moduleKey: definition.key, disabledAt: new Date() },
       update: { disabledAt: new Date() },
     });
+  }
+
+  private toProfile(tenant: {
+    id: string;
+    name: string;
+    logoKey: string | null;
+    updatedAt: Date;
+  }): TenantProfile {
+    return {
+      id: tenant.id,
+      name: tenant.name,
+      logoUrl: this.fileUrl.build(tenant.logoKey, tenant.updatedAt),
+    };
+  }
+
+  async getProfile(tenantId: string): Promise<TenantProfile> {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+    return this.toProfile(tenant);
+  }
+
+  /** Sirket logosu - kullanici avatariyla ayni desen (bkz. UsersService.uploadAvatar):
+   * tek bir gorsel oldugu icin anahtar tenant'a gore deterministik, secilince aninda
+   * yuklenir. */
+  async uploadLogo(
+    tenantId: string,
+    file: { mimetype: string; buffer: Buffer },
+  ): Promise<TenantProfile> {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+    const ext = detectImageExtension(file.mimetype, file.buffer);
+    const env =
+      process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    const key = `PILENS/${env}/${tenantId}/branding/logo.${ext}`;
+
+    await this.storage.upload(key, file.buffer, file.mimetype);
+    if (tenant.logoKey && tenant.logoKey !== key) {
+      await this.storage.delete(tenant.logoKey);
+    }
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { logoKey: key },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Tenant',
+      entityId: tenantId,
+      meta: { logoUploaded: true },
+    });
+    return this.toProfile(updated);
+  }
+
+  async removeLogo(tenantId: string): Promise<TenantProfile> {
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+    if (tenant.logoKey) {
+      await this.storage.delete(tenant.logoKey);
+    }
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { logoKey: null },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Tenant',
+      entityId: tenantId,
+      meta: { logoRemoved: true },
+    });
+    return this.toProfile(updated);
   }
 
   private requireToggleableModule(moduleKey: string) {

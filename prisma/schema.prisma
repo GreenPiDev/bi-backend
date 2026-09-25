@@ -133,7 +133,11 @@ model Tenant {
   name      String
   slug      String   @unique
   plan      String   @default("trial")
+  /** Sirket logosu (R2 storage key) - kullanici avatariyla ayni desen
+   * (bkz. R2StorageService doc comment'i), /settings?tab=crm'de yonetilir. */
+  logoKey   String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   users             User[]
   dataSources       DataSource[]
@@ -149,6 +153,8 @@ model Tenant {
   departmentOptions DepartmentOption[]
   titleOptions      TitleOption[]
   productCategoryOptions ProductCategoryOption[]
+  paymentMethodOptions PaymentMethodOption[]
+  ibanOptions       IbanOption[]
   settings          TenantSetting[]
   roles             Role[]
   calendarEvents    CalendarEvent[]
@@ -553,6 +559,44 @@ model ProductCategoryOption {
 }
 
 /**
+ * Teklif "odeme yontemi" alani icin tenant'in tanimladigi liste - Sektor/Departman/
+ * Unvan/Urun Kategorisi ile ayni desen. Quote.paymentMethod bu listedeki label'a
+ * karsi dogrulanir (bkz. QuotesService.assertValidPaymentMethod).
+ */
+model PaymentMethodOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_payment_method_options")
+}
+
+/**
+ * Teklifin "banka bilgileri" bolumu icin tenant'in tanimladigi IBAN listesi.
+ * Quote secilen bir IbanOption'in 4 alanini olusturma/guncelleme aninda kendi
+ * uzerine kopyalar (bkz. QuotesService.resolveIbanSnapshot) - Q3'teki
+ * unitPrice'in Product.price'tan kopyalanmasiyla ayni desen, boylece IbanOption
+ * sonradan degistirilse/silinse bile mevcut teklifler etkilenmez.
+ */
+model IbanOption {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  bankName           String
+  accountHolderName  String
+  accountNumber      String?
+  iban               String
+  createdAt          DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("crm_iban_options")
+}
+
+/**
  * Genel amacli tenant bazli anahtar-deger ayar deposu (K2 esigi buradan okunur).
  */
 model TenantSetting {
@@ -790,6 +834,26 @@ model Quote {
    */
   contactId    String?
   quoteNumber  String
+  /** Kullanicinin teklife elle verdigi tarih - quoteNumber'in gun-icinde-sayaci
+   * (sistemin "simdi"si) ile karistirilmamali, teklif belgesinde gorunen tarih
+   * kullanici tarafindan gecmis/gelecek bir gune ayarlanabilir. */
+  quoteDate    DateTime    @default(now())
+  /** Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta". */
+  leadTime     String?
+  /** Tenant'in crm_payment_method_options listesine karsi dogrulanir (bkz.
+   * QuotesService.assertValidPaymentMethod, sektor alaniyla ayni desen). */
+  paymentMethod String?
+  title         String?
+  salesTerms    String?
+  deliveryTerms String?
+  /**
+   * Secilen IbanOption'in 4 alani olusturma/guncelleme aninda buraya kopyalanir
+   * (bkz. IbanOption doc comment'i) - FK degil, snapshot.
+   */
+  ibanBankName          String?
+  ibanAccountHolderName String?
+  ibanAccountNumber     String?
+  ibanNumber            String?
   status       QuoteStatus @default(DRAFT)
   approvedAt   DateTime?
   approvedById String?

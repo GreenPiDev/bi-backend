@@ -134,6 +134,65 @@ export class QuotesService {
     return { id: postSaleCase.id, contactId: postSaleCase.contactId };
   }
 
+  /** Odeme yontemi, tenant'in tanimladigi listeye karsi dogrulanir - sektor
+   * alaniyla ayni desen (bkz. AccountsService.assertValidSector). Tenant henuz
+   * hic odeme yontemi tanimlamadiysa serbest metin kabul edilir. */
+  private async assertValidPaymentMethod(
+    paymentMethod: string | undefined,
+  ): Promise<void> {
+    if (!paymentMethod) {
+      return;
+    }
+    const options = await this.prisma.paymentMethodOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === paymentMethod)) {
+      throw new AppException(
+        'INVALID_PAYMENT_METHOD',
+        'Belirtilen odeme yontemi tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /** Secilen IbanOption'in 4 alanini teklife kopyalanacak sekilde doner - FK degil,
+   * QuoteItem.unitPrice ile ayni "olusturma anindaki degeri koru" deseni (bkz.
+   * IbanOption doc comment'i). ibanOptionId verilmezse tum alanlar null doner. */
+  private async resolveIbanSnapshot(
+    ibanOptionId: string | null | undefined,
+  ): Promise<{
+    ibanBankName: string | null;
+    ibanAccountHolderName: string | null;
+    ibanAccountNumber: string | null;
+    ibanNumber: string | null;
+  }> {
+    if (!ibanOptionId) {
+      return {
+        ibanBankName: null,
+        ibanAccountHolderName: null,
+        ibanAccountNumber: null,
+        ibanNumber: null,
+      };
+    }
+    const option = await this.prisma.ibanOption.findFirst({
+      where: { id: ibanOptionId },
+    });
+    if (!option) {
+      throw new AppException(
+        'IBAN_NOT_FOUND',
+        'Secilen IBAN tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return {
+      ibanBankName: option.bankName,
+      ibanAccountHolderName: option.accountHolderName,
+      ibanAccountNumber: option.accountNumber,
+      ibanNumber: option.iban,
+    };
+  }
+
   /**
    * Q3/Q4/Q5/Q7: satir basina birim fiyati (Product.price ya da manuel ezme) ve
    * iskonto notunu belirler, ayrica ProductDiscountPolicy (Product.maxDiscountPct)
@@ -239,6 +298,9 @@ export class QuotesService {
     createdById: string,
     dto: CreateQuoteDto,
   ): Promise<QuoteWithDetails> {
+    await this.assertValidPaymentMethod(dto.paymentMethod);
+    const ibanSnapshot = await this.resolveIbanSnapshot(dto.ibanOptionId);
+
     const { quoteId } = await this.prisma.$transaction(async (tx) => {
       if (dto.contactId) {
         const contact = await tx.contact.findFirst({
@@ -272,6 +334,13 @@ export class QuotesService {
               accountId: dto.accountId,
               contactId: dto.contactId ?? null,
               quoteNumber,
+              quoteDate: dto.quoteDate,
+              leadTime: dto.leadTime ?? null,
+              paymentMethod: dto.paymentMethod ?? null,
+              title: dto.title ?? null,
+              salesTerms: dto.salesTerms ?? null,
+              deliveryTerms: dto.deliveryTerms ?? null,
+              ...ibanSnapshot,
               status: 'DRAFT',
               createdById,
               items: { create: items },
@@ -340,11 +409,30 @@ export class QuotesService {
         HttpStatus.CONFLICT,
       );
     }
+    await this.assertValidPaymentMethod(dto.paymentMethod ?? undefined);
+    const ibanOptionIdProvided = dto.ibanOptionId !== undefined;
+    const ibanSnapshot = ibanOptionIdProvided
+      ? await this.resolveIbanSnapshot(dto.ibanOptionId)
+      : null;
 
     const contactIdProvided = dto.contactId !== undefined;
-    const contactUpdateData = contactIdProvided
-      ? { contactId: dto.contactId ?? null }
-      : {};
+    const contactUpdateData = {
+      ...(contactIdProvided ? { contactId: dto.contactId ?? null } : {}),
+      ...(dto.quoteDate !== undefined ? { quoteDate: dto.quoteDate } : {}),
+      ...(dto.leadTime !== undefined ? { leadTime: dto.leadTime ?? null } : {}),
+      ...(dto.paymentMethod !== undefined
+        ? { paymentMethod: dto.paymentMethod ?? null }
+        : {}),
+      ...(dto.title !== undefined ? { title: dto.title ?? null } : {}),
+      ...(dto.salesTerms !== undefined
+        ? { salesTerms: dto.salesTerms ?? null }
+        : {}),
+      ...(dto.deliveryTerms !== undefined
+        ? { deliveryTerms: dto.deliveryTerms ?? null }
+        : {}),
+      ...(ibanSnapshot ?? {}),
+    };
+    const hasFieldUpdates = Object.keys(contactUpdateData).length > 0;
 
     const postSaleCase = await this.prisma.$transaction(async (tx) => {
       if (contactIdProvided && dto.contactId) {
@@ -370,7 +458,7 @@ export class QuotesService {
 
       const nextStatus = dto.status ?? existing.status;
       if (nextStatus === existing.status) {
-        if (contactIdProvided) {
+        if (hasFieldUpdates) {
           await tx.quote.update({ where: { id }, data: contactUpdateData });
         }
         return null;

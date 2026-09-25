@@ -26,12 +26,14 @@ import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { DepartmentOptionsModule } from './modules/department-options/department-options.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
+import { IbanOptionsModule } from './modules/iban-options/iban-options.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
+import { PaymentMethodOptionsModule } from './modules/payment-method-options/payment-method-options.module';
 import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { ProductImportsModule } from './modules/product-imports/product-imports.module';
@@ -88,6 +90,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     DepartmentOptionsModule,
     TitleOptionsModule,
     ProductCategoriesModule,
+    PaymentMethodOptionsModule,
+    IbanOptionsModule,
     TenantSettingsModule,
     CalendarEventsModule,
     InteractionsModule,

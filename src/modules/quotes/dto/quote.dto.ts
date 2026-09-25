@@ -45,6 +45,19 @@ export const CreateQuoteSchema = z.object({
     .min(1, 'En az bir urun satiri eklenmelidir.')
     .max(200),
   opportunity: QuoteOpportunityInputSchema.optional(),
+  /** Kullanicinin elle girdigi teklif tarihi - quoteNumber'in gun-icinde-sayaci
+   * icin kullandigi sistem tarihinden bagimsizdir. */
+  quoteDate: z.coerce.date(),
+  /** Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta". */
+  leadTime: z.string().trim().max(200).optional(),
+  /** Tenant'in tanimladigi listeye karsi dogrulanir, bkz. QuotesService.assertValidPaymentMethod. */
+  paymentMethod: z.string().trim().max(200).optional(),
+  title: z.string().trim().max(200).optional(),
+  salesTerms: z.string().trim().max(4000).optional(),
+  deliveryTerms: z.string().trim().max(4000).optional(),
+  /** Tenant'in crm_iban_options listesinden secilir, 4 alani teklife kopyalanir
+   * (bkz. QuotesService.resolveIbanSnapshot). */
+  ibanOptionId: z.string().uuid().optional(),
 });
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
@@ -55,6 +68,15 @@ export const UpdateQuoteSchema = z.object({
   status: QuoteStatusSchema.optional(),
   /** null verilirse muhatap kisi kaldirilir, alan hic verilmezse mevcut deger korunur. */
   contactId: z.string().uuid().nullable().optional(),
+  quoteDate: z.coerce.date().optional(),
+  /** null verilirse alan temizlenir, hic verilmezse mevcut deger korunur. */
+  leadTime: z.string().trim().max(200).nullable().optional(),
+  paymentMethod: z.string().trim().max(200).nullable().optional(),
+  title: z.string().trim().max(200).nullable().optional(),
+  salesTerms: z.string().trim().max(4000).nullable().optional(),
+  deliveryTerms: z.string().trim().max(4000).nullable().optional(),
+  /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger korunur. */
+  ibanOptionId: z.string().uuid().nullable().optional(),
 });
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
 

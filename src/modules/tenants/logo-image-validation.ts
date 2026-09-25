@@ -1,0 +1,1 @@
+export const MAX_LOGO_IMAGE_SIZE_BYTES = 1.5 * 1024 * 1024;
