@@ -94,6 +94,14 @@ export type UpdateInteractionDto = z.infer<typeof UpdateInteractionSchema>;
 
 export const InteractionQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
+  contactId: z.string().uuid().optional(),
+  createdById: z.string().uuid().optional(),
+  type: InteractionTypeSchema.optional(),
   status: z.enum(['OPEN', 'CLOSED']).optional(),
+  /** Gorusme tarihi filtresi (liste sayfasi filtre penceresi) - hem tek tarih ("su
+   * tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de bu ayni
+   * from/to ciftine cevrilir - bkz. opportunity.dto.ts'teki ayni desen. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 export type InteractionQueryDto = z.infer<typeof InteractionQuerySchema>;

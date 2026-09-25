@@ -99,10 +99,30 @@ export class InteractionsService {
     }));
   }
 
+  /** Filtre panelindeki "Oluşturan" seçicisini besler - calendar-events'teki
+   * listAssignableUsers ile ayni desen. */
+  async listCreators(): Promise<{ id: string; name: string }[]> {
+    return this.prisma.user.findMany({
+      where: { isActive: true, isPlatformAdmin: false },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async list(
     query: InteractionQueryDto,
   ): Promise<PagedResult<InteractionWithDetails>> {
-    const { page, pageSize, accountId, status } = query;
+    const {
+      page,
+      pageSize,
+      accountId,
+      contactId,
+      createdById,
+      type,
+      status,
+      from,
+      to,
+    } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'occurredAt',
       direction: 'desc',
@@ -110,7 +130,18 @@ export class InteractionsService {
 
     const where = {
       ...(accountId ? { accountId } : {}),
+      ...(contactId ? { contactId } : {}),
+      ...(createdById ? { createdById } : {}),
+      ...(type ? { type } : {}),
       ...(status ? { status } : {}),
+      ...(from || to
+        ? {
+            occurredAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([

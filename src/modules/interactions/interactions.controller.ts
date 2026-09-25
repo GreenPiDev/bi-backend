@@ -45,6 +45,12 @@ export class InteractionsController {
     return this.interactions.list(query);
   }
 
+  @Get('creators')
+  @RequiresPermission('interactions', 'VIEW')
+  listCreators(): Promise<{ id: string; name: string }[]> {
+    return this.interactions.listCreators();
+  }
+
   @Get(':id')
   @RequiresPermission('interactions', 'VIEW')
   getById(@Param('id') id: string): Promise<InteractionWithDetails> {
