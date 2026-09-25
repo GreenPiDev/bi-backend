@@ -79,6 +79,9 @@ function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
       update: vi.fn().mockResolvedValue(quoteRow),
       delete: vi.fn().mockResolvedValue(quoteRow),
     },
+    user: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx)),
     __tx: tx,
   };
