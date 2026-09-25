@@ -29,5 +29,6 @@ export type UpdatePurchaseOrderDto = z.infer<typeof UpdatePurchaseOrderSchema>;
 export const PurchaseOrderQuerySchema = ListQuerySchema.extend({
   quoteId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
+  status: PurchaseOrderStatusSchema.optional(),
 });
 export type PurchaseOrderQueryDto = z.infer<typeof PurchaseOrderQuerySchema>;

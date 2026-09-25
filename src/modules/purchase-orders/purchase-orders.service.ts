@@ -48,7 +48,7 @@ export class PurchaseOrdersService {
       return cached;
     }
 
-    const { page, pageSize, quoteId, projectId } = query;
+    const { page, pageSize, quoteId, projectId, status } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -57,6 +57,7 @@ export class PurchaseOrdersService {
     const where = {
       ...(quoteId ? { quoteId } : {}),
       ...(projectId ? { projectId } : {}),
+      ...(status ? { status } : {}),
     };
 
     const [data, total] = await Promise.all([
