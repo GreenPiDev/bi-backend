@@ -1,8 +1,11 @@
 import { CheckPostSaleFollowupProcessor } from './check-post-sale-followup.processor';
 
+const fakePostSaleCasesCache = { invalidateForTenant: vi.fn() } as never;
+
 function createDueCase(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'psc-1',
+    tenantId: 'tenant-1',
     quoteId: 'quote-1',
     reminderAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     reminderSentAt: null,
@@ -41,6 +44,7 @@ describe('CheckPostSaleFollowupProcessor', () => {
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await processor.process();
 
@@ -64,6 +68,7 @@ describe('CheckPostSaleFollowupProcessor', () => {
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await processor.process();
 
@@ -77,6 +82,7 @@ describe('CheckPostSaleFollowupProcessor', () => {
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await expect(processor.process()).resolves.toBeUndefined();
   });

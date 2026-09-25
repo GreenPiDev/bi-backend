@@ -7,6 +7,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { ProductsCacheService } from './products-cache.service';
 import type {
   CreateProductDto,
   ProductQueryDto,
@@ -24,9 +25,15 @@ export class ProductsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly cache: ProductsCacheService,
   ) {}
 
   async list(query: ProductQueryDto): Promise<PagedResult<ProductView>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, q, productListId } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'name',
@@ -56,10 +63,12 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
-    return {
+    const result = {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<ProductView> {
@@ -93,6 +102,7 @@ export class ProductsService {
       entityId: product.id,
       meta: { name: product.name },
     });
+    await this.cache.invalidate();
     return product;
   }
 
@@ -104,6 +114,7 @@ export class ProductsService {
       include: { productList: true },
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Product', entityId: id });
+    await this.cache.invalidate();
     return product;
   }
 
@@ -111,5 +122,6 @@ export class ProductsService {
     await this.findOrThrow(id);
     await this.prisma.product.delete({ where: { id } });
     await this.audit.log({ action: 'DELETE', entity: 'Product', entityId: id });
+    await this.cache.invalidate();
   }
 }

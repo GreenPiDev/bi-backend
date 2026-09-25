@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from '../modules/auth/auth.module';
 import { DatasourcesModule } from '../modules/datasources/datasources.module';
 import { ExportsModule } from '../modules/exports/exports.module';
+import { PostSaleCasesModule } from '../modules/post-sale-cases/post-sale-cases.module';
 import { QueryModule } from '../modules/query/query.module';
 import { ALERTS_QUEUE } from './alerts-queue.constants';
 import { AlertsSchedulerBootstrap } from './alerts-scheduler.bootstrap';
@@ -44,6 +45,7 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     AuthModule,
     ExportsModule,
     QueryModule,
+    PostSaleCasesModule,
   ],
   providers: [
     IngestDatasourceProcessor,

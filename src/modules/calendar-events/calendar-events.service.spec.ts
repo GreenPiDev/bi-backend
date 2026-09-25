@@ -3,6 +3,11 @@ import { CalendarEventsService } from './calendar-events.service';
 
 const fakeAudit = { log: vi.fn() } as never;
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
+const fakeCalendarEventsCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 const EVENT_ID = '11111111-1111-1111-1111-111111111111';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -53,6 +58,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -65,6 +71,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -86,6 +93,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -108,6 +116,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await expect(
       service.update('yok', { title: 'x' } as never),
@@ -122,6 +131,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await service.update(EVENT_ID, {
       attendees: [{ userId: USER_ID }],
@@ -144,6 +154,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await service.update(EVENT_ID, { title: 'Yeni baslik' } as never);
     expect(prisma.calendarEventAttendee.deleteMany).not.toHaveBeenCalled();
@@ -160,6 +171,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await service.remove(EVENT_ID);
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({
@@ -173,6 +185,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     const result = await service.listAssignableUsers();
     expect(prisma.user.findMany).toHaveBeenCalledWith({
@@ -193,6 +206,7 @@ describe('CalendarEventsService', () => {
       prisma as never,
       fakeAudit,
       fakeFileUrl,
+      fakeCalendarEventsCache,
     );
     await service.list({ from, to, order: 'asc' });
     expect(prisma.calendarEvent.findMany).toHaveBeenCalledWith({

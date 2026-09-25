@@ -3,6 +3,11 @@ import { PurchaseOrdersService } from './purchase-orders.service';
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
+const fakeCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -91,7 +96,11 @@ describe('PurchaseOrdersService', () => {
 
   it('getById: bulunamayan siparis icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ purchaseOrderRow: null });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -101,7 +110,11 @@ describe('PurchaseOrdersService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
     });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await expect(
       service.createFromQuote('user-1', 'quote-1'),
     ).rejects.toMatchObject({ code: 'QUOTE_NOT_APPROVED' });
@@ -109,7 +122,11 @@ describe('PurchaseOrdersService', () => {
 
   it('createFromQuote: teklif bulunamazsa NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ quoteRow: null });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await expect(
       service.createFromQuote('user-1', 'yok'),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -117,7 +134,11 @@ describe('PurchaseOrdersService', () => {
 
   it('createFromQuote: stok yoksa teklif miktari kadar kalem miktari uretir (SP2)', async () => {
     const prisma = createPrisma({ stockItems: [] });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await service.createFromQuote('user-1', 'quote-1');
 
     const tx = (
@@ -158,7 +179,11 @@ describe('PurchaseOrdersService', () => {
         { productId: 'product-2', quantity: '1.000' },
       ],
     });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await service.createFromQuote('user-1', 'quote-1');
 
     const tx = (
@@ -182,7 +207,11 @@ describe('PurchaseOrdersService', () => {
 
   it('createFromQuote: quoteId ile eslesen bir Project varsa projectId setler (SP1 akis notu)', async () => {
     const prisma = createPrisma({ projectRow: { id: 'project-1' } });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await service.createFromQuote('user-1', 'quote-1');
 
     const tx = (
@@ -199,7 +228,11 @@ describe('PurchaseOrdersService', () => {
 
   it('createFromQuote: SIP-YYYY-AA-GG-NNN formatinda numara uretir', async () => {
     const prisma = createPrisma();
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await service.createFromQuote('user-1', 'quote-1');
 
     const tx = (
@@ -218,7 +251,11 @@ describe('PurchaseOrdersService', () => {
 
   it('update: bulunamayan siparis icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ purchaseOrderRow: null });
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await expect(
       service.update('yok', { status: 'CONFIRMED' } as never),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -226,7 +263,11 @@ describe('PurchaseOrdersService', () => {
 
   it('update: items verilirse eski kalemleri silip yenilerini yazar (kaynak dogrulamasi DTO seviyesinde)', async () => {
     const prisma = createPrisma();
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await service.update('po-1', {
       items: [
         {
@@ -267,7 +308,11 @@ describe('PurchaseOrdersService', () => {
 
   it('remove: siparisi siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new PurchaseOrdersService(prisma as never, fakeAudit);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
     await service.remove('po-1');
     expect(prisma.purchaseOrder.delete).toHaveBeenCalledWith({
       where: { id: 'po-1' },

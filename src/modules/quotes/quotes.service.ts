@@ -22,10 +22,13 @@ import {
   SEND_POST_SALE_SURVEY_JOB,
 } from '../../jobs/post-sale-survey-queue.constants';
 import { AuditService } from '../audit/audit.service';
+import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
+import { PostSaleCasesCacheService } from '../post-sale-cases/post-sale-cases-cache.service';
 import {
   DEFAULT_POST_SALE_FOLLOW_UP_DAYS,
   POST_SALE_FOLLOW_UP_DAYS_KEY,
 } from '../tenant-settings/tenant-settings.constants';
+import { QuotesCacheService } from './quotes-cache.service';
 import type {
   CreateQuoteDto,
   QuoteItemInputDto,
@@ -85,6 +88,9 @@ export class QuotesService {
     private readonly audit: AuditService,
     @InjectQueue(POST_SALE_SURVEY_QUEUE)
     private readonly surveyQueue: Queue,
+    private readonly quotesCache: QuotesCacheService,
+    private readonly opportunitiesCache: OpportunitiesCacheService,
+    private readonly postSaleCasesCache: PostSaleCasesCacheService,
   ) {}
 
   /**
@@ -251,6 +257,11 @@ export class QuotesService {
   }
 
   async list(query: QuoteQueryDto): Promise<PagedResult<QuoteWithDetails>> {
+    const cached = await this.quotesCache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, accountId, status } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
@@ -273,10 +284,12 @@ export class QuotesService {
       this.prisma.quote.count({ where }),
     ]);
 
-    return {
+    const result = {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.quotesCache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<QuoteWithDetails> {
@@ -388,6 +401,10 @@ export class QuotesService {
       entity: 'Quote',
       entityId: quoteId,
     });
+    await this.quotesCache.invalidate();
+    if (dto.opportunity) {
+      await this.opportunitiesCache.invalidate();
+    }
     return this.getById(quoteId);
   }
 
@@ -506,6 +523,10 @@ export class QuotesService {
     });
 
     await this.audit.log({ action: 'UPDATE', entity: 'Quote', entityId: id });
+    await this.quotesCache.invalidate();
+    if (postSaleCase) {
+      await this.postSaleCasesCache.invalidate();
+    }
     if (postSaleCase?.contactId) {
       await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
         postSaleCaseId: postSaleCase.id,
@@ -518,6 +539,7 @@ export class QuotesService {
     await this.getById(id);
     await this.prisma.quote.delete({ where: { id } });
     await this.audit.log({ action: 'DELETE', entity: 'Quote', entityId: id });
+    await this.quotesCache.invalidate();
   }
 
   /** Q7: sadece onay bekleyen teklifler onaylanabilir/reddedilebilir. */
@@ -549,6 +571,8 @@ export class QuotesService {
       });
     });
     await this.audit.log({ action: 'APPROVE', entity: 'Quote', entityId: id });
+    await this.quotesCache.invalidate();
+    await this.postSaleCasesCache.invalidate();
     if (postSaleCase.contactId) {
       await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
         postSaleCaseId: postSaleCase.id,
@@ -564,6 +588,7 @@ export class QuotesService {
       data: { status: 'REJECTED', approvedAt: new Date(), approvedById },
     });
     await this.audit.log({ action: 'REJECT', entity: 'Quote', entityId: id });
+    await this.quotesCache.invalidate();
     return this.getById(id);
   }
 }

@@ -4,6 +4,17 @@ import { InteractionsService } from './interactions.service';
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
 const fakeAccountsCache = { invalidate: vi.fn() } as never;
+const fakeCalendarEventsCache = { invalidate: vi.fn() } as never;
+const fakeInteractionsCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
+const fakeOpportunitiesCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 const TENANT_ID = 'tenant-1';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -65,6 +76,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -77,6 +91,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -101,6 +118,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountName: 'Yeni Firma',
@@ -124,6 +144,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -143,6 +166,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.create(TENANT_ID, USER_ID, {
       contactId: 'contact-1',
@@ -171,6 +197,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.create(TENANT_ID, USER_ID, {
       contactName: 'Ahmet Yilmaz',
@@ -195,6 +224,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await expect(
       service.create(TENANT_ID, USER_ID, {
@@ -214,6 +246,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -238,6 +273,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await expect(
       service.create(TENANT_ID, USER_ID, {
@@ -260,6 +298,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     const startAt = new Date(Date.now() + 60 * 60_000);
     const result = await service.create(TENANT_ID, USER_ID, {
@@ -291,6 +332,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     const startAt = new Date(Date.now() + 60 * 60_000);
     const result = await service.create(TENANT_ID, USER_ID, {
@@ -311,6 +355,9 @@ describe('InteractionsService', () => {
       prisma as never,
       fakeAudit,
       fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
     );
     await service.remove('interaction-1');
     expect(prisma.interaction.delete).toHaveBeenCalledWith({

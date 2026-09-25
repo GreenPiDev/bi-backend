@@ -14,6 +14,7 @@ import {
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
+import { MessagesCacheService } from './messages-cache.service';
 import type { CreateMessageDto, MessageQueryDto } from './dto/message.dto';
 
 const SORTABLE_FIELDS = ['sentAt', 'createdAt'] as const;
@@ -63,12 +64,18 @@ export class MessagesService {
     private readonly audit: AuditService,
     private readonly realtime: RealtimeService,
     private readonly fileUrl: FileUrlService,
+    private readonly messagesCache: MessagesCacheService,
   ) {}
 
   async list(
     userId: string,
     query: MessageQueryDto,
   ): Promise<PagedResult<ConversationSummary>> {
+    const cached = await this.messagesCache.get(userId, query);
+    if (cached) {
+      return cached;
+    }
+
     const {
       page,
       pageSize,
@@ -246,10 +253,12 @@ export class MessagesService {
 
     await this.attachRelatedEntityLabels(data);
 
-    return {
+    const result = {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.messagesCache.set(userId, query, result);
+    return result;
   }
 
   /** Verilen konusma(lar) icin `relatedEntityLabel`'i doldurur - Quote icin numara,
@@ -426,6 +435,7 @@ export class MessagesService {
       recipientUserIds: created.recipients.map((recipient) => recipient.userId),
     });
 
+    await this.messagesCache.invalidate();
     return created;
   }
 
@@ -448,6 +458,7 @@ export class MessagesService {
       },
       data: { readAt: read ? new Date() : null },
     });
+    await this.messagesCache.invalidate();
   }
 
   /** Kisisel yildizlama - konusma bazli (bkz. MessageStar model yorumu). Once
@@ -474,6 +485,7 @@ export class MessagesService {
         where: { userId, conversationId },
       });
     }
+    await this.messagesCache.invalidate();
   }
 
   async listAssignableUsers(): Promise<

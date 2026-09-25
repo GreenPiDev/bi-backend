@@ -7,6 +7,7 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
+import { CalendarEventsCacheService } from './calendar-events-cache.service';
 import type {
   CalendarEventQueryDto,
   CreateCalendarEventDto,
@@ -23,6 +24,7 @@ export class CalendarEventsService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
     private readonly fileUrl: FileUrlService,
+    private readonly cache: CalendarEventsCacheService,
   ) {}
 
   /**
@@ -57,8 +59,13 @@ export class CalendarEventsService {
   async list(
     query: CalendarEventQueryDto,
   ): Promise<CalendarEventWithAttendees[]> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { from, to, order } = query;
-    return this.prisma.calendarEvent.findMany({
+    const result = await this.prisma.calendarEvent.findMany({
       where: {
         ...(to ? { startAt: { lte: to } } : {}),
         ...(from ? { endAt: { gte: from } } : {}),
@@ -66,6 +73,8 @@ export class CalendarEventsService {
       include: { attendees: true },
       orderBy: { startAt: order },
     });
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<CalendarEventWithAttendees> {
@@ -110,6 +119,7 @@ export class CalendarEventsService {
       entityId: event.id,
       meta: { title: event.title },
     });
+    await this.cache.invalidate();
     return event;
   }
 
@@ -140,6 +150,7 @@ export class CalendarEventsService {
       entity: 'CalendarEvent',
       entityId: id,
     });
+    await this.cache.invalidate();
     return event;
   }
 
@@ -151,5 +162,6 @@ export class CalendarEventsService {
       entity: 'CalendarEvent',
       entityId: id,
     });
+    await this.cache.invalidate();
   }
 }

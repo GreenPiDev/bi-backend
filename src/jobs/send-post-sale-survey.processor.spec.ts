@@ -1,5 +1,7 @@
 import { SendPostSaleSurveyProcessor } from './send-post-sale-survey.processor';
 
+const fakePostSaleCasesCache = { invalidateForTenant: vi.fn() } as never;
+
 function createCase(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'psc-1',
@@ -38,6 +40,7 @@ describe('SendPostSaleSurveyProcessor', () => {
     const processor = new SendPostSaleSurveyProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await processor.process(createJob());
 
@@ -62,6 +65,7 @@ describe('SendPostSaleSurveyProcessor', () => {
     const processor = new SendPostSaleSurveyProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await processor.process(createJob());
 
@@ -79,6 +83,7 @@ describe('SendPostSaleSurveyProcessor', () => {
     const processor = new SendPostSaleSurveyProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await processor.process(createJob());
 
@@ -91,6 +96,7 @@ describe('SendPostSaleSurveyProcessor', () => {
     const processor = new SendPostSaleSurveyProcessor(
       prisma as never,
       mail as never,
+      fakePostSaleCasesCache,
     );
     await processor.process(createJob());
 

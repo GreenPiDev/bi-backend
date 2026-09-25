@@ -60,10 +60,10 @@ export class SendInteractionRemindersProcessor extends WorkerHost {
   private async notify(attendee: {
     id: string;
     userId: string;
-    note: string | null;
     event: {
       id: string;
       title: string;
+      description: string | null;
       relatedEntityId: string | null;
       attendees: { userId: string }[];
     };
@@ -101,8 +101,8 @@ export class SendInteractionRemindersProcessor extends WorkerHost {
       to: [user.email],
       cc: ccEmails.length > 0 ? ccEmails : undefined,
       subject: `PiLens - Hatirlatma: ${attendee.event.title}`,
-      text: attendee.note
-        ? `${attendee.event.title}\n\n${attendee.note}`
+      text: attendee.event.description
+        ? `${attendee.event.title}\n\n${attendee.event.description}`
         : attendee.event.title,
     });
 

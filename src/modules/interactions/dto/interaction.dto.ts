@@ -32,16 +32,20 @@ const NestedOpportunitySchema = z.object({
   estimatedValueCurrency: CurrencyCodeSchema.optional(),
 });
 
-/** M4-M6: hatirlatma - her atanan kullaniciya kendi notu, M9 gecmis tarih kisitina
+/** M4-M6: hatirlatma - tum atananlara ortak baslik/aciklama, M9 gecmis tarih kisitina
  * service katmaninda bakilir (create aninin "simdi"sine gore, occurredAt'a degil). */
 const ReminderSchema = z.object({
   startAt: z.coerce.date(),
-  title: z.string().trim().max(200).optional(),
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Hatirlatma basligi bos birakilamaz.')
+    .max(200),
+  description: z.string().trim().max(2000).optional(),
   assignees: z
     .array(
       z.object({
         userId: z.string().uuid(),
-        note: z.string().trim().max(1000).optional(),
       }),
     )
     .min(1)

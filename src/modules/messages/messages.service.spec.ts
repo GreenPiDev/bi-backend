@@ -7,6 +7,11 @@ const fakeAudit = { log: auditLog } as never;
 const emitToTenant = vi.fn();
 const fakeRealtime = { emitToTenant } as never;
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
+const fakeMessagesCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 const TENANT_ID = 'tenant-1';
 const SENDER_ID = '11111111-1111-1111-1111-111111111111';
@@ -72,6 +77,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.getById(CONVERSATION_ID, SENDER_ID),
@@ -88,6 +94,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.getById(CONVERSATION_ID, RECIPIENT_ID),
@@ -109,6 +116,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.getById(CONVERSATION_ID, SENDER_ID),
@@ -124,6 +132,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.getById(CONVERSATION_ID, BYSTANDER_ID),
@@ -139,6 +148,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(service.getById('yok', SENDER_ID)).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -152,6 +162,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -178,6 +189,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -213,6 +225,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -248,6 +261,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -278,6 +292,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -305,6 +320,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -322,6 +338,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -342,6 +359,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -367,6 +385,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -405,6 +424,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -437,6 +457,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.create(TENANT_ID, SENDER_ID, {
       subject: 'Konu',
@@ -478,6 +499,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.create(TENANT_ID, RECIPIENT_ID, {
       body: 'Cevap',
@@ -503,6 +525,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.create(TENANT_ID, BYSTANDER_ID, {
@@ -523,6 +546,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.setConversationRead(CONVERSATION_ID, BYSTANDER_ID),
@@ -538,6 +562,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
@@ -557,6 +582,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID, false);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
@@ -576,6 +602,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await expect(
       service.setConversationStar(
@@ -596,6 +623,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -620,6 +648,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -637,6 +666,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -659,6 +689,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeMessagesCache,
     );
     const result = await service.list(SENDER_ID, {
       page: 1,

@@ -8,6 +8,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { PurchaseOrdersCacheService } from './purchase-orders-cache.service';
 import type {
   PurchaseOrderQueryDto,
   UpdatePurchaseOrderDto,
@@ -36,11 +37,17 @@ export class PurchaseOrdersService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly cache: PurchaseOrdersCacheService,
   ) {}
 
   async list(
     query: PurchaseOrderQueryDto,
   ): Promise<PagedResult<PurchaseOrderWithItems>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, quoteId, projectId } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
@@ -63,10 +70,12 @@ export class PurchaseOrdersService {
       this.prisma.purchaseOrder.count({ where }),
     ]);
 
-    return {
+    const result = {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<PurchaseOrderWithItems> {
@@ -195,6 +204,7 @@ export class PurchaseOrdersService {
       entityId: created.id,
       meta: { orderNumber: created.orderNumber },
     });
+    await this.cache.invalidate();
     return this.getById(created.id);
   }
 
@@ -232,6 +242,7 @@ export class PurchaseOrdersService {
       entity: 'PurchaseOrder',
       entityId: id,
     });
+    await this.cache.invalidate();
     return this.getById(id);
   }
 
@@ -243,5 +254,6 @@ export class PurchaseOrdersService {
       entity: 'PurchaseOrder',
       entityId: id,
     });
+    await this.cache.invalidate();
   }
 }

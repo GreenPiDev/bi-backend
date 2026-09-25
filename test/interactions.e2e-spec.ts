@@ -174,6 +174,7 @@ describe('Interactions (e2e)', () => {
         occurredAt: '2026-01-01T10:00:00.000Z',
         reminder: {
           startAt: '2020-01-01T10:00:00.000Z',
+          title: 'Hazirlik',
           assignees: [{ userId: userIdA }],
         },
       });
@@ -191,7 +192,11 @@ describe('Interactions (e2e)', () => {
         type: 'CALL',
         notes: 'ilk hatirlatmali gorusme',
         occurredAt: '2026-01-01T10:00:00.000Z',
-        reminder: { startAt, assignees: [{ userId: userIdA }] },
+        reminder: {
+          startAt,
+          title: 'Hazirlik',
+          assignees: [{ userId: userIdA }],
+        },
       });
     expect(first.status).toBe(201);
     expect(first.body.reminderConflicts).toEqual([]);
@@ -204,7 +209,11 @@ describe('Interactions (e2e)', () => {
         type: 'CALL',
         notes: 'ikinci hatirlatmali gorusme (cakisiyor)',
         occurredAt: '2026-01-01T10:00:00.000Z',
-        reminder: { startAt, assignees: [{ userId: userIdA }] },
+        reminder: {
+          startAt,
+          title: 'Hazirlik',
+          assignees: [{ userId: userIdA }],
+        },
       });
     expect(second.status).toBe(201);
     expect(second.body.reminderConflicts).toEqual([

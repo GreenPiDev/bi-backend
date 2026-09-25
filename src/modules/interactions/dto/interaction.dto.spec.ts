@@ -70,6 +70,7 @@ describe('Interaction DTO', () => {
       opportunity: { name: 'Yeni sunucu ihtiyaci' },
       reminder: {
         startAt: '2027-01-01T10:00:00.000Z',
+        title: 'Hazirlanmasi gereken teklif',
         assignees: [{ userId: '11111111-1111-1111-8111-111111111111' }],
       },
     });

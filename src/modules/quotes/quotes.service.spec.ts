@@ -5,6 +5,13 @@ const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
 const surveyQueueAdd = vi.fn();
 const fakeSurveyQueue = { add: surveyQueueAdd } as never;
+const fakeQuotesCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
+const fakeOpportunitiesCache = { invalidate: vi.fn() } as never;
+const fakePostSaleCasesCache = { invalidate: vi.fn() } as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -89,6 +96,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -104,6 +114,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.create('user-1', {
       accountId: 'account-1',
@@ -134,6 +147,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.create('user-1', {
       accountId: 'account-1',
@@ -160,6 +176,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(
       service.create('user-1', {
@@ -177,6 +196,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(
       service.create('user-1', {
@@ -203,6 +225,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.create('user-1', {
       accountId: 'account-1',
@@ -238,6 +263,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(
       service.create('user-1', {
@@ -265,6 +293,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.create('user-1', {
       accountId: 'account-1',
@@ -293,6 +324,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(
       service.update('quote-1', { items: [] } as never, 'user-1'),
@@ -312,6 +346,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.update(
       'quote-1',
@@ -346,6 +383,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.update(
       'quote-1',
@@ -374,6 +414,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.update(
       'quote-1',
@@ -397,6 +440,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.update('quote-1', { contactId: null } as never, 'user-1');
 
@@ -417,6 +463,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(
       service.update('quote-1', { contactId: 'contact-2' } as never, 'user-1'),
@@ -432,6 +481,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.approve('quote-1', 'manager-1');
     expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
@@ -457,6 +509,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.approve('quote-1', 'manager-1');
 
@@ -484,6 +539,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.approve('quote-1', 'manager-1');
 
@@ -499,6 +557,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await expect(service.approve('quote-1', 'manager-1')).rejects.toMatchObject(
       {
@@ -516,6 +577,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.reject('quote-1', 'manager-1');
     expect(prisma.quote.update).toHaveBeenCalledWith(
@@ -531,6 +595,9 @@ describe('QuotesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
     );
     await service.remove('quote-1');
     expect(prisma.quote.delete).toHaveBeenCalledWith({

@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { MailService } from '../core/mail/mail.service';
 import { PrismaService } from '../core/prisma/prisma.service';
+import { PostSaleCasesCacheService } from '../modules/post-sale-cases/post-sale-cases-cache.service';
 import {
   POST_SALE_SURVEY_QUEUE,
   type SendPostSaleSurveyJobPayload,
@@ -21,6 +22,7 @@ export class SendPostSaleSurveyProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly postSaleCasesCache: PostSaleCasesCacheService,
   ) {
     super();
   }
@@ -54,5 +56,6 @@ export class SendPostSaleSurveyProcessor extends WorkerHost {
         sentAt,
       },
     });
+    await this.postSaleCasesCache.invalidateForTenant(postSaleCase.tenantId);
   }
 }

@@ -19,6 +19,7 @@ import {
   SEND_POST_SALE_SURVEY_JOB,
 } from '../../jobs/post-sale-survey-queue.constants';
 import { AuditService } from '../audit/audit.service';
+import { PostSaleCasesCacheService } from './post-sale-cases-cache.service';
 import type {
   MarkPostSaleFeedbackDto,
   PostSaleCaseQueryDto,
@@ -69,11 +70,17 @@ export class PostSaleCasesService {
     private readonly audit: AuditService,
     @InjectQueue(POST_SALE_SURVEY_QUEUE)
     private readonly surveyQueue: Queue,
+    private readonly cache: PostSaleCasesCacheService,
   ) {}
 
   async list(
     query: PostSaleCaseQueryDto,
   ): Promise<PagedResult<PostSaleCaseWithDetails>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, accountId, status } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'reminderAt',
@@ -96,10 +103,12 @@ export class PostSaleCasesService {
       this.prisma.postSaleCase.count({ where }),
     ]);
 
-    return {
+    const result = {
       data: data.map((row) => ({ ...row, status: computeStatus(row) })),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<PostSaleCaseWithDetails> {
@@ -159,6 +168,7 @@ export class PostSaleCasesService {
       entityId: id,
       meta: { action: 'send-survey' },
     });
+    await this.cache.invalidate();
 
     return this.getById(id);
   }
@@ -195,6 +205,7 @@ export class PostSaleCasesService {
       entityId: id,
       meta: { action: 'mark-feedback' },
     });
+    await this.cache.invalidate();
 
     return this.getById(id);
   }

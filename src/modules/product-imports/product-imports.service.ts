@@ -6,6 +6,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { CreateProductSchema } from '../products/dto/product.dto';
+import { ProductsCacheService } from '../products/products-cache.service';
 import { FileParserService } from '../datasources/file-parser.service';
 import type {
   NumberFormat,
@@ -72,6 +73,7 @@ export class ProductImportsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly fileParser: FileParserService,
+    private readonly productsCache: ProductsCacheService,
   ) {}
 
   /**
@@ -190,6 +192,7 @@ export class ProductImportsService {
 
     if (validRows.length > 0) {
       await this.prisma.product.createMany({ data: validRows as never });
+      await this.productsCache.invalidate();
     }
 
     return { totalRows: records.length, imported: validRows.length, errors };

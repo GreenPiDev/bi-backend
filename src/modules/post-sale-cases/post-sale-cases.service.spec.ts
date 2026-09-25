@@ -5,6 +5,11 @@ const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
 const surveyQueueAdd = vi.fn();
 const fakeSurveyQueue = { add: surveyQueueAdd } as never;
+const fakeCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 function createCaseRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -55,6 +60,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -67,6 +73,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     const result = await service.getById('psc-1');
     expect(result.status).toBe('BEKLEMEDE');
@@ -78,6 +85,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     const result = await service.getById('psc-1');
     expect(result.status).toBe('HATIRLATILDI');
@@ -94,6 +102,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     const result = await service.getById('psc-1');
     expect(result.status).toBe('GERI_BILDIRIM_ALINDI');
@@ -105,6 +114,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await expect(service.sendSurvey('psc-1', {})).rejects.toMatchObject({
       code: 'CONTACT_REQUIRED',
@@ -121,6 +131,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await expect(
       service.sendSurvey('psc-1', { contactId: 'contact-2' }),
@@ -133,6 +144,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await service.sendSurvey('psc-1', { contactId: 'contact-1' });
 
@@ -151,6 +163,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await service.sendSurvey('psc-1', {});
 
@@ -171,6 +184,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await service.markFeedback('psc-1', { responseNote: 'Musteri memnun' });
 
@@ -194,6 +208,7 @@ describe('PostSaleCasesService', () => {
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
+      fakeCache,
     );
     await service.markFeedback('psc-1', {});
 

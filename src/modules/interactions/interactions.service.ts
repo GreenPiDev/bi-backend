@@ -7,13 +7,17 @@ import type {
   Opportunity,
 } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { isPastCalendarDay } from '../../core/validators/date';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
+import { CalendarEventsCacheService } from '../calendar-events/calendar-events-cache.service';
+import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
 import { AuditService } from '../audit/audit.service';
+import { InteractionsCacheService } from './interactions-cache.service';
 import type {
   CreateInteractionDto,
   InteractionQueryDto,
@@ -80,6 +84,9 @@ export class InteractionsService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
     private readonly accountsCache: AccountsCacheService,
+    private readonly calendarEventsCache: CalendarEventsCacheService,
+    private readonly interactionsCache: InteractionsCacheService,
+    private readonly opportunitiesCache: OpportunitiesCacheService,
   ) {}
 
   /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
@@ -112,6 +119,11 @@ export class InteractionsService {
   async list(
     query: InteractionQueryDto,
   ): Promise<PagedResult<InteractionWithDetails>> {
+    const cached = await this.interactionsCache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const {
       page,
       pageSize,
@@ -155,10 +167,12 @@ export class InteractionsService {
       this.prisma.interaction.count({ where }),
     ]);
 
-    return {
+    const result = {
       data: await this.attachCreatedByNames(data),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.interactionsCache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<InteractionWithDetails> {
@@ -231,7 +245,7 @@ export class InteractionsService {
     createdById: string,
     dto: CreateInteractionDto,
   ): Promise<CreateInteractionResult> {
-    if (dto.reminder && dto.reminder.startAt.getTime() <= Date.now()) {
+    if (dto.reminder && isPastCalendarDay(dto.reminder.startAt)) {
       throw new AppException(
         'REMINDER_PAST_DATE',
         'Hatirlatma icin gecmis bir tarih secilemez.',
@@ -325,7 +339,8 @@ export class InteractionsService {
           data: {
             tenantId,
             createdById,
-            title: dto.reminder.title ?? dto.notes.slice(0, 60),
+            title: dto.reminder.title,
+            description: dto.reminder.description,
             startAt: dto.reminder.startAt,
             endAt: dto.reminder.startAt,
             relatedEntityType: 'Interaction',
@@ -346,6 +361,13 @@ export class InteractionsService {
     if (accountWasCreated) {
       await this.accountsCache.invalidate();
     }
+    if (dto.reminder) {
+      await this.calendarEventsCache.invalidate();
+    }
+    if (dto.opportunity) {
+      await this.opportunitiesCache.invalidate();
+    }
+    await this.interactionsCache.invalidate();
 
     return {
       interaction: await this.getById(interaction),
@@ -364,6 +386,7 @@ export class InteractionsService {
       entity: 'Interaction',
       entityId: id,
     });
+    await this.interactionsCache.invalidate();
     return this.getById(id);
   }
 
@@ -375,5 +398,6 @@ export class InteractionsService {
       entity: 'Interaction',
       entityId: id,
     });
+    await this.interactionsCache.invalidate();
   }
 }

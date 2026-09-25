@@ -3,6 +3,12 @@ import { OpportunitiesService } from './opportunities.service';
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
+const fakeCalendarEventsCache = { invalidate: vi.fn() } as never;
+const fakeOpportunitiesCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 function createOpportunityRow(
   overrides: Partial<Record<string, unknown>> = {},
@@ -42,7 +48,12 @@ function createPrisma(row: unknown = createOpportunityRow()) {
 describe('OpportunitiesService', () => {
   it('getById: bulunamayan firsat icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new OpportunitiesService(prisma as never, fakeAudit);
+    const service = new OpportunitiesService(
+      prisma as never,
+      fakeAudit,
+      fakeCalendarEventsCache,
+      fakeOpportunitiesCache,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -50,7 +61,12 @@ describe('OpportunitiesService', () => {
 
   it('create: firsati olusturur ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new OpportunitiesService(prisma as never, fakeAudit);
+    const service = new OpportunitiesService(
+      prisma as never,
+      fakeAudit,
+      fakeCalendarEventsCache,
+      fakeOpportunitiesCache,
+    );
     await service.create('tenant-1', 'user-1', {
       accountId: 'account-1',
       name: 'Yeni sunucu ihtiyaci',
@@ -65,7 +81,12 @@ describe('OpportunitiesService', () => {
 
   it('update: bulunamayan firsat icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new OpportunitiesService(prisma as never, fakeAudit);
+    const service = new OpportunitiesService(
+      prisma as never,
+      fakeAudit,
+      fakeCalendarEventsCache,
+      fakeOpportunitiesCache,
+    );
     await expect(
       service.update('yok', { name: 'x' } as never),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -73,7 +94,12 @@ describe('OpportunitiesService', () => {
 
   it('remove: firsati siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new OpportunitiesService(prisma as never, fakeAudit);
+    const service = new OpportunitiesService(
+      prisma as never,
+      fakeAudit,
+      fakeCalendarEventsCache,
+      fakeOpportunitiesCache,
+    );
     await service.remove('opp-1');
     expect(prisma.opportunity.delete).toHaveBeenCalledWith({
       where: { id: 'opp-1' },

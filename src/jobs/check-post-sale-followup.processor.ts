@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../core/prisma/prisma.service';
 import { MailService } from '../core/mail/mail.service';
+import { PostSaleCasesCacheService } from '../modules/post-sale-cases/post-sale-cases-cache.service';
 import { POST_SALE_FOLLOWUP_QUEUE } from './post-sale-followup-queue.constants';
 
 /**
@@ -18,6 +19,7 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly postSaleCasesCache: PostSaleCasesCacheService,
   ) {
     super();
   }
@@ -29,7 +31,11 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
 
     for (const postSaleCase of dueCases) {
       try {
-        await this.notify(postSaleCase.id, postSaleCase.quoteId);
+        await this.notify(
+          postSaleCase.id,
+          postSaleCase.quoteId,
+          postSaleCase.tenantId,
+        );
       } catch (err) {
         this.logger.warn(
           `Satis sonrasi hatirlatma gonderilemedi (case ${postSaleCase.id}): ${(err as Error).message}`,
@@ -38,7 +44,11 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
     }
   }
 
-  private async notify(postSaleCaseId: string, quoteId: string): Promise<void> {
+  private async notify(
+    postSaleCaseId: string,
+    quoteId: string,
+    tenantId: string,
+  ): Promise<void> {
     const quote = await this.prisma.quote.findUnique({
       where: { id: quoteId },
     });
@@ -62,5 +72,6 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
       where: { id: postSaleCaseId },
       data: { reminderSentAt: new Date() },
     });
+    await this.postSaleCasesCache.invalidateForTenant(tenantId);
   }
 }

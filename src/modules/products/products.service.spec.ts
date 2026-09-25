@@ -3,6 +3,11 @@ import { ProductsService } from './products.service';
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
+const fakeCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -36,7 +41,7 @@ describe('ProductsService', () => {
 
   it('getById: bulunamayan urun icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductsService(prisma as never, fakeAudit);
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -44,7 +49,7 @@ describe('ProductsService', () => {
 
   it('create: urunu olusturur ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProductsService(prisma as never, fakeAudit);
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
     await service.create({
       name: 'Dizustu Bilgisayar',
       unit: 'adet',
@@ -59,7 +64,7 @@ describe('ProductsService', () => {
 
   it('update: bulunamayan urun icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductsService(prisma as never, fakeAudit);
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.update('yok', { name: 'x' } as never),
     ).rejects.toMatchObject({
@@ -69,7 +74,7 @@ describe('ProductsService', () => {
 
   it('remove: urunu siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProductsService(prisma as never, fakeAudit);
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
     await service.remove('product-1');
     expect(prisma.product.delete).toHaveBeenCalledWith({
       where: { id: 'product-1' },

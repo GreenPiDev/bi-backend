@@ -1,12 +1,15 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Opportunity } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { isPastCalendarDay } from '../../core/validators/date';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { CalendarEventsCacheService } from '../calendar-events/calendar-events-cache.service';
+import { OpportunitiesCacheService } from './opportunities-cache.service';
 import type {
   CreateOpportunityDto,
   OpportunityQueryDto,
@@ -33,9 +36,16 @@ export class OpportunitiesService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly calendarEventsCache: CalendarEventsCacheService,
+    private readonly opportunitiesCache: OpportunitiesCacheService,
   ) {}
 
   async list(query: OpportunityQueryDto): Promise<PagedResult<Opportunity>> {
+    const cached = await this.opportunitiesCache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, accountId, stage, minEstimatedValue, from, to } =
       query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
@@ -69,10 +79,12 @@ export class OpportunitiesService {
       this.prisma.opportunity.count({ where }),
     ]);
 
-    return {
+    const result = {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.opportunitiesCache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<Opportunity> {
@@ -142,7 +154,7 @@ export class OpportunitiesService {
     createdById: string,
     dto: CreateOpportunityDto,
   ): Promise<CreateOpportunityResult> {
-    if (dto.reminder && dto.reminder.startAt.getTime() <= Date.now()) {
+    if (dto.reminder && isPastCalendarDay(dto.reminder.startAt)) {
       throw new AppException(
         'REMINDER_PAST_DATE',
         'Hatirlatma icin gecmis bir tarih secilemez.',
@@ -195,6 +207,10 @@ export class OpportunitiesService {
       entity: 'Opportunity',
       entityId: opportunityId,
     });
+    if (dto.reminder) {
+      await this.calendarEventsCache.invalidate();
+    }
+    await this.opportunitiesCache.invalidate();
 
     return {
       opportunity: await this.getById(opportunityId),
@@ -213,6 +229,7 @@ export class OpportunitiesService {
       entity: 'Opportunity',
       entityId: id,
     });
+    await this.opportunitiesCache.invalidate();
     return opportunity;
   }
 
@@ -224,5 +241,6 @@ export class OpportunitiesService {
       entity: 'Opportunity',
       entityId: id,
     });
+    await this.opportunitiesCache.invalidate();
   }
 }

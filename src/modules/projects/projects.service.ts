@@ -8,6 +8,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { ProjectsCacheService } from './projects-cache.service';
 import type {
   CreateProjectDto,
   ProjectQueryDto,
@@ -29,9 +30,15 @@ export class ProjectsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly cache: ProjectsCacheService,
   ) {}
 
   async list(query: ProjectQueryDto): Promise<PagedResult<Project>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, accountId } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
@@ -52,10 +59,12 @@ export class ProjectsService {
       this.prisma.project.count({ where }),
     ]);
 
-    return {
+    const result = {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<Project> {
@@ -136,6 +145,7 @@ export class ProjectsService {
       entityId: created.id,
       meta: { projectNumber: created.projectNumber },
     });
+    await this.cache.invalidate();
     return created;
   }
 
@@ -150,6 +160,7 @@ export class ProjectsService {
       entity: 'Project',
       entityId: id,
     });
+    await this.cache.invalidate();
     return project;
   }
 
@@ -161,5 +172,6 @@ export class ProjectsService {
       entity: 'Project',
       entityId: id,
     });
+    await this.cache.invalidate();
   }
 }
