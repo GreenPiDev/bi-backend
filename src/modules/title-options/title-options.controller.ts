@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import type { TitleOption } from '@prisma/client';
@@ -13,7 +14,9 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateTitleOptionSchema,
+  UpdateTitleOptionSchema,
   type CreateTitleOptionDto,
+  type UpdateTitleOptionDto,
 } from './dto/title-option.dto';
 import { TitleOptionsService } from './title-options.service';
 
@@ -34,6 +37,16 @@ export class TitleOptionsController {
     dto: CreateTitleOptionDto,
   ): Promise<TitleOption> {
     return this.titleOptions.create(dto);
+  }
+
+  @Patch(':id')
+  @RequiresPermission('settings', 'UPDATE')
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateTitleOptionSchema))
+    dto: UpdateTitleOptionDto,
+  ): Promise<TitleOption> {
+    return this.titleOptions.update(id, dto);
   }
 
   @Delete(':id')

@@ -8,3 +8,6 @@ export const CreateSectorOptionSchema = z.object({
     .max(200),
 });
 export type CreateSectorOptionDto = z.infer<typeof CreateSectorOptionSchema>;
+
+export const UpdateSectorOptionSchema = CreateSectorOptionSchema;
+export type UpdateSectorOptionDto = z.infer<typeof UpdateSectorOptionSchema>;

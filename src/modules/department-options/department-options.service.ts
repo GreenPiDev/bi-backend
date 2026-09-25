@@ -6,7 +6,10 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
-import type { CreateDepartmentOptionDto } from './dto/department-option.dto';
+import type {
+  CreateDepartmentOptionDto,
+  UpdateDepartmentOptionDto,
+} from './dto/department-option.dto';
 
 @Injectable()
 export class DepartmentOptionsService {
@@ -27,6 +30,47 @@ export class DepartmentOptionsService {
       });
       await this.audit.log({
         action: 'CREATE',
+        entity: 'DepartmentOption',
+        entityId: option.id,
+        meta: { label: option.label },
+      });
+      return option;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new AppException(
+          'DEPARTMENT_ALREADY_EXISTS',
+          'Bu departman zaten tanimli.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async update(
+    id: string,
+    dto: UpdateDepartmentOptionDto,
+  ): Promise<DepartmentOption> {
+    const existing = await this.prisma.departmentOption.findFirst({
+      where: { id },
+    });
+    if (!existing) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Departman bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    try {
+      const option = await this.prisma.departmentOption.update({
+        where: { id },
+        data: { label: dto.label },
+      });
+      await this.audit.log({
+        action: 'UPDATE',
         entity: 'DepartmentOption',
         entityId: option.id,
         meta: { label: option.label },

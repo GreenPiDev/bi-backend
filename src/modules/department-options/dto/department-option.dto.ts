@@ -10,3 +10,8 @@ export const CreateDepartmentOptionSchema = z.object({
 export type CreateDepartmentOptionDto = z.infer<
   typeof CreateDepartmentOptionSchema
 >;
+
+export const UpdateDepartmentOptionSchema = CreateDepartmentOptionSchema;
+export type UpdateDepartmentOptionDto = z.infer<
+  typeof UpdateDepartmentOptionSchema
+>;

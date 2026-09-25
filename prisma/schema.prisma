@@ -148,6 +148,7 @@ model Tenant {
   sectorOptions     SectorOption[]
   departmentOptions DepartmentOption[]
   titleOptions      TitleOption[]
+  productCategoryOptions ProductCategoryOption[]
   settings          TenantSetting[]
   roles             Role[]
   calendarEvents    CalendarEvent[]
@@ -532,6 +533,23 @@ model TitleOption {
 
   @@unique([tenantId, label])
   @@map("crm_title_options")
+}
+
+/**
+ * U1: tenant kendi urun kategori listesini yonetir; Product.category zaten
+ * serbest metin (bkz. VARSAYIMLAR V32), bu liste sadece Autocomplete oneri
+ * kaynagi - Sektor/Departman/Unvan ile ayni desen.
+ */
+model ProductCategoryOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_product_category_options")
 }
 
 /**

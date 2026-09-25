@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import type { SectorOption } from '@prisma/client';
@@ -13,7 +14,9 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateSectorOptionSchema,
+  UpdateSectorOptionSchema,
   type CreateSectorOptionDto,
+  type UpdateSectorOptionDto,
 } from './dto/sector-option.dto';
 import { SectorOptionsService } from './sector-options.service';
 
@@ -34,6 +37,16 @@ export class SectorOptionsController {
     dto: CreateSectorOptionDto,
   ): Promise<SectorOption> {
     return this.sectorOptions.create(dto);
+  }
+
+  @Patch(':id')
+  @RequiresPermission('settings', 'UPDATE')
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateSectorOptionSchema))
+    dto: UpdateSectorOptionDto,
+  ): Promise<SectorOption> {
+    return this.sectorOptions.update(id, dto);
   }
 
   @Delete(':id')

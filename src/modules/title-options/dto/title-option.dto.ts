@@ -8,3 +8,6 @@ export const CreateTitleOptionSchema = z.object({
     .max(200),
 });
 export type CreateTitleOptionDto = z.infer<typeof CreateTitleOptionSchema>;
+
+export const UpdateTitleOptionSchema = CreateTitleOptionSchema;
+export type UpdateTitleOptionDto = z.infer<typeof UpdateTitleOptionSchema>;

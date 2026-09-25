@@ -6,7 +6,10 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
-import type { CreateSectorOptionDto } from './dto/sector-option.dto';
+import type {
+  CreateSectorOptionDto,
+  UpdateSectorOptionDto,
+} from './dto/sector-option.dto';
 
 @Injectable()
 export class SectorOptionsService {
@@ -27,6 +30,44 @@ export class SectorOptionsService {
       });
       await this.audit.log({
         action: 'CREATE',
+        entity: 'SectorOption',
+        entityId: option.id,
+        meta: { label: option.label },
+      });
+      return option;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new AppException(
+          'SECTOR_ALREADY_EXISTS',
+          'Bu sektor zaten tanimli.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async update(id: string, dto: UpdateSectorOptionDto): Promise<SectorOption> {
+    const existing = await this.prisma.sectorOption.findFirst({
+      where: { id },
+    });
+    if (!existing) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Sektor bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    try {
+      const option = await this.prisma.sectorOption.update({
+        where: { id },
+        data: { label: dto.label },
+      });
+      await this.audit.log({
+        action: 'UPDATE',
         entity: 'SectorOption',
         entityId: option.id,
         meta: { label: option.label },

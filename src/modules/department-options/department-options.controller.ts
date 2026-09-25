@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import type { DepartmentOption } from '@prisma/client';
@@ -13,7 +14,9 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateDepartmentOptionSchema,
+  UpdateDepartmentOptionSchema,
   type CreateDepartmentOptionDto,
+  type UpdateDepartmentOptionDto,
 } from './dto/department-option.dto';
 import { DepartmentOptionsService } from './department-options.service';
 
@@ -34,6 +37,16 @@ export class DepartmentOptionsController {
     dto: CreateDepartmentOptionDto,
   ): Promise<DepartmentOption> {
     return this.departmentOptions.create(dto);
+  }
+
+  @Patch(':id')
+  @RequiresPermission('settings', 'UPDATE')
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateDepartmentOptionSchema))
+    dto: UpdateDepartmentOptionDto,
+  ): Promise<DepartmentOption> {
+    return this.departmentOptions.update(id, dto);
   }
 
   @Delete(':id')

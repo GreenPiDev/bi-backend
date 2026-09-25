@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { Prisma, type TitleOption } from '@prisma/client';
+import { Prisma, type ProductCategoryOption } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import {
   TENANT_PRISMA,
@@ -7,30 +7,32 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
 import type {
-  CreateTitleOptionDto,
-  UpdateTitleOptionDto,
-} from './dto/title-option.dto';
+  CreateProductCategoryDto,
+  UpdateProductCategoryDto,
+} from './dto/product-category.dto';
 
 @Injectable()
-export class TitleOptionsService {
+export class ProductCategoriesService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
   ) {}
 
-  list(): Promise<TitleOption[]> {
-    return this.prisma.titleOption.findMany({ orderBy: { label: 'asc' } });
+  list(): Promise<ProductCategoryOption[]> {
+    return this.prisma.productCategoryOption.findMany({
+      orderBy: { label: 'asc' },
+    });
   }
 
-  async create(dto: CreateTitleOptionDto): Promise<TitleOption> {
+  async create(dto: CreateProductCategoryDto): Promise<ProductCategoryOption> {
     try {
-      const option = await this.prisma.titleOption.create({
+      const option = await this.prisma.productCategoryOption.create({
         // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
         data: { label: dto.label } as never,
       });
       await this.audit.log({
         action: 'CREATE',
-        entity: 'TitleOption',
+        entity: 'ProductCategoryOption',
         entityId: option.id,
         meta: { label: option.label },
       });
@@ -41,8 +43,8 @@ export class TitleOptionsService {
         error.code === 'P2002'
       ) {
         throw new AppException(
-          'TITLE_ALREADY_EXISTS',
-          'Bu unvan zaten tanimli.',
+          'PRODUCT_CATEGORY_ALREADY_EXISTS',
+          'Bu kategori zaten tanimli.',
           HttpStatus.CONFLICT,
         );
       }
@@ -50,25 +52,28 @@ export class TitleOptionsService {
     }
   }
 
-  async update(id: string, dto: UpdateTitleOptionDto): Promise<TitleOption> {
-    const existing = await this.prisma.titleOption.findFirst({
+  async update(
+    id: string,
+    dto: UpdateProductCategoryDto,
+  ): Promise<ProductCategoryOption> {
+    const existing = await this.prisma.productCategoryOption.findFirst({
       where: { id },
     });
     if (!existing) {
       throw new AppException(
         'NOT_FOUND',
-        'Unvan bulunamadi.',
+        'Kategori bulunamadi.',
         HttpStatus.NOT_FOUND,
       );
     }
     try {
-      const option = await this.prisma.titleOption.update({
+      const option = await this.prisma.productCategoryOption.update({
         where: { id },
         data: { label: dto.label },
       });
       await this.audit.log({
         action: 'UPDATE',
-        entity: 'TitleOption',
+        entity: 'ProductCategoryOption',
         entityId: option.id,
         meta: { label: option.label },
       });
@@ -79,8 +84,8 @@ export class TitleOptionsService {
         error.code === 'P2002'
       ) {
         throw new AppException(
-          'TITLE_ALREADY_EXISTS',
-          'Bu unvan zaten tanimli.',
+          'PRODUCT_CATEGORY_ALREADY_EXISTS',
+          'Bu kategori zaten tanimli.',
           HttpStatus.CONFLICT,
         );
       }
@@ -89,20 +94,20 @@ export class TitleOptionsService {
   }
 
   async remove(id: string): Promise<void> {
-    const option = await this.prisma.titleOption.findFirst({
+    const option = await this.prisma.productCategoryOption.findFirst({
       where: { id },
     });
     if (!option) {
       throw new AppException(
         'NOT_FOUND',
-        'Unvan bulunamadi.',
+        'Kategori bulunamadi.',
         HttpStatus.NOT_FOUND,
       );
     }
-    await this.prisma.titleOption.delete({ where: { id } });
+    await this.prisma.productCategoryOption.delete({ where: { id } });
     await this.audit.log({
       action: 'DELETE',
-      entity: 'TitleOption',
+      entity: 'ProductCategoryOption',
       entityId: id,
     });
   }
