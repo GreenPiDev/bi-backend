@@ -83,8 +83,8 @@ export class PostSaleCasesService {
 
     const { page, pageSize, accountId, status } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
-      field: 'reminderAt',
-      direction: 'asc',
+      field: 'createdAt',
+      direction: 'desc',
     });
 
     const where = {
