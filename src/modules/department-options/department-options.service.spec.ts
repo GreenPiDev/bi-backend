@@ -1,8 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { DepartmentOptionsService } from './department-options.service';
 
 const fakeAudit = { log: vi.fn() };
+const fakeRealtime = { emitToTenant: vi.fn(), emitToAll: vi.fn() };
 
 function createPrisma() {
   return {
@@ -13,6 +15,10 @@ function createPrisma() {
       delete: vi.fn(),
     },
   };
+}
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
 }
 
 describe('DepartmentOptionsService', () => {
@@ -27,24 +33,30 @@ describe('DepartmentOptionsService', () => {
     const service = new DepartmentOptionsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await expect(service.create({ label: 'Muhasebe' })).rejects.toMatchObject({
+    await expect(
+      runInTenant(() => service.create({ label: 'Muhasebe' })),
+    ).rejects.toMatchObject({
       code: 'DEPARTMENT_ALREADY_EXISTS',
     } satisfies Partial<AppException>);
   });
 
-  it('remove: bulunamayan sektor icin NOT_FOUND firlatir', async () => {
+  it('remove: bulunamayan departman icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma();
     const service = new DepartmentOptionsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await expect(service.remove('yok')).rejects.toMatchObject({
+    await expect(
+      runInTenant(() => service.remove('yok')),
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
   });
 
-  it('create: basarili olursa audit loglar', async () => {
+  it('create: basarili olursa audit loglar ve tenant odasina yayinlar', async () => {
     const prisma = createPrisma();
     prisma.departmentOption.create.mockResolvedValue({
       id: 's1',
@@ -53,9 +65,17 @@ describe('DepartmentOptionsService', () => {
     const service = new DepartmentOptionsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    const result = await service.create({ label: 'Muhasebe' });
+    const result = await runInTenant(() =>
+      service.create({ label: 'Muhasebe' }),
+    );
     expect(result.label).toBe('Muhasebe');
     expect(fakeAudit.log).toHaveBeenCalled();
+    expect(fakeRealtime.emitToTenant).toHaveBeenCalledWith(
+      't1',
+      'departmentOptions.updated',
+      expect.any(Array),
+    );
   });
 });
