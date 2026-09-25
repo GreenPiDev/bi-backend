@@ -50,6 +50,9 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
     calendarEventAttendee: {
       findFirst: vi.fn().mockResolvedValue(null),
     },
+    user: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(client)),
   };
   return client;
