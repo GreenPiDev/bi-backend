@@ -5,6 +5,8 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { RealtimeService } from '../../core/realtime/realtime.service';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import type {
   CreateSectorOptionDto,
@@ -16,10 +18,17 @@ export class SectorOptionsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   list(): Promise<SectorOption[]> {
     return this.prisma.sectorOption.findMany({ orderBy: { label: 'asc' } });
+  }
+
+  private async emitUpdated(): Promise<void> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const options = await this.list();
+    this.realtime.emitToTenant(tenantId, 'sectorOptions.updated', options);
   }
 
   async create(dto: CreateSectorOptionDto): Promise<SectorOption> {
@@ -34,6 +43,7 @@ export class SectorOptionsService {
         entityId: option.id,
         meta: { label: option.label },
       });
+      await this.emitUpdated();
       return option;
     } catch (error) {
       if (
@@ -72,6 +82,7 @@ export class SectorOptionsService {
         entityId: option.id,
         meta: { label: option.label },
       });
+      await this.emitUpdated();
       return option;
     } catch (error) {
       if (
@@ -105,5 +116,6 @@ export class SectorOptionsService {
       entity: 'SectorOption',
       entityId: id,
     });
+    await this.emitUpdated();
   }
 }

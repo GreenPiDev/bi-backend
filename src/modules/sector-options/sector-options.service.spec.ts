@@ -1,8 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { SectorOptionsService } from './sector-options.service';
 
 const fakeAudit = { log: vi.fn() };
+const fakeRealtime = { emitToTenant: vi.fn(), emitToAll: vi.fn() };
 
 function createPrisma() {
   return {
@@ -13,6 +15,10 @@ function createPrisma() {
       delete: vi.fn(),
     },
   };
+}
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
 }
 
 describe('SectorOptionsService', () => {
@@ -27,8 +33,11 @@ describe('SectorOptionsService', () => {
     const service = new SectorOptionsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await expect(service.create({ label: 'Yazilim' })).rejects.toMatchObject({
+    await expect(
+      runInTenant(() => service.create({ label: 'Yazilim' })),
+    ).rejects.toMatchObject({
       code: 'SECTOR_ALREADY_EXISTS',
     } satisfies Partial<AppException>);
   });
@@ -38,13 +47,16 @@ describe('SectorOptionsService', () => {
     const service = new SectorOptionsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await expect(service.remove('yok')).rejects.toMatchObject({
+    await expect(
+      runInTenant(() => service.remove('yok')),
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
   });
 
-  it('create: basarili olursa audit loglar', async () => {
+  it('create: basarili olursa audit loglar ve tenant odasina yayinlar', async () => {
     const prisma = createPrisma();
     prisma.sectorOption.create.mockResolvedValue({
       id: 's1',
@@ -53,9 +65,17 @@ describe('SectorOptionsService', () => {
     const service = new SectorOptionsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    const result = await service.create({ label: 'Yazilim' });
+    const result = await runInTenant(() =>
+      service.create({ label: 'Yazilim' }),
+    );
     expect(result.label).toBe('Yazilim');
     expect(fakeAudit.log).toHaveBeenCalled();
+    expect(fakeRealtime.emitToTenant).toHaveBeenCalledWith(
+      't1',
+      'sectorOptions.updated',
+      expect.any(Array),
+    );
   });
 });
