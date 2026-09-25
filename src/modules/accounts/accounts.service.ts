@@ -25,7 +25,6 @@ const SORTABLE_FIELDS = ['name', 'city', 'createdAt'] as const;
 const CRITICAL_FIELDS = [
   'taxNumber',
   'taxOffice',
-  'sector',
   'website',
   'phone',
   'landlinePhone',
@@ -44,6 +43,9 @@ function withMissingCriticalFields(account: Account): AccountWithMeta {
   });
   if ((account.accountTypes ?? []).length === 0) {
     missing.push('accountTypes');
+  }
+  if ((account.sector ?? []).length === 0) {
+    missing.push('sector');
   }
   return { ...account, missingCriticalFields: missing };
 }
@@ -90,7 +92,7 @@ export class AccountsService {
 
     const where = {
       ...(city ? { city } : {}),
-      ...(sector ? { sector } : {}),
+      ...(sector ? { sector: { has: sector } } : {}),
       ...(ownerId ? { ownerId } : {}),
       ...(from || to
         ? {
@@ -158,17 +160,23 @@ export class AccountsService {
     return withMissingCriticalFields(account);
   }
 
-  /** A2: sektor, tenant'in tanimladigi listeye karsi dogrulanir; tenant henuz
-   * hic sektor tanimlamadiysa (bkz. VARSAYIMLAR V18) serbest metin kabul edilir. */
-  private async assertValidSector(sector: string | undefined): Promise<void> {
-    if (!sector) {
+  /** A2: sektor(ler), tenant'in tanimladigi listeye karsi dogrulanir; tenant henuz
+   * hic sektor tanimlamadiysa (bkz. VARSAYIMLAR V18) serbest metin kabul edilir.
+   * Coklu secim destegi eklendikten sonra (bkz. VARSAYIMLAR V41) her secilen deger
+   * ayri ayri dogrulanir. */
+  private async assertValidSector(
+    sectors: string[] | undefined,
+  ): Promise<void> {
+    if (!sectors || sectors.length === 0) {
       return;
     }
     const options = await this.prisma.sectorOption.findMany();
     if (options.length === 0) {
       return;
     }
-    if (!options.some((option) => option.label === sector)) {
+    const validLabels = new Set(options.map((option) => option.label));
+    const invalid = sectors.find((sector) => !validLabels.has(sector));
+    if (invalid) {
       throw new AppException(
         'INVALID_SECTOR',
         'Belirtilen sektor tanimli degil.',

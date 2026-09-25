@@ -29,7 +29,7 @@ export const CreateAccountSchema = z.object({
     .refine((v) => v === '' || isValidTaxNumber(v), 'Gecersiz vergi/TC no.')
     .optional(),
   taxOffice: z.string().trim().max(200).optional(),
-  sector: z.string().trim().max(200).optional(),
+  sector: z.array(z.string().trim().max(200)).max(20).optional(),
   accountTypes: z.array(AccountTypeSchema).max(4).optional(),
   website: z
     .string()

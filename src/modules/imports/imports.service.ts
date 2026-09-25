@@ -79,6 +79,20 @@ function uppercaseAccountName(mapped: Record<string, unknown>): void {
   }
 }
 
+/** Sektor artik coklu secim (bkz. VARSAYIMLAR V41) - ice aktarma dosyasindaki tek
+ * sutundan gelen deger virgul/noktali virgulle ayrilmis birden fazla sektor
+ * icerebilir. */
+function splitAccountSector(mapped: Record<string, unknown>): void {
+  if (typeof mapped.sector !== 'string') {
+    return;
+  }
+  const values = mapped.sector
+    .split(/[,;]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  mapped.sector = values.length > 0 ? values : undefined;
+}
+
 function mappingIncompleteError(message: string): AppException {
   return new AppException(
     'MAPPING_INCOMPLETE',
@@ -182,6 +196,7 @@ export class ImportsService {
     records.forEach((record, index) => {
       const mapped = applyMapping(record, mapping);
       uppercaseAccountName(mapped);
+      splitAccountSector(mapped);
 
       const customFields: Record<string, string> = {};
       for (const column of attributeColumns) {
@@ -275,7 +290,7 @@ export class ImportsService {
       Ad: account.name,
       'Vergi No': account.taxNumber ?? '',
       'Vergi Dairesi': account.taxOffice ?? '',
-      Sektor: account.sector ?? '',
+      Sektor: (account.sector ?? []).join(', '),
       'Web Sitesi': account.website ?? '',
       Telefon: account.phone ?? '',
       'E-posta': account.email ?? '',

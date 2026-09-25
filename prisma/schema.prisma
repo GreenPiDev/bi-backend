@@ -440,7 +440,7 @@ model Account {
   name          String
   taxNumber     String?
   taxOffice     String?
-  sector        String?
+  sector        String[]      @default([])
   accountTypes  AccountType[] @default([])
   website       String?
   phone         String?
