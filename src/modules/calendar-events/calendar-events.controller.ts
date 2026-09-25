@@ -39,8 +39,9 @@ export class CalendarEventsController {
   list(
     @Query(new ZodValidationPipe(CalendarEventQuerySchema))
     query: CalendarEventQueryDto,
+    @CurrentUser() user: RequestUser,
   ): Promise<CalendarEventWithAttendees[]> {
-    return this.calendarEvents.list(query);
+    return this.calendarEvents.list(query, user.id);
   }
 
   @Get('assignable-users')
@@ -53,8 +54,11 @@ export class CalendarEventsController {
 
   @Get(':id')
   @RequiresPermission('calendar', 'VIEW')
-  getById(@Param('id') id: string): Promise<CalendarEventWithAttendees> {
-    return this.calendarEvents.getById(id);
+  getById(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<CalendarEventWithAttendees> {
+    return this.calendarEvents.getById(id, user.id);
   }
 
   @Post()
@@ -73,14 +77,18 @@ export class CalendarEventsController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateCalendarEventSchema))
     dto: UpdateCalendarEventDto,
+    @CurrentUser() user: RequestUser,
   ): Promise<CalendarEventWithAttendees> {
-    return this.calendarEvents.update(id, dto);
+    return this.calendarEvents.update(id, dto, user.tenantId);
   }
 
   @Delete(':id')
   @RequiresPermission('calendar', 'DELETE')
   @HttpCode(204)
-  remove(@Param('id') id: string): Promise<void> {
-    return this.calendarEvents.remove(id);
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.calendarEvents.remove(id, user.tenantId);
   }
 }

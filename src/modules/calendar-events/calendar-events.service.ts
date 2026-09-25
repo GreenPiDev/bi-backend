@@ -5,6 +5,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { RealtimeService } from '../../core/realtime/realtime.service';
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
 import { CalendarEventsCacheService } from './calendar-events-cache.service';
@@ -18,6 +19,32 @@ export type CalendarEventWithAttendees = CalendarEvent & {
   attendees: CalendarEventAttendee[];
 };
 
+/**
+ * Katilimci secilmeden olusturulan (create() sirasinda tek katilimci olarak
+ * olusturana otomatik eklenen) etkinlikler sadece olusturanin takviminde
+ * gorunur. Ayri bir "visibility" alani eklenmedi - bu durum zaten
+ * attendees/createdById'den turetilebiliyor (bkz. kullanici istegi,
+ * docs/YOL_HARITASI.md Ajanda kaydi).
+ */
+function isPrivateToCreator(event: CalendarEventWithAttendees): boolean {
+  return (
+    event.attendees.length <= 1 &&
+    event.attendees.every((a) => a.userId === event.createdById)
+  );
+}
+
+/** Katilimcisi olan (paylasilan) etkinliklerin degisikligini tenant'a anlik yayinlar -
+ * ozel hatirlaticilar (isPrivateToCreator) hicbir zaman yayinlanmaz. Payload'da olay
+ * icerigi yok, sadece bir tetikleyici (bkz. use-calendar-events-realtime-sync.ts,
+ * messages.message.created ile ayni "icerige bakma, invalidate et" deseni - gercek
+ * gorunurluk filtresi zaten list()/getById() icinde uygulaniyor). */
+function emitCalendarEventChange(
+  realtime: RealtimeService,
+  tenantId: string,
+): void {
+  realtime.emitToTenant(tenantId, 'calendar-events.event.changed', {});
+}
+
 @Injectable()
 export class CalendarEventsService {
   constructor(
@@ -25,6 +52,7 @@ export class CalendarEventsService {
     private readonly audit: AuditService,
     private readonly fileUrl: FileUrlService,
     private readonly cache: CalendarEventsCacheService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -54,30 +82,56 @@ export class CalendarEventsService {
   /**
    * T1/T3: tek uc hem ay gorunumunu (from/to araligiyla ortusen etkinlikler,
    * asc siralama) hem de "bizimle ilgili" ters kronolojik listeyi (order=desc)
-   * besler - gorunurluk kisiti yok (bkz. docs/VARSAYIMLAR.md V23, madde 2).
+   * besler - genel gorunurluk kisiti yok (bkz. docs/VARSAYIMLAR.md V23, madde 2),
+   * tek istisna: katilimci secilmeden olusturulan etkinlikler (isPrivateToCreator)
+   * sadece olusturanin listesinde gorunur. Cache tum sonucu (filtresiz) tutar,
+   * filtre her istekte kullaniciya gore uygulanir - boylece ayni cache anahtari
+   * farkli kullanicilar arasinda guvenle paylasilabilir.
    */
   async list(
     query: CalendarEventQueryDto,
+    currentUserId: string,
   ): Promise<CalendarEventWithAttendees[]> {
     const cached = await this.cache.get(query);
-    if (cached) {
-      return cached;
-    }
+    const result =
+      cached ??
+      (await (async () => {
+        const { from, to, order } = query;
+        const rows = await this.prisma.calendarEvent.findMany({
+          where: {
+            ...(to ? { startAt: { lte: to } } : {}),
+            ...(from ? { endAt: { gte: from } } : {}),
+          },
+          include: { attendees: true },
+          orderBy: { startAt: order },
+        });
+        await this.cache.set(query, rows);
+        return rows;
+      })());
 
-    const { from, to, order } = query;
-    const result = await this.prisma.calendarEvent.findMany({
-      where: {
-        ...(to ? { startAt: { lte: to } } : {}),
-        ...(from ? { endAt: { gte: from } } : {}),
-      },
-      include: { attendees: true },
-      orderBy: { startAt: order },
-    });
-    await this.cache.set(query, result);
-    return result;
+    return result.filter(
+      (event) =>
+        !isPrivateToCreator(event) || event.createdById === currentUserId,
+    );
   }
 
-  async getById(id: string): Promise<CalendarEventWithAttendees> {
+  async getById(
+    id: string,
+    currentUserId: string,
+  ): Promise<CalendarEventWithAttendees> {
+    const event = await this.findExisting(id);
+    if (isPrivateToCreator(event) && event.createdById !== currentUserId) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Etkinlik bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return event;
+  }
+
+  /** update()/remove() icin: gorunurluk kisiti uygulamadan varlik kontrolu. */
+  private async findExisting(id: string): Promise<CalendarEventWithAttendees> {
     const event = await this.prisma.calendarEvent.findFirst({
       where: { id },
       include: { attendees: true },
@@ -120,14 +174,18 @@ export class CalendarEventsService {
       meta: { title: event.title },
     });
     await this.cache.invalidate();
+    if (!isPrivateToCreator(event)) {
+      emitCalendarEventChange(this.realtime, tenantId);
+    }
     return event;
   }
 
   async update(
     id: string,
     dto: UpdateCalendarEventDto,
+    tenantId: string,
   ): Promise<CalendarEventWithAttendees> {
-    await this.getById(id);
+    const before = await this.findExisting(id);
     const event = await this.prisma.$transaction(async (tx) => {
       if (dto.attendees) {
         await tx.calendarEventAttendee.deleteMany({ where: { eventId: id } });
@@ -151,11 +209,14 @@ export class CalendarEventsService {
       entityId: id,
     });
     await this.cache.invalidate();
+    if (!isPrivateToCreator(before) || !isPrivateToCreator(event)) {
+      emitCalendarEventChange(this.realtime, tenantId);
+    }
     return event;
   }
 
-  async remove(id: string): Promise<void> {
-    await this.getById(id);
+  async remove(id: string, tenantId: string): Promise<void> {
+    const existing = await this.findExisting(id);
     await this.prisma.calendarEvent.delete({ where: { id } });
     await this.audit.log({
       action: 'DELETE',
@@ -163,5 +224,8 @@ export class CalendarEventsService {
       entityId: id,
     });
     await this.cache.invalidate();
+    if (!isPrivateToCreator(existing)) {
+      emitCalendarEventChange(this.realtime, tenantId);
+    }
   }
 }
