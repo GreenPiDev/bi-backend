@@ -176,7 +176,7 @@ describe('AccountsService', () => {
         email: 'a@b.com',
         website: 'https://acme.com',
         address: 'Merkez Mah.',
-        sector: 'Yazilim',
+        sector: ['Yazilim'],
         city: 'Istanbul',
         district: 'Kadikoy',
         accountTypes: ['CUSTOMER'],
@@ -191,7 +191,7 @@ describe('AccountsService', () => {
     const prisma = createPrisma();
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({ name: 'Acme', sector: 'Herhangi' } as never),
+      service.create({ name: 'Acme', sector: ['Herhangi'] } as never),
     ).resolves.toBeDefined();
   });
 
@@ -202,7 +202,7 @@ describe('AccountsService', () => {
     ]);
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({ name: 'Acme', sector: 'Tarim' } as never),
+      service.create({ name: 'Acme', sector: ['Tarim'] } as never),
     ).rejects.toMatchObject({
       code: 'INVALID_SECTOR',
     } satisfies Partial<AppException>);
@@ -215,7 +215,7 @@ describe('AccountsService', () => {
     ]);
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({ name: 'Acme', sector: 'Yazilim' } as never),
+      service.create({ name: 'Acme', sector: ['Yazilim'] } as never),
     ).resolves.toBeDefined();
   });
 
