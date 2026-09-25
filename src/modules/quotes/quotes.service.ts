@@ -51,6 +51,14 @@ export type QuoteWithDetails = Quote & {
   contact: Contact | null;
   opportunity: Opportunity | null;
   items: (QuoteItem & { product: Product & { productList: ProductList } })[];
+  createdByName: string | null;
+};
+
+type QuoteRow = Quote & {
+  account: Account;
+  contact: Contact | null;
+  opportunity: Opportunity | null;
+  items: (QuoteItem & { product: Product & { productList: ProductList } })[];
 };
 
 interface EnsuredPostSaleCase {
@@ -256,6 +264,23 @@ export class QuotesService {
     return { items: resolved, requiresApproval };
   }
 
+  /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
+   * User tablosundan toplu cozumleniyor (interactions.service.ts'teki ayni desen). */
+  private async attachCreatedByNames(
+    rows: QuoteRow[],
+  ): Promise<QuoteWithDetails[]> {
+    const ids = [...new Set(rows.map((row) => row.createdById))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(users.map((user) => [user.id, user.name]));
+    return rows.map((row) => ({
+      ...row,
+      createdByName: nameById.get(row.createdById) ?? null,
+    }));
+  }
+
   async list(query: QuoteQueryDto): Promise<PagedResult<QuoteWithDetails>> {
     const cached = await this.quotesCache.get(query);
     if (cached) {
@@ -285,7 +310,7 @@ export class QuotesService {
     ]);
 
     const result = {
-      data,
+      data: await this.attachCreatedByNames(data),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
     await this.quotesCache.set(query, result);
@@ -304,7 +329,8 @@ export class QuotesService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return quote;
+    const [withName] = await this.attachCreatedByNames([quote]);
+    return withName;
   }
 
   async create(
