@@ -30,6 +30,7 @@ export type InteractionWithDetails = Interaction & {
   contact: Contact | null;
   participants: InteractionParticipant[];
   opportunity: Opportunity | null;
+  createdByName: string | null;
 };
 
 export interface ReminderConflict {
@@ -66,6 +67,13 @@ const INTERACTION_INCLUDE = {
   opportunity: true,
 } as const;
 
+type InteractionRow = Interaction & {
+  account: Account | null;
+  contact: Contact | null;
+  participants: InteractionParticipant[];
+  opportunity: Opportunity | null;
+};
+
 @Injectable()
 export class InteractionsService {
   constructor(
@@ -73,6 +81,23 @@ export class InteractionsService {
     private readonly audit: AuditService,
     private readonly accountsCache: AccountsCacheService,
   ) {}
+
+  /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
+   * User tablosundan toplu cozumleniyor. */
+  private async attachCreatedByNames(
+    rows: InteractionRow[],
+  ): Promise<InteractionWithDetails[]> {
+    const ids = [...new Set(rows.map((row) => row.createdById))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(users.map((user) => [user.id, user.name]));
+    return rows.map((row) => ({
+      ...row,
+      createdByName: nameById.get(row.createdById) ?? null,
+    }));
+  }
 
   async list(
     query: InteractionQueryDto,
@@ -100,7 +125,7 @@ export class InteractionsService {
     ]);
 
     return {
-      data,
+      data: await this.attachCreatedByNames(data),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
   }
@@ -117,7 +142,8 @@ export class InteractionsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return interaction;
+    const [withName] = await this.attachCreatedByNames([interaction]);
+    return withName;
   }
 
   /**
