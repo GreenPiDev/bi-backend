@@ -153,6 +153,7 @@ model Tenant {
   departmentOptions DepartmentOption[]
   titleOptions      TitleOption[]
   productCategoryOptions ProductCategoryOption[]
+  brandOptions      BrandOption[]
   paymentMethodOptions PaymentMethodOption[]
   ibanOptions       IbanOption[]
   settings          TenantSetting[]
@@ -569,6 +570,22 @@ model ProductCategoryOption {
 }
 
 /**
+ * Tenant kendi marka listesini yonetir; Product.brand serbest metin (Sektor/Departman/
+ * Unvan/Urun Kategorisi ile ayni desen) - bu liste sadece Autocomplete oneri kaynagi.
+ */
+model BrandOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_brand_options")
+}
+
+/**
  * Teklif "odeme yontemi" alani icin tenant'in tanimladigi liste - Sektor/Departman/
  * Unvan/Urun Kategorisi ile ayni desen. Quote.paymentMethod bu listedeki label'a
  * karsi dogrulanir (bkz. QuotesService.assertValidPaymentMethod).
@@ -791,6 +808,7 @@ model Product {
   attributes     Json?
   description    String?
   category       String?
+  brand          String?
   costPrice      Decimal?  @db.Decimal(12, 2)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

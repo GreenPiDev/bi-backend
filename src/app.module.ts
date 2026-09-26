@@ -36,6 +36,7 @@ import { PlatformAdminModule } from './modules/platform-admin/platform-admin.mod
 import { PaymentMethodOptionsModule } from './modules/payment-method-options/payment-method-options.module';
 import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
+import { BrandOptionsModule } from './modules/brand-options/brand-options.module';
 import { ProductImportsModule } from './modules/product-imports/product-imports.module';
 import { ProductListsModule } from './modules/product-lists/product-lists.module';
 import { ProductsModule } from './modules/products/products.module';
@@ -90,6 +91,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     DepartmentOptionsModule,
     TitleOptionsModule,
     ProductCategoriesModule,
+    BrandOptionsModule,
     PaymentMethodOptionsModule,
     IbanOptionsModule,
     TenantSettingsModule,
