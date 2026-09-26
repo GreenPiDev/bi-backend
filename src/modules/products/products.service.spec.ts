@@ -21,7 +21,10 @@ function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function createPrisma(row: unknown = createProductRow()) {
+function createPrisma(
+  row: unknown = createProductRow(),
+  targetProductList: unknown = { id: 'product-list-2', name: 'Bayi' },
+) {
   return {
     product: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -29,7 +32,11 @@ function createPrisma(row: unknown = createProductRow()) {
       findFirst: vi.fn().mockResolvedValue(row),
       create: vi.fn().mockResolvedValue(row),
       update: vi.fn().mockResolvedValue(row),
+      updateMany: vi.fn().mockResolvedValue({ count: 2 }),
       delete: vi.fn().mockResolvedValue(row),
+    },
+    productList: {
+      findFirst: vi.fn().mockResolvedValue(targetProductList),
     },
   };
 }
@@ -79,5 +86,32 @@ describe('ProductsService', () => {
     expect(prisma.product.delete).toHaveBeenCalledWith({
       where: { id: 'product-1' },
     });
+  });
+
+  it('bulkMove: bulunamayan hedef liste icin NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma(createProductRow(), null);
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    await expect(
+      service.bulkMove({
+        productIds: ['product-1'],
+        targetProductListId: 'yok',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('bulkMove: secilen urunleri hedef listeye tasir', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const result = await service.bulkMove({
+      productIds: ['product-1', 'product-2'],
+      targetProductListId: 'product-list-2',
+    });
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['product-1', 'product-2'] } },
+      data: { productListId: 'product-list-2' },
+    });
+    expect(result).toEqual({ movedCount: 2 });
+    expect(auditLog).toHaveBeenCalled();
   });
 });

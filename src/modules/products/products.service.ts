@@ -9,6 +9,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { ProductsCacheService } from './products-cache.service';
 import type {
+  BulkMoveProductsDto,
   CreateProductDto,
   ProductQueryDto,
   UpdateProductDto,
@@ -123,5 +124,35 @@ export class ProductsService {
     await this.prisma.product.delete({ where: { id } });
     await this.audit.log({ action: 'DELETE', entity: 'Product', entityId: id });
     await this.cache.invalidate();
+  }
+
+  async bulkMove(dto: BulkMoveProductsDto): Promise<{ movedCount: number }> {
+    const targetList = await this.prisma.productList.findFirst({
+      where: { id: dto.targetProductListId },
+    });
+    if (!targetList) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Hedef urun listesi bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const result = await this.prisma.product.updateMany({
+      where: { id: { in: dto.productIds } },
+      data: { productListId: dto.targetProductListId },
+    });
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'ProductList',
+      entityId: dto.targetProductListId,
+      meta: {
+        bulkMoveProductIds: dto.productIds,
+        movedCount: result.count,
+      },
+    });
+    await this.cache.invalidate();
+    return { movedCount: result.count };
   }
 }

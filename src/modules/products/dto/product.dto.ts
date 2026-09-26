@@ -44,3 +44,11 @@ export const ProductQuerySchema = ListQuerySchema.extend({
   productListId: z.string().uuid().optional(),
 });
 export type ProductQueryDto = z.infer<typeof ProductQuerySchema>;
+
+export const BulkMoveProductsSchema = z.object({
+  productIds: z.array(z.string().uuid()).min(1, 'En az bir urun seciniz.'),
+  targetProductListId: z
+    .string()
+    .uuid('Gecerli bir hedef urun listesi seciniz.'),
+});
+export type BulkMoveProductsDto = z.infer<typeof BulkMoveProductsSchema>;

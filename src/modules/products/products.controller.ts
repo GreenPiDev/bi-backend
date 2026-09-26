@@ -14,9 +14,11 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
+  BulkMoveProductsSchema,
   CreateProductSchema,
   ProductQuerySchema,
   UpdateProductSchema,
+  type BulkMoveProductsDto,
   type CreateProductDto,
   type ProductQueryDto,
   type UpdateProductDto,
@@ -48,6 +50,15 @@ export class ProductsController {
     @Body(new ZodValidationPipe(CreateProductSchema)) dto: CreateProductDto,
   ): Promise<ProductView> {
     return this.products.create(dto);
+  }
+
+  @Patch('bulk-move')
+  @RequiresPermission('products', 'UPDATE')
+  bulkMove(
+    @Body(new ZodValidationPipe(BulkMoveProductsSchema))
+    dto: BulkMoveProductsDto,
+  ): Promise<{ movedCount: number }> {
+    return this.products.bulkMove(dto);
   }
 
   @Patch(':id')
