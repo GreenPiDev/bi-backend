@@ -16,7 +16,12 @@ describe('FilesController', () => {
     const storage = { download: vi.fn() };
     const controller = new FilesController(storage as never);
     await expect(
-      controller.getFile(undefined, createUser('t1'), fakeResponse()),
+      controller.getFile(
+        undefined,
+        undefined,
+        createUser('t1'),
+        fakeResponse(),
+      ),
     ).rejects.toMatchObject({ code: 'FILE_REQUIRED' });
     expect(storage.download).not.toHaveBeenCalled();
   });
@@ -27,6 +32,7 @@ describe('FilesController', () => {
     await expect(
       controller.getFile(
         'PILENS/development/OTHER_TENANT/avatars/u1.png',
+        undefined,
         createUser('t1'),
         fakeResponse(),
       ),
@@ -38,7 +44,12 @@ describe('FilesController', () => {
     const storage = { download: vi.fn() };
     const controller = new FilesController(storage as never);
     await expect(
-      controller.getFile('../../etc/passwd', createUser('t1'), fakeResponse()),
+      controller.getFile(
+        '../../etc/passwd',
+        undefined,
+        createUser('t1'),
+        fakeResponse(),
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(storage.download).not.toHaveBeenCalled();
   });
@@ -57,6 +68,7 @@ describe('FilesController', () => {
 
     await controller.getFile(
       'PILENS/development/t1/avatars/u1.png',
+      undefined,
       createUser('t1'),
       res,
     );
@@ -75,6 +87,61 @@ describe('FilesController', () => {
     expect(pipe).toHaveBeenCalledWith(res);
   });
 
+  it('name verilirse Content-Disposition ile orijinal dosya adini doner', async () => {
+    const pipe = vi.fn();
+    const storage = {
+      download: vi.fn().mockResolvedValue({
+        body: { pipe },
+        contentType: 'application/pdf',
+        contentLength: 456,
+      }),
+    };
+    const controller = new FilesController(storage as never);
+    const res = fakeResponse();
+
+    await controller.getFile(
+      'PILENS/development/t1/messages/x.pdf',
+      'teklifler.xlsx',
+      createUser('t1'),
+      res,
+    );
+
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Content-Disposition',
+      'inline; filename="teklifler.xlsx"; filename*=UTF-8\'\'teklifler.xlsx',
+    );
+  });
+
+  it('name icinde CRLF/quote varsa temizler (header enjeksiyonu engellenir)', async () => {
+    const pipe = vi.fn();
+    const storage = {
+      download: vi.fn().mockResolvedValue({
+        body: { pipe },
+        contentType: 'application/pdf',
+        contentLength: 456,
+      }),
+    };
+    const controller = new FilesController(storage as never);
+    const res = fakeResponse();
+
+    await controller.getFile(
+      'PILENS/development/t1/messages/x.pdf',
+      'evil"\r\nX-Injected: 1',
+      createUser('t1'),
+      res,
+    );
+
+    const call = (res.setHeader as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([header]) => header === 'Content-Disposition',
+    );
+    const value = call?.[1] as string;
+    expect(value).not.toMatch(/[\r\n]/);
+    // Sadece "filename=" degerini saran iki yapisal tirnak olmali - kullanicinin
+    // girdisindeki tirnaklar temizlenmis olmali, aksi halde deger disina tasip
+    // ek bir Content-Disposition parametresi enjekte edebilirdi.
+    expect(value.match(/"/g)).toHaveLength(2);
+  });
+
   it("R2'de bulunamayan bir anahtar icin NOT_FOUND firlatir", async () => {
     const storage = {
       download: vi.fn().mockRejectedValue(new Error('NoSuchKey')),
@@ -83,6 +150,7 @@ describe('FilesController', () => {
     await expect(
       controller.getFile(
         'PILENS/development/t1/avatars/yok.png',
+        undefined,
         createUser('t1'),
         fakeResponse(),
       ),

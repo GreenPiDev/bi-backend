@@ -6,6 +6,7 @@ import {
 } from '../../core/decorators/current-user.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { R2StorageService } from '../../core/storage/r2-storage.service';
+import { assertKeyBelongsToTenant } from '../../core/storage/tenant-scoped-key';
 
 /**
  * Yuklenen dosyalari (urun gorseli, avatar) R2'den okuyup tarayiciya proxy'ler.
@@ -22,6 +23,7 @@ export class FilesController {
   @Get()
   async getFile(
     @Query('key') key: string | undefined,
+    @Query('name') name: string | undefined,
     @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ): Promise<void> {
@@ -54,6 +56,19 @@ export class FilesController {
       res.setHeader('Content-Length', String(file.contentLength));
     }
     res.setHeader('Cache-Control', 'private, max-age=3600');
+    // `name` verilirse (mesaj eki gibi orijinal adi olan dosyalar) tarayici "farkli
+    // kaydet" veya otomatik indirmede bu adi kullanir - aksi halde URL'deki
+    // "/files" yol parcasindan turetilen jenerik bir ad gorunur. CRLF/quote'lar
+    // header enjeksiyonuna karsi temizlenir; ASCII-disi karakterler icin RFC 5987
+    // filename* de eklenir (Turkce karakterli dosya adlari icin).
+    if (name) {
+      const sanitized = name.replace(/[\r\n"]/g, '');
+      const asciiFallback = sanitized.replace(/[^\x20-\x7E]/g, '_');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(sanitized)}`,
+      );
+    }
     // Helmet'in varsayilan Cross-Origin-Resource-Policy: same-origin degeri, bu uc
     // kasitli olarak farkli origin'deki (frontend) bir <img> etiketine gomulecek
     // sekilde tasarlandigi icin gevsetiliyor - aksi halde tarayici (curl'in aksine)
@@ -61,17 +76,5 @@ export class FilesController {
     // cikar).
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     file.body.pipe(res);
-  }
-}
-
-/** Anahtar sablonu: PILENS/{env}/{tenantId}/... - ucuncu segment tenantId. */
-function assertKeyBelongsToTenant(key: string, tenantId: string): void {
-  const segments = key.split('/');
-  if (segments[0] !== 'PILENS' || segments[2] !== tenantId) {
-    throw new AppException(
-      'NOT_FOUND',
-      'Dosya bulunamadi.',
-      HttpStatus.NOT_FOUND,
-    );
   }
 }

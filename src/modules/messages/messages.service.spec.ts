@@ -7,6 +7,11 @@ const fakeAudit = { log: auditLog } as never;
 const emitToTenant = vi.fn();
 const fakeRealtime = { emitToTenant } as never;
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
+const fakeStorage = {
+  upload: vi.fn(),
+  delete: vi.fn(),
+  download: vi.fn(),
+} as never;
 const fakeMessagesCache = {
   get: vi.fn().mockResolvedValue(null),
   set: vi.fn(),
@@ -32,6 +37,7 @@ function createMessageRow(overrides: Partial<Record<string, unknown>> = {}) {
     recipients: [
       { id: 'rec-1', userId: RECIPIENT_ID, kind: 'TO', readAt: null },
     ],
+    attachments: [],
     ...overrides,
   };
 }
@@ -77,6 +83,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -94,6 +101,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -116,6 +124,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -132,6 +141,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -148,6 +158,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(service.getById('yok', SENDER_ID)).rejects.toMatchObject({
@@ -162,6 +173,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
@@ -189,6 +201,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
@@ -225,6 +238,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
@@ -261,6 +275,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
 
@@ -292,6 +307,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
 
@@ -320,6 +336,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
 
@@ -338,6 +355,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
 
@@ -359,6 +377,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
@@ -385,6 +404,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
@@ -424,6 +444,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.list(SENDER_ID, {
@@ -457,6 +478,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.create(TENANT_ID, SENDER_ID, {
@@ -492,6 +514,115 @@ describe('MessagesService', () => {
     );
   });
 
+  it('create: attachments verilince nested create ile tenantId ekleyip fileUrl.build ile url uretir', async () => {
+    const prisma = createPrisma([
+      createMessageRow({
+        attachments: [
+          {
+            id: 'att-1',
+            fileKey: `PILENS/development/${TENANT_ID}/messages/x.pdf`,
+            fileName: 'teklif.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 1234,
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+      }),
+    ]);
+    const buildFileUrl = vi.fn(() => 'https://api.example.com/files?key=x');
+    const service = new MessagesService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime,
+      { build: buildFileUrl } as never,
+      fakeStorage,
+      fakeMessagesCache,
+    );
+    const result = await service.create(TENANT_ID, SENDER_ID, {
+      subject: 'Ekli',
+      body: 'Ekte dosya var.',
+      toUserIds: [RECIPIENT_ID],
+      ccUserIds: [],
+      attachments: [
+        {
+          fileKey: `PILENS/development/${TENANT_ID}/messages/x.pdf`,
+          fileName: 'teklif.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 1234,
+        },
+      ],
+    } as never);
+
+    expect(prisma.message.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          attachments: {
+            create: [
+              expect.objectContaining({
+                tenantId: TENANT_ID,
+                fileName: 'teklif.pdf',
+                mimeType: 'application/pdf',
+                sizeBytes: 1234,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(result.attachments).toEqual([
+      expect.objectContaining({
+        id: 'att-1',
+        fileName: 'teklif.pdf',
+        url: 'https://api.example.com/files?key=x',
+      }),
+    ]);
+  });
+
+  it('uploadAttachment: gecerli dosyayi R2 anahtar sablonuyla yukler', async () => {
+    const upload = vi.fn();
+    const service = new MessagesService(
+      createPrisma() as never,
+      fakeAudit,
+      fakeRealtime,
+      fakeFileUrl,
+      { upload, delete: vi.fn(), download: vi.fn() } as never,
+      fakeMessagesCache,
+    );
+    const result = await service.uploadAttachment(TENANT_ID, {
+      mimetype: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\nfake'),
+      originalname: 'teklif.pdf',
+    });
+    expect(upload).toHaveBeenCalledWith(
+      expect.stringContaining(`PILENS/development/${TENANT_ID}/messages/`),
+      expect.any(Buffer),
+      'application/pdf',
+    );
+    expect(result.fileName).toBe('teklif.pdf');
+    expect(result.fileKey).toContain(`/${TENANT_ID}/messages/`);
+  });
+
+  it("deleteUnattachedFile: baska tenant'in anahtarini silmeye calisirsa NOT_FOUND firlatir", async () => {
+    const del = vi.fn();
+    const service = new MessagesService(
+      createPrisma() as never,
+      fakeAudit,
+      fakeRealtime,
+      fakeFileUrl,
+      { upload: vi.fn(), delete: del, download: vi.fn() } as never,
+      fakeMessagesCache,
+    );
+    await expect(
+      service.deleteUnattachedFile(
+        TENANT_ID,
+        'PILENS/development/other-tenant/messages/x.pdf',
+      ),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(del).not.toHaveBeenCalled();
+  });
+
   it('create: conversationId verilince katilimci dogrulamasi yapip ayni konusmaya ekler', async () => {
     const prisma = createPrisma();
     const service = new MessagesService(
@@ -499,6 +630,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.create(TENANT_ID, RECIPIENT_ID, {
@@ -525,6 +657,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -546,6 +679,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -562,6 +696,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID);
@@ -582,6 +717,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID, false);
@@ -602,6 +738,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await expect(
@@ -623,6 +760,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.setConversationStar(
@@ -648,6 +786,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.setConversationStar(
@@ -666,6 +805,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     await service.setConversationStar(
@@ -689,6 +829,7 @@ describe('MessagesService', () => {
       fakeAudit,
       fakeRealtime,
       fakeFileUrl,
+      fakeStorage,
       fakeMessagesCache,
     );
     const result = await service.list(SENDER_ID, {

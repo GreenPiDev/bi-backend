@@ -38,4 +38,22 @@ describe('FileUrlService', () => {
       `http://localhost:3011/api/v1/files?key=k.png&v=${updatedAt.getTime()}`,
     );
   });
+
+  it('fileName verilirse &name= parametresini ekler (indirilen dosyanin adi icin)', () => {
+    const service = new FileUrlService(
+      createConfig('http://localhost:3011/api/v1'),
+    );
+    const updatedAt = new Date('2026-09-08T06:00:00.000Z');
+    expect(
+      service.build(
+        'PILENS/development/t1/messages/x.pdf',
+        updatedAt,
+        'teklifler.pdf',
+      ),
+    ).toBe(
+      'http://localhost:3011/api/v1/files?key=PILENS%2Fdevelopment%2Ft1%2Fmessages%2Fx.pdf&v=' +
+        updatedAt.getTime() +
+        '&name=teklifler.pdf',
+    );
+  });
 });

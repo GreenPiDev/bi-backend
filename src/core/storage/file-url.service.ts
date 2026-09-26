@@ -10,11 +10,14 @@ import { ConfigService } from '@nestjs/config';
 export class FileUrlService {
   constructor(private readonly config: ConfigService) {}
 
-  build(key: string | null, updatedAt: Date): string | null {
+  /** `fileName` verilirse (mesaj eki gibi orijinal adi olan dosyalar icin)
+   * indirilen dosyanin adi bu olur - bkz. FilesController Content-Disposition. */
+  build(key: string | null, updatedAt: Date, fileName?: string): string | null {
     if (!key) return null;
     const base = this.config
       .getOrThrow<string>('API_PUBLIC_URL')
       .replace(/\/+$/, '');
-    return `${base}/files?key=${encodeURIComponent(key)}&v=${updatedAt.getTime()}`;
+    const nameParam = fileName ? `&name=${encodeURIComponent(fileName)}` : '';
+    return `${base}/files?key=${encodeURIComponent(key)}&v=${updatedAt.getTime()}${nameParam}`;
   }
 }

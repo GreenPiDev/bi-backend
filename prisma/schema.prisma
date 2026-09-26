@@ -171,6 +171,7 @@ model Tenant {
   stockItems        StockItem[]
   messages          Message[]
   messageStars      MessageStar[]
+  messageAttachments MessageAttachment[]
 
   @@map("tenants")
 }
@@ -1117,8 +1118,9 @@ model Message {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
-  tenant     Tenant             @relation(fields: [tenantId], references: [id])
-  recipients MessageRecipient[]
+  tenant      Tenant               @relation(fields: [tenantId], references: [id])
+  recipients  MessageRecipient[]
+  attachments MessageAttachment[]
 
   @@index([tenantId, relatedEntity, relatedEntityId])
   @@index([tenantId, sentAt])
@@ -1143,6 +1145,30 @@ model MessageRecipient {
 
   @@unique([messageId, userId, kind])
   @@map("crm_message_recipients")
+}
+
+/**
+ * Mesaj eki (G3 genisletmesi, dosya ekleme) - R2'de PILENS/{env}/{tenantId}/messages/...
+ * anahtar sablonuyla saklanir (bkz. FilesController). Mesaj olusturulmadan once
+ * yuklenip (POST /messages/attachments) donen anahtarla birlikte mesaj create
+ * body'sine referans verilir, bu yuzden tenantId burada da tutulur (Message'a FK
+ * uzerinden erisilebilir olsa da, tenant-scoped extension'in filtreleyebilmesi icin).
+ */
+model MessageAttachment {
+  id        String   @id @default(uuid())
+  tenantId  String
+  messageId String
+  fileKey   String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, messageId])
+  @@map("crm_message_attachments")
 }
 
 /**

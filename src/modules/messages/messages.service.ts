@@ -1,6 +1,8 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type {
   Message,
+  MessageAttachment,
   MessageRecipient,
   MessageRelatedEntity,
   Prisma,
@@ -12,7 +14,10 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { RealtimeService } from '../../core/realtime/realtime.service';
+import { detectAttachmentExtension } from '../../core/validators/attachment-upload-validation';
 import { FileUrlService } from '../../core/storage/file-url.service';
+import { R2StorageService } from '../../core/storage/r2-storage.service';
+import { assertKeyBelongsToTenant } from '../../core/storage/tenant-scoped-key';
 import { AuditService } from '../audit/audit.service';
 import { MessagesCacheService } from './messages-cache.service';
 import type { CreateMessageDto, MessageQueryDto } from './dto/message.dto';
@@ -20,8 +25,22 @@ import type { CreateMessageDto, MessageQueryDto } from './dto/message.dto';
 const SORTABLE_FIELDS = ['sentAt', 'createdAt'] as const;
 const CONVERSATION_SCAN_LIMIT = 2000;
 
+export interface MessageAttachmentView {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string | null;
+}
+
 export type MessageWithRecipients = Message & {
   recipients: MessageRecipient[];
+  attachments: MessageAttachmentView[];
+};
+
+type RawMessage = Message & {
+  recipients: MessageRecipient[];
+  attachments: MessageAttachment[];
 };
 
 export interface ConversationSummary {
@@ -55,6 +74,7 @@ interface RelatedEntityRef {
 
 const MESSAGE_INCLUDE = {
   recipients: true,
+  attachments: true,
 } as const;
 
 @Injectable()
@@ -64,8 +84,60 @@ export class MessagesService {
     private readonly audit: AuditService,
     private readonly realtime: RealtimeService,
     private readonly fileUrl: FileUrlService,
+    private readonly storage: R2StorageService,
     private readonly messagesCache: MessagesCacheService,
   ) {}
+
+  /** Mesaj olusturulmadan once dosyayi R2'ye yukler, mesaj create body'sinde
+   * referans verilecek anahtari doner - mesaj id'si henuz yok, o yuzden avatar/
+   * urun gorseli deseninin aksine anahtar sabit degil, her yukleme icin yeni uuid. */
+  async uploadAttachment(
+    tenantId: string,
+    file: { mimetype: string; buffer: Buffer; originalname: string },
+  ): Promise<{
+    fileKey: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+  }> {
+    const ext = detectAttachmentExtension(file.mimetype, file.buffer);
+    const env =
+      process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    const key = `PILENS/${env}/${tenantId}/messages/${randomUUID()}.${ext}`;
+    await this.storage.upload(key, file.buffer, file.mimetype);
+    return {
+      fileKey: key,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      sizeBytes: file.buffer.length,
+    };
+  }
+
+  /** Kullanici mesaji gondermeden once eki kaldirirsa (henuz hicbir Message satirina
+   * baglanmamis), R2'de yetim kalmasin diye temizlik ucu. */
+  async deleteUnattachedFile(tenantId: string, fileKey: string): Promise<void> {
+    assertKeyBelongsToTenant(fileKey, tenantId);
+    await this.storage.delete(fileKey);
+  }
+
+  /** Ham Prisma sonucundaki attachments'i (fileKey tasir) disariya sizdirmadan
+   * indirilebilir URL'e cevirir - avatarUrl/urun gorseli deseniyle ayni. */
+  private mapMessage(message: RawMessage): MessageWithRecipients {
+    return {
+      ...message,
+      attachments: message.attachments.map((attachment) => ({
+        id: attachment.id,
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        sizeBytes: attachment.sizeBytes,
+        url: this.fileUrl.build(
+          attachment.fileKey,
+          attachment.createdAt,
+          attachment.fileName,
+        ),
+      })),
+    };
+  }
 
   async list(
     userId: string,
@@ -181,12 +253,14 @@ export class MessagesService {
     // Konusma bazli gruplama Prisma'nin groupBy'iyla dogrudan yapilamaz (en son mesaj +
     // okunmamis sayisi gerekiyor); kucuk/orta olcek icin makul bir pencere cekilip
     // bellekte gruplaniyor - bkz. docs/VARSAYIMLAR.md mesaj hacmi notu.
-    const candidates = await this.prisma.message.findMany({
-      where,
-      orderBy: { sentAt: direction },
-      take: CONVERSATION_SCAN_LIMIT,
-      include: MESSAGE_INCLUDE,
-    });
+    const candidates = (
+      await this.prisma.message.findMany({
+        where,
+        orderBy: { sentAt: direction },
+        take: CONVERSATION_SCAN_LIMIT,
+        include: MESSAGE_INCLUDE,
+      })
+    ).map((message) => this.mapMessage(message));
 
     const byConversation = new Map<string, MessageWithRecipients[]>();
     for (const message of candidates) {
@@ -323,14 +397,16 @@ export class MessagesService {
     conversationId: string,
     userId: string,
   ): Promise<MessageWithRecipients[]> {
-    const messages = await this.prisma.message.findMany({
-      where: {
-        conversationId,
-        OR: [{ senderId: userId }, { recipients: { some: { userId } } }],
-      },
-      orderBy: { sentAt: 'asc' },
-      include: MESSAGE_INCLUDE,
-    });
+    const messages = (
+      await this.prisma.message.findMany({
+        where: {
+          conversationId,
+          OR: [{ senderId: userId }, { recipients: { some: { userId } } }],
+        },
+        orderBy: { sentAt: 'asc' },
+        include: MESSAGE_INCLUDE,
+      })
+    ).map((message) => this.mapMessage(message));
     if (messages.length === 0) {
       throw new AppException(
         'NOT_FOUND',
@@ -412,10 +488,20 @@ export class MessagesService {
               })),
             ],
           },
+          attachments: {
+            create: (dto.attachments ?? []).map((attachment) => ({
+              tenantId,
+              fileKey: attachment.fileKey,
+              fileName: attachment.fileName,
+              mimeType: attachment.mimeType,
+              sizeBytes: attachment.sizeBytes,
+            })),
+          },
         },
         include: MESSAGE_INCLUDE,
       });
     });
+    const mappedCreated = this.mapMessage(created);
 
     await this.audit.log({
       action: 'CREATE',
@@ -436,7 +522,7 @@ export class MessagesService {
     });
 
     await this.messagesCache.invalidate();
-    return created;
+    return mappedCreated;
   }
 
   /** `read=true` (varsayilan): konusmadaki tum okunmamis mesajlari okundu isaretler.

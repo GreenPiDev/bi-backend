@@ -423,4 +423,117 @@ describe('Messages (e2e)', () => {
       expect(ids).toContain(projectConversationId);
     });
   });
+
+  describe('Mesaj ekleri', () => {
+    const pdfBuffer = Buffer.concat([
+      Buffer.from('%PDF-1.4\n'),
+      Buffer.from('fake pdf content'),
+    ]);
+
+    it.runIf(Boolean(process.env.R2_ACCOUNT_ID))(
+      'POST /messages/attachments -> POST /messages: ek yukleyip mesaja bagliyor, /files proxy uzerinden indirilebiliyor',
+      async () => {
+        const uploadRes = await request(app.getHttpServer())
+          .post('/api/v1/messages/attachments')
+          .set('Cookie', cookiesA)
+          .attach('file', pdfBuffer, {
+            filename: 'teklif.pdf',
+            contentType: 'application/pdf',
+          });
+        expect(uploadRes.status).toBe(201);
+        expect(uploadRes.body.fileKey).toContain(`/${tenantIdA}/messages/`);
+        expect(uploadRes.body.fileName).toBe('teklif.pdf');
+
+        const createRes = await request(app.getHttpServer())
+          .post('/api/v1/messages')
+          .set('Cookie', cookiesA)
+          .send({
+            subject: 'Ekli mesaj',
+            body: 'Ekte teklif var.',
+            toUserIds: [recipientIdA],
+            attachments: [uploadRes.body],
+          });
+        expect(createRes.status).toBe(201);
+        expect(createRes.body.attachments).toHaveLength(1);
+        expect(createRes.body.attachments[0]).toMatchObject({
+          fileName: 'teklif.pdf',
+          mimeType: 'application/pdf',
+        });
+        const attachmentUrl = createRes.body.attachments[0].url as string;
+        const relativePath = attachmentUrl.replace(/^https?:\/\/[^/]+/, '');
+
+        const downloadRes = await request(app.getHttpServer())
+          .get(relativePath)
+          .set('Cookie', recipientCookiesA);
+        expect(downloadRes.status).toBe(200);
+        expect(downloadRes.headers['content-type']).toBe('application/pdf');
+
+        const crossTenantRes = await request(app.getHttpServer())
+          .get(relativePath)
+          .set('Cookie', cookiesB);
+        expect(crossTenantRes.status).toBe(404);
+      },
+    );
+
+    it.runIf(Boolean(process.env.R2_ACCOUNT_ID))(
+      'POST /messages/attachments: desteklenmeyen tur icin UNSUPPORTED_ATTACHMENT_TYPE doner',
+      async () => {
+        const res = await request(app.getHttpServer())
+          .post('/api/v1/messages/attachments')
+          .set('Cookie', cookiesA)
+          .attach('file', Buffer.from('not-a-real-pdf'), {
+            filename: 'teklif.pdf',
+            contentType: 'application/pdf',
+          });
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe('UNSUPPORTED_ATTACHMENT_TYPE');
+      },
+    );
+
+    it.runIf(Boolean(process.env.R2_ACCOUNT_ID))(
+      'DELETE /messages/attachments: yuklenmis ama gonderilmemis eki kaldirir, baska tenant kendi anahtarini silemez',
+      async () => {
+        const uploadRes = await request(app.getHttpServer())
+          .post('/api/v1/messages/attachments')
+          .set('Cookie', cookiesA)
+          .attach('file', pdfBuffer, {
+            filename: 'vazgecilen.pdf',
+            contentType: 'application/pdf',
+          });
+        expect(uploadRes.status).toBe(201);
+        const key = uploadRes.body.fileKey as string;
+
+        const crossTenantDelete = await request(app.getHttpServer())
+          .delete('/api/v1/messages/attachments')
+          .query({ key })
+          .set('Cookie', cookiesB);
+        expect(crossTenantDelete.status).toBe(404);
+
+        const deleteRes = await request(app.getHttpServer())
+          .delete('/api/v1/messages/attachments')
+          .query({ key })
+          .set('Cookie', cookiesA);
+        expect(deleteRes.status).toBe(204);
+      },
+    );
+
+    it('POST /messages: attachments 5 taneden fazlaysa 400 doner', async () => {
+      const tooMany = Array.from({ length: 6 }, (_, i) => ({
+        fileKey: `PILENS/development/${tenantIdA}/messages/fake-${i}.pdf`,
+        fileName: `dosya-${i}.pdf`,
+        mimeType: 'application/pdf',
+        sizeBytes: 100,
+      }));
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/messages')
+        .set('Cookie', cookiesA)
+        .send({
+          subject: 'Cok ekli mesaj',
+          body: 'Bu olmamali.',
+          toUserIds: [recipientIdA],
+          attachments: tooMany,
+        });
+      expect(res.status).toBe(400);
+    });
+  });
 });

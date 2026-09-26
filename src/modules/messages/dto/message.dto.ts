@@ -10,6 +10,18 @@ export const MessageRelatedEntitySchema = z.enum([
   'INTERACTION',
 ]);
 
+// POST /messages/attachments'in donusune birebir eslenir - mesaj olusturulmadan once
+// yuklenip anahtari burada referans verilir (bkz. messages.controller.ts, MessagesService.create).
+export const MessageAttachmentRefSchema = z.object({
+  fileKey: z.string().min(1),
+  fileName: z.string().trim().min(1).max(255),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+});
+export type MessageAttachmentRefDto = z.infer<
+  typeof MessageAttachmentRefSchema
+>;
+
 export const CreateMessageSchema = z
   .object({
     subject: z.string().trim().max(200).optional(),
@@ -21,6 +33,10 @@ export const CreateMessageSchema = z
     relatedEntity: MessageRelatedEntitySchema.optional(),
     relatedEntityId: z.string().uuid().optional(),
     conversationId: z.string().uuid().optional(),
+    attachments: z
+      .array(MessageAttachmentRefSchema)
+      .max(5, 'En fazla 5 dosya eklenebilir.')
+      .optional(),
   })
   .refine(
     (dto) => Boolean(dto.relatedEntity) === Boolean(dto.relatedEntityId),
