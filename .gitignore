@@ -20,3 +20,6 @@ prisma/migrations/dev-tmp/
 .DS_Store
 .idea/
 .wrangler/
+
+# ad-hoc / one-off scripts, not meant to be pushed
+src/scripts/seed-ahmet-demo.ts
