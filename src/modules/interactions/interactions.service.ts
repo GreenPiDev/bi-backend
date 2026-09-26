@@ -266,7 +266,7 @@ export class InteractionsService {
       let accountAutoCreated = false;
       if (!accountId && dto.accountName) {
         const account = await tx.account.create({
-          data: { name: dto.accountName } as never,
+          data: { name: dto.accountName, createdById } as never,
         });
         accountId = account.id;
         accountAutoCreated = true;
@@ -278,7 +278,7 @@ export class InteractionsService {
       if (!contactId && dto.contactName) {
         const { firstName, lastName } = splitFreeTextName(dto.contactName);
         const contact = await tx.contact.create({
-          data: { accountId, firstName, lastName } as never,
+          data: { accountId, firstName, lastName, createdById } as never,
         });
         contactId = contact.id;
         contactAutoCreated = true;

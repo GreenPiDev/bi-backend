@@ -15,6 +15,10 @@ import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { diskStorage } from 'multer';
+import {
+  CurrentUser,
+  type RequestUser,
+} from '../../core/decorators/current-user.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { MAX_UPLOAD_SIZE_BYTES } from '../datasources/datasources.constants';
@@ -145,6 +149,7 @@ export class ImportsController {
   @RequiresPermission('accounts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importAccounts(
+    @CurrentUser() user: RequestUser,
     @UploadedFile() file: Express.Multer.File,
     @Body('headerRowIndex') headerRowIndexRaw: string | undefined,
     @Body('mapping') mappingRaw: string | undefined,
@@ -161,6 +166,7 @@ export class ImportsController {
       : [];
     return this.withUploadedFile(file, (filePath, type) =>
       this.imports.importAccounts(
+        user.id,
         filePath,
         type,
         headerRowIndex,
@@ -174,12 +180,13 @@ export class ImportsController {
   @RequiresPermission('contacts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importContacts(
+    @CurrentUser() user: RequestUser,
     @UploadedFile() file: Express.Multer.File,
     @Body('mapping') mappingRaw: string | undefined,
   ): Promise<ImportResult> {
     const mapping = parseMapping(mappingRaw);
     return this.withUploadedFile(file, (filePath, type) =>
-      this.imports.importContacts(filePath, type, mapping),
+      this.imports.importContacts(user.id, filePath, type, mapping),
     );
   }
 

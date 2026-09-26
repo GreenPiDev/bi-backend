@@ -22,6 +22,8 @@ const SORTABLE_FIELDS = ['lastName', 'firstName', 'createdAt'] as const;
 const CASE_INSENSITIVE_SORT_FIELDS = new Set<string>(['firstName', 'lastName']);
 const nameCollator = new Intl.Collator('tr', { sensitivity: 'base' });
 
+export type ContactWithMeta = Contact & { createdByName: string | null };
+
 function normalize<T extends object>(dto: T): T {
   const result = { ...dto } as Record<string, unknown>;
   if ('email' in result && result.email === '') {
@@ -37,7 +39,35 @@ export class ContactsService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(query: ContactQueryDto): Promise<PagedResult<Contact>> {
+  /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
+   * User tablosundan toplu cozumleniyor (quotes.service.ts'teki ayni desen). */
+  private async attachCreatedByNames<T extends { createdById: string | null }>(
+    rows: T[],
+  ): Promise<(T & { createdByName: string | null })[]> {
+    const ids = [
+      ...new Set(
+        rows
+          .map((row) => row.createdById)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    const users =
+      ids.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const nameById = new Map(users.map((user) => [user.id, user.name]));
+    return rows.map((row) => ({
+      ...row,
+      createdByName: row.createdById
+        ? (nameById.get(row.createdById) ?? null)
+        : null,
+    }));
+  }
+
+  async list(query: ContactQueryDto): Promise<PagedResult<ContactWithMeta>> {
     const { page, pageSize, q, accountId, ownerId, status } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'lastName',
@@ -77,12 +107,12 @@ export class ContactsService {
         return direction === 'asc' ? cmp : -cmp;
       });
       const total = all.length;
-      const data = all.slice(
+      const pageRows = all.slice(
         (page - 1) * pageSize,
         (page - 1) * pageSize + pageSize,
       );
       return {
-        data,
+        data: await this.attachCreatedByNames(pageRows),
         meta: {
           page,
           pageSize,
@@ -104,12 +134,12 @@ export class ContactsService {
     ]);
 
     return {
-      data,
+      data: await this.attachCreatedByNames(data),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
   }
 
-  async getById(id: string) {
+  async getById(id: string): Promise<ContactWithMeta> {
     const contact = await this.prisma.contact.findFirst({
       where: { id },
       include: { account: { select: { id: true, name: true } } },
@@ -121,7 +151,8 @@ export class ContactsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return contact;
+    const [withName] = await this.attachCreatedByNames([contact]);
+    return withName;
   }
 
   private async assertAccountExists(accountId: string | undefined) {
@@ -178,13 +209,13 @@ export class ContactsService {
     }
   }
 
-  async create(dto: CreateContactDto): Promise<Contact> {
+  async create(createdById: string, dto: CreateContactDto): Promise<Contact> {
     await this.assertAccountExists(dto.accountId);
     await this.assertValidDepartment(dto.department);
     await this.assertValidTitle(dto.title);
     const contact = await this.prisma.contact.create({
       // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
-      data: normalize(dto) as never,
+      data: { ...normalize(dto), createdById } as never,
     });
     await this.audit.log({
       action: 'CREATE',

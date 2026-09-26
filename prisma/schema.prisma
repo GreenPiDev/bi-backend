@@ -451,6 +451,14 @@ model Account {
   district      String?
   ownerId       String?
   customFields  Json          @default("{}")
+  /**
+   * Kaydi olusturan kullanici (bkz. UsersService.getUserStats - "oluşturduğu firmalar" KPI'i).
+   * ownerId'den farkli: ownerId elle atanan "sorumlu kisi", bu ise degistirilemez, olusturma
+   * aninda set edilen gercek yaratici. Nullable: bu alan eklenmeden once olusturulmus kayitlar
+   * icin backfill migration'i audit_logs'taki en eski CREATE kaydindan doldurur, ama tum eski
+   * kayitlarda karsilik gelen bir audit log garanti degil.
+   */
+  createdById   String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
@@ -484,6 +492,8 @@ model Contact {
   lastContactedAt      DateTime?
   inactivityNotifiedAt DateTime?
   customFields         Json          @default("{}")
+  /** bkz. Account.createdById doc comment - ayni gerekce/nullable karari. */
+  createdById          String?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   deletedAt            DateTime?

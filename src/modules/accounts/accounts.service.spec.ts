@@ -9,6 +9,7 @@ const fakeCache = {
 } as never;
 
 const ACCOUNT_ID = '11111111-1111-1111-1111-111111111111';
+const CREATED_BY_ID = '22222222-2222-2222-2222-222222222222';
 
 function createAccountRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -63,13 +64,18 @@ describe('AccountsService', () => {
   it('create: bos string alanlari null yapar', async () => {
     const prisma = createPrisma();
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
-    await service.create({
+    await service.create(CREATED_BY_ID, {
       name: 'Acme A.S.',
       website: '',
       email: '',
     } as never);
     expect(prisma.account.create).toHaveBeenCalledWith({
-      data: { name: 'Acme A.S.', website: null, email: null },
+      data: {
+        name: 'Acme A.S.',
+        website: null,
+        email: null,
+        createdById: CREATED_BY_ID,
+      },
     });
   });
 
@@ -191,7 +197,10 @@ describe('AccountsService', () => {
     const prisma = createPrisma();
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({ name: 'Acme', sector: ['Herhangi'] } as never),
+      service.create(CREATED_BY_ID, {
+        name: 'Acme',
+        sector: ['Herhangi'],
+      } as never),
     ).resolves.toBeDefined();
   });
 
@@ -202,7 +211,10 @@ describe('AccountsService', () => {
     ]);
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({ name: 'Acme', sector: ['Tarim'] } as never),
+      service.create(CREATED_BY_ID, {
+        name: 'Acme',
+        sector: ['Tarim'],
+      } as never),
     ).rejects.toMatchObject({
       code: 'INVALID_SECTOR',
     } satisfies Partial<AppException>);
@@ -215,14 +227,17 @@ describe('AccountsService', () => {
     ]);
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({ name: 'Acme', sector: ['Yazilim'] } as never),
+      service.create(CREATED_BY_ID, {
+        name: 'Acme',
+        sector: ['Yazilim'],
+      } as never),
     ).resolves.toBeDefined();
   });
 
   it('create: yetkili kisi (contact) birlikte gonderilirse ayni transaction icinde olusturulur', async () => {
     const prisma = createPrisma();
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
-    await service.create({
+    await service.create(CREATED_BY_ID, {
       name: 'Acme',
       contact: {
         firstName: 'Ayse',
@@ -237,6 +252,7 @@ describe('AccountsService', () => {
         lastName: 'Yilmaz',
         phone: '+90 555 000 0000',
         accountId: ACCOUNT_ID,
+        createdById: CREATED_BY_ID,
       },
     });
   });
@@ -248,7 +264,7 @@ describe('AccountsService', () => {
     ]);
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     await expect(
-      service.create({
+      service.create(CREATED_BY_ID, {
         name: 'Acme',
         contact: { firstName: 'Ayse', lastName: 'Yilmaz', title: 'Uydurma' },
       } as never),

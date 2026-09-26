@@ -10,11 +10,15 @@ import {
   Query,
 } from '@nestjs/common';
 import type { Contact } from '@prisma/client';
+import {
+  CurrentUser,
+  type RequestUser,
+} from '../../core/decorators/current-user.decorator';
 import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
-import { ContactsService } from './contacts.service';
+import { ContactsService, type ContactWithMeta } from './contacts.service';
 import {
   ContactQuerySchema,
   CreateContactSchema,
@@ -33,7 +37,7 @@ export class ContactsController {
   @RequiresPermission('contacts', 'VIEW')
   list(
     @Query(new ZodValidationPipe(ContactQuerySchema)) query: ContactQueryDto,
-  ): Promise<PagedResult<Contact>> {
+  ): Promise<PagedResult<ContactWithMeta>> {
     return this.contacts.list(query);
   }
 
@@ -46,9 +50,10 @@ export class ContactsController {
   @Post()
   @RequiresPermission('contacts', 'CREATE')
   create(
+    @CurrentUser() user: RequestUser,
     @Body(new ZodValidationPipe(CreateContactSchema)) dto: CreateContactDto,
   ): Promise<Contact> {
-    return this.contacts.create(dto);
+    return this.contacts.create(user.id, dto);
   }
 
   @Patch(':id')

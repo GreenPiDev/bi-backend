@@ -32,7 +32,11 @@ import {
   UpdateProfileSchema,
 } from './dto/update-profile.dto';
 import { UpdateRoleDto, UpdateRoleSchema } from './dto/update-role.dto';
-import { type UserProfile, UsersService } from './users.service';
+import {
+  type UserProfile,
+  type UserStats,
+  UsersService,
+} from './users.service';
 
 @Controller('users')
 export class UsersController {
@@ -42,6 +46,12 @@ export class UsersController {
   @RequiresPermission('settings', 'VIEW', 'users')
   list(): Promise<SafeUser[]> {
     return this.users.list();
+  }
+
+  @Get(':id/stats')
+  @RequiresPermission('settings', 'VIEW', 'users')
+  getUserStats(@Param('id') id: string): Promise<UserStats> {
+    return this.users.getUserStats(id);
   }
 
   @Get('me')

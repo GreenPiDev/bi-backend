@@ -10,6 +10,10 @@ import {
   Query,
 } from '@nestjs/common';
 import type { Account } from '@prisma/client';
+import {
+  CurrentUser,
+  type RequestUser,
+} from '../../core/decorators/current-user.decorator';
 import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
@@ -46,9 +50,10 @@ export class AccountsController {
   @Post()
   @RequiresPermission('accounts', 'CREATE')
   create(
+    @CurrentUser() user: RequestUser,
     @Body(new ZodValidationPipe(CreateAccountSchema)) dto: CreateAccountDto,
   ): Promise<Account> {
-    return this.accounts.create(dto);
+    return this.accounts.create(user.id, dto);
   }
 
   @Patch(':id')

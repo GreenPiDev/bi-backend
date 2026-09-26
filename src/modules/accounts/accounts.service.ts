@@ -34,9 +34,14 @@ const CRITICAL_FIELDS = [
   'district',
 ] as const;
 
-export type AccountWithMeta = Account & { missingCriticalFields: string[] };
+export type AccountWithMeta = Account & {
+  missingCriticalFields: string[];
+  createdByName: string | null;
+};
 
-function withMissingCriticalFields(account: Account): AccountWithMeta {
+function withMissingCriticalFields<T extends Account>(
+  account: T,
+): T & { missingCriticalFields: string[] } {
   const missing: string[] = CRITICAL_FIELDS.filter((field) => {
     const value = account[field as keyof Account];
     return value === null || value === undefined || value === '';
@@ -67,6 +72,34 @@ export class AccountsService {
     private readonly audit: AuditService,
     private readonly cache: AccountsCacheService,
   ) {}
+
+  /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
+   * User tablosundan toplu cozumleniyor (quotes.service.ts'teki ayni desen). */
+  private async attachCreatedByNames<T extends { createdById: string | null }>(
+    rows: T[],
+  ): Promise<(T & { createdByName: string | null })[]> {
+    const ids = [
+      ...new Set(
+        rows
+          .map((row) => row.createdById)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    const users =
+      ids.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const nameById = new Map(users.map((user) => [user.id, user.name]));
+    return rows.map((row) => ({
+      ...row,
+      createdByName: row.createdById
+        ? (nameById.get(row.createdById) ?? null)
+        : null,
+    }));
+  }
 
   async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
     const cached = await this.cache.get(query);
@@ -137,8 +170,9 @@ export class AccountsService {
       this.prisma.account.count({ where }),
     ]);
 
+    const withNames = await this.attachCreatedByNames(data);
     const result = {
-      data: data.map(withMissingCriticalFields),
+      data: withNames.map(withMissingCriticalFields),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
     await this.cache.set(query, result);
@@ -157,7 +191,8 @@ export class AccountsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return withMissingCriticalFields(account);
+    const [withName] = await this.attachCreatedByNames([account]);
+    return withMissingCriticalFields(withName);
   }
 
   /** A2: sektor(ler), tenant'in tanimladigi listeye karsi dogrulanir; tenant henuz
@@ -227,7 +262,7 @@ export class AccountsService {
     }
   }
 
-  async create(dto: CreateAccountDto): Promise<Account> {
+  async create(createdById: string, dto: CreateAccountDto): Promise<Account> {
     const { contact, ...accountFields } = dto;
     await this.assertValidSector(accountFields.sector);
     if (contact) {
@@ -237,11 +272,11 @@ export class AccountsService {
     const account = await this.prisma.$transaction(async (tx) => {
       const created = await tx.account.create({
         // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
-        data: normalize(accountFields) as never,
+        data: { ...normalize(accountFields), createdById } as never,
       });
       if (contact) {
         await tx.contact.create({
-          data: { ...contact, accountId: created.id } as never,
+          data: { ...contact, accountId: created.id, createdById } as never,
         });
       }
       return created;

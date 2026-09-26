@@ -175,6 +175,7 @@ export class ImportsService {
   }
 
   async importAccounts(
+    createdById: string,
     filePath: string,
     type: DataSourceType,
     headerRowIndex: number,
@@ -224,7 +225,9 @@ export class ImportsService {
     });
 
     if (validRows.length > 0) {
-      await this.prisma.account.createMany({ data: validRows as never });
+      await this.prisma.account.createMany({
+        data: validRows.map((row) => ({ ...row, createdById })) as never,
+      });
       await this.accountsCache.invalidate();
     }
 
@@ -232,6 +235,7 @@ export class ImportsService {
   }
 
   async importContacts(
+    createdById: string,
     filePath: string,
     type: DataSourceType,
     mapping: ImportMappingDto,
@@ -276,7 +280,9 @@ export class ImportsService {
     }
 
     if (validRows.length > 0) {
-      await this.prisma.contact.createMany({ data: validRows as never });
+      await this.prisma.contact.createMany({
+        data: validRows.map((row) => ({ ...row, createdById })) as never,
+      });
     }
 
     return { totalRows: records.length, imported: validRows.length, errors };

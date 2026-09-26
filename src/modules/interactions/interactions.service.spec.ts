@@ -129,7 +129,7 @@ describe('InteractionsService', () => {
       occurredAt: new Date('2026-01-01'),
     } as never);
     expect(prisma.account.create).toHaveBeenCalledWith({
-      data: { name: 'Yeni Firma' },
+      data: { name: 'Yeni Firma', createdById: USER_ID },
     });
     expect(prisma.interaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -156,7 +156,12 @@ describe('InteractionsService', () => {
       occurredAt: new Date('2026-01-01'),
     } as never);
     expect(prisma.contact.create).toHaveBeenCalledWith({
-      data: { accountId: ACCOUNT_ID, firstName: 'Ahmet', lastName: 'Yilmaz' },
+      data: {
+        accountId: ACCOUNT_ID,
+        firstName: 'Ahmet',
+        lastName: 'Yilmaz',
+        createdById: USER_ID,
+      },
     });
   });
 
@@ -208,7 +213,12 @@ describe('InteractionsService', () => {
       occurredAt: new Date('2026-01-01'),
     } as never);
     expect(prisma.contact.create).toHaveBeenCalledWith({
-      data: { accountId: undefined, firstName: 'Ahmet', lastName: 'Yilmaz' },
+      data: {
+        accountId: undefined,
+        firstName: 'Ahmet',
+        lastName: 'Yilmaz',
+        createdById: USER_ID,
+      },
     });
     expect(prisma.interaction.create).toHaveBeenCalledWith(
       expect.objectContaining({

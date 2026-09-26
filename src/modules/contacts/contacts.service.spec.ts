@@ -5,6 +5,7 @@ const fakeAudit = { log: vi.fn() } as never;
 
 const CONTACT_ID = '22222222-2222-2222-2222-222222222222';
 const ACCOUNT_ID = '11111111-1111-1111-1111-111111111111';
+const CREATED_BY_ID = '33333333-3333-3333-3333-333333333333';
 
 function createContactRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -53,7 +54,7 @@ describe('ContactsService', () => {
     prisma.account.findFirst.mockResolvedValue(null);
     const service = new ContactsService(prisma as never, fakeAudit);
     await expect(
-      service.create({
+      service.create(CREATED_BY_ID, {
         firstName: 'Ayse',
         lastName: 'Yilmaz',
         accountId: ACCOUNT_ID,
@@ -67,7 +68,7 @@ describe('ContactsService', () => {
   it('create: gecerli firma ile kisi olusturur', async () => {
     const prisma = createPrisma();
     const service = new ContactsService(prisma as never, fakeAudit);
-    await service.create({
+    await service.create(CREATED_BY_ID, {
       firstName: 'Ayse',
       lastName: 'Yilmaz',
       accountId: ACCOUNT_ID,
@@ -79,6 +80,7 @@ describe('ContactsService', () => {
         lastName: 'Yilmaz',
         accountId: ACCOUNT_ID,
         email: null,
+        createdById: CREATED_BY_ID,
       },
     });
   });
@@ -120,7 +122,7 @@ describe('ContactsService', () => {
     ]);
     const service = new ContactsService(prisma as never, fakeAudit);
     await expect(
-      service.create({
+      service.create(CREATED_BY_ID, {
         firstName: 'Ayse',
         lastName: 'Yilmaz',
         title: 'Uydurma Unvan',
@@ -137,7 +139,7 @@ describe('ContactsService', () => {
     ]);
     const service = new ContactsService(prisma as never, fakeAudit);
     await expect(
-      service.create({
+      service.create(CREATED_BY_ID, {
         firstName: 'Ayse',
         lastName: 'Yilmaz',
         department: 'Uydurma Departman',

@@ -32,6 +32,22 @@ export interface UserProfile extends SafeUser {
   lastLoginAt: Date | null;
 }
 
+/** /settings/kullanicilar/:id profil sayfasi icin - kullanicinin sistemde olusturdugu
+ * CRM kayitlarinin sayilari (Account/Contact sahiplik `ownerId` uzerinden, digerleri
+ * `createdById` uzerinden - bkz. schema.prisma). Salt-okunur, sadece KPI kartlari icin. */
+export interface UserStats {
+  user: SafeUser;
+  counts: {
+    accounts: number;
+    contacts: number;
+    interactions: number;
+    opportunities: number;
+    quotes: number;
+    projects: number;
+    purchaseOrders: number;
+  };
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -372,6 +388,51 @@ export class UsersService {
       meta: { avatarRemoved: true },
     });
     return this.toProfile(updated as UserWithRoles);
+  }
+
+  async getUserStats(targetUserId: string): Promise<UserStats> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: targetUserId },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+    if (!user) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const [
+      accounts,
+      contacts,
+      interactions,
+      opportunities,
+      quotes,
+      projects,
+      purchaseOrders,
+    ] = await Promise.all([
+      this.prisma.account.count({ where: { createdById: targetUserId } }),
+      this.prisma.contact.count({ where: { createdById: targetUserId } }),
+      this.prisma.interaction.count({ where: { createdById: targetUserId } }),
+      this.prisma.opportunity.count({ where: { createdById: targetUserId } }),
+      this.prisma.quote.count({ where: { createdById: targetUserId } }),
+      this.prisma.project.count({ where: { createdById: targetUserId } }),
+      this.prisma.purchaseOrder.count({ where: { createdById: targetUserId } }),
+    ]);
+
+    return {
+      user: toSafeUser(user as UserWithRoles, this.fileUrl),
+      counts: {
+        accounts,
+        contacts,
+        interactions,
+        opportunities,
+        quotes,
+        projects,
+        purchaseOrders,
+      },
+    };
   }
 
   private toProfile(user: UserWithRoles): UserProfile {
