@@ -63,6 +63,8 @@ export const AccountQuerySchema = ListQuerySchema.extend({
   city: z.string().optional(),
   sector: z.string().optional(),
   ownerId: z.string().optional(),
+  /** Kaydi olusturan kullaniciya gore filtre (liste sayfasi filtre penceresi). */
+  createdById: z.string().optional(),
   /** Ekleme tarihi filtresi (liste sayfasi filtre penceresi) - "su tarihten itibaren
    * / su tarihe kadar eklenenler" ya da "son N gun" secimi frontend'de "from"a
    * cevrilir. */

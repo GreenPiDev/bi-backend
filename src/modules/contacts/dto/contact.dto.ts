@@ -31,5 +31,7 @@ export const ContactQuerySchema = ListQuerySchema.extend({
   accountId: z.string().optional(),
   ownerId: z.string().optional(),
   status: ContactStatusSchema.optional(),
+  /** Kaydi olusturan kullaniciya gore filtre (liste sayfasi filtre penceresi). */
+  createdById: z.string().optional(),
 });
 export type ContactQueryDto = z.infer<typeof ContactQuerySchema>;

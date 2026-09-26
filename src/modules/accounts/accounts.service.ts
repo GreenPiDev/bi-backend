@@ -114,6 +114,7 @@ export class AccountsService {
       city,
       sector,
       ownerId,
+      createdById,
       from,
       to,
       notContactedDays,
@@ -127,6 +128,7 @@ export class AccountsService {
       ...(city ? { city } : {}),
       ...(sector ? { sector: { has: sector } } : {}),
       ...(ownerId ? { ownerId } : {}),
+      ...(createdById ? { createdById } : {}),
       ...(from || to
         ? {
             createdAt: {

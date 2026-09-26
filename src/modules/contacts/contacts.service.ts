@@ -68,7 +68,8 @@ export class ContactsService {
   }
 
   async list(query: ContactQueryDto): Promise<PagedResult<ContactWithMeta>> {
-    const { page, pageSize, q, accountId, ownerId, status } = query;
+    const { page, pageSize, q, accountId, ownerId, status, createdById } =
+      query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'lastName',
       direction: 'asc',
@@ -78,6 +79,7 @@ export class ContactsService {
       ...(accountId ? { accountId } : {}),
       ...(ownerId ? { ownerId } : {}),
       ...(status ? { status } : {}),
+      ...(createdById ? { createdById } : {}),
       ...(q
         ? {
             OR: [
