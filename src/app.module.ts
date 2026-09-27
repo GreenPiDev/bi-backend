@@ -28,8 +28,11 @@ import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
 import { IbanOptionsModule } from './modules/iban-options/iban-options.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { InteractionImportsModule } from './modules/interaction-imports/interaction-imports.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
+import { InteractionTypeOptionsModule } from './modules/interaction-type-options/interaction-type-options.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
@@ -97,6 +100,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     TenantSettingsModule,
     CalendarEventsModule,
     InteractionsModule,
+    InteractionImportsModule,
+    InteractionTypeOptionsModule,
     OpportunitiesModule,
     ProductListsModule,
     ProductsModule,
@@ -107,6 +112,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     PurchaseOrdersModule,
     StockItemsModule,
     MessagesModule,
+    NotificationsModule,
     JobsModule,
   ],
   providers: [

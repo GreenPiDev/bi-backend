@@ -106,6 +106,23 @@ export class InteractionsService {
     }));
   }
 
+  /** Gorusme sekli, tenant'in tanimladigi listeye karsi dogrulanir - odeme yontemi
+   * alaniyla ayni desen (bkz. QuotesService.assertValidPaymentMethod). Tenant henuz
+   * hic gorusme sekli tanimlamadiysa serbest metin kabul edilir. */
+  private async assertValidInteractionType(type: string): Promise<void> {
+    const options = await this.prisma.interactionTypeOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === type)) {
+      throw new AppException(
+        'INVALID_INTERACTION_TYPE',
+        'Belirtilen gorusme sekli tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   /** Filtre panelindeki "Oluşturan" seçicisini besler - calendar-events'teki
    * listAssignableUsers ile ayni desen. */
   async listCreators(): Promise<{ id: string; name: string }[]> {
@@ -252,6 +269,7 @@ export class InteractionsService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    await this.assertValidInteractionType(dto.type);
 
     const reminderConflicts = dto.reminder
       ? await this.findReminderConflicts(
@@ -309,6 +327,7 @@ export class InteractionsService {
           accountId,
           contactId,
           type: dto.type,
+          subject: dto.subject,
           notes: dto.notes,
           occurredAt: dto.occurredAt,
           accountAutoCreated,
@@ -380,6 +399,9 @@ export class InteractionsService {
     dto: UpdateInteractionDto,
   ): Promise<InteractionWithDetails> {
     await this.getById(id);
+    if (dto.type) {
+      await this.assertValidInteractionType(dto.type);
+    }
     await this.prisma.interaction.update({ where: { id }, data: dto });
     await this.audit.log({
       action: 'UPDATE',

@@ -5,13 +5,17 @@ import {
   OpportunityStageSchema,
 } from '../../opportunities/dto/opportunity.dto';
 
-export const InteractionTypeSchema = z.enum([
-  'CALL',
-  'VISIT',
-  'MEETING',
-  'EMAIL',
-  'OTHER',
-]);
+/**
+ * Eskiden sabit 5 degerli enum'du - artik tenant'in /settings?tab=crm'de yonettigi
+ * dinamik InteractionTypeOption listesine karsi (InteractionsService.
+ * assertValidInteractionType) dogrulanan serbest metin (bkz. schema.prisma
+ * Interaction.type yorumu).
+ */
+export const InteractionTypeSchema = z
+  .string()
+  .trim()
+  .min(1, 'Gorusme sekli secilmelidir.')
+  .max(200);
 
 const ParticipantSchema = z.object({
   name: z.string().trim().min(1),
@@ -61,7 +65,11 @@ export const CreateInteractionSchema = z
     /** M1: bilinmeyen kisi - serbest metin, otomatik kontak olusturur. */
     contactName: z.string().trim().min(1).optional(),
     type: InteractionTypeSchema,
-    notes: z.string().trim().min(1, 'Notlar bos birakilamaz.'),
+    subject: z.string().trim().max(200).optional(),
+    /** Konu (subject) eklendikten sonra artik zorunlu degil - gorusme bir konu
+     * basligiyla da tek basina anlamli olabilir (bkz. /gorusmeler/ice-aktar
+     * requiredFieldsError metni). */
+    notes: z.string().trim().max(5000).optional(),
     occurredAt: z.coerce.date(),
     participants: z.array(ParticipantSchema).max(20).optional(),
     opportunity: NestedOpportunitySchema.optional(),
@@ -90,7 +98,8 @@ export type CreateInteractionDto = z.infer<typeof CreateInteractionSchema>;
 
 export const UpdateInteractionSchema = z.object({
   type: InteractionTypeSchema.optional(),
-  notes: z.string().trim().min(1).optional(),
+  subject: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(5000).optional(),
   occurredAt: z.coerce.date().optional(),
   status: z.enum(['OPEN', 'CLOSED']).optional(),
 });

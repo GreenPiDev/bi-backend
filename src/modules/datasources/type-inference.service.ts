@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { DatasetFieldRole, DatasetFieldType } from '@prisma/client';
+import { parseFlexibleDate } from '../../core/validators/date';
 
 export interface InferredField {
   sourceName: string;
@@ -19,9 +20,6 @@ const TR_CHAR_MAP: Record<string, string> = {
 };
 
 const TR_NUMBER_PATTERN = /^-?(\d{1,3}(\.\d{3})+|\d+)(,\d+)?$/;
-const TR_DATE_PATTERN = /^(\d{2})\.(\d{2})\.(\d{4})(\s+\d{2}:\d{2}(:\d{2})?)?$/;
-const ISO_DATE_PATTERN =
-  /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
 const TRUE_VALUES = ['true', 'evet', 'dogru', 'doğru', '1'];
 const FALSE_VALUES = ['false', 'hayir', 'hayır', 'yanlis', 'yanlış', '0'];
@@ -51,41 +49,7 @@ function parseTrNumber(value: string): number {
 }
 
 function isTrDate(value: string): boolean {
-  const v = value.trim();
-  if (ISO_DATE_PATTERN.test(v)) {
-    return true;
-  }
-  const match = TR_DATE_PATTERN.exec(v);
-  if (!match) {
-    return false;
-  }
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  return day >= 1 && day <= 31 && month >= 1 && month <= 12;
-}
-
-function parseDateValue(value: string): Date | null {
-  const v = value.trim();
-  if (ISO_DATE_PATTERN.test(v)) {
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-  const match = TR_DATE_PATTERN.exec(v);
-  if (!match) {
-    return null;
-  }
-  const [, dd, mm, yyyy, rawTime] = match;
-  let hours = 0;
-  let minutes = 0;
-  let seconds = 0;
-  if (rawTime) {
-    const timeParts = rawTime.trim().split(':').map(Number);
-    [hours, minutes, seconds = 0] = timeParts;
-  }
-  const d = new Date(
-    Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), hours, minutes, seconds),
-  );
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseFlexibleDate(value) !== null;
 }
 
 /**
@@ -160,7 +124,7 @@ export class TypeInferenceService {
         return Number.isNaN(n) ? null : n;
       }
       case 'DATE':
-        return parseDateValue(trimmed);
+        return parseFlexibleDate(trimmed);
       case 'BOOLEAN':
         return this.toBoolean(trimmed);
       default:

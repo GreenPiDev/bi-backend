@@ -55,7 +55,7 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'interactions',
     label: 'Gorusmeler',
-    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT'],
   },
   {
     key: 'opportunities',

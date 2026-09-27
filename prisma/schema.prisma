@@ -45,17 +45,28 @@ enum MessageRecipientKind {
   CC
 }
 
+/**
+ * Generic bildirim mekanizmasi (header'daki zil ikonu) icin - yeni bir ozellik
+ * bildirim gondermek istedikce buraya yeni bir deger eklenir (bkz. CLAUDE.md,
+ * kullanicinin "TÜRÜ enum olsun" istegi). İlk kullanim: Ajanda/Takvim'de baskasina
+ * katilimci olarak atanan bir hatirlatici (bkz. calendar-events.service.ts).
+ */
+enum NotificationType {
+  CALENDAR_REMINDER_ASSIGNED
+  /** Gunluk zamanlayici (check-todays-reminders.processor.ts): bugun baslayan,
+   * kullanicinin katilimci oldugu TUM CalendarEvent'leri (kaynagi ne olursa olsun -
+   * dogrudan /ajanda'dan kurulan veya bir gorusmeye bagli) tek bir bildirimde
+   * toplar, kullanici basina gunde en fazla 1 kez uretilir. */
+  CALENDAR_REMINDERS_DUE_TODAY
+  /** Gunluk zamanlayici (check-contact-inactivity.processor.ts): bir kontakla
+   * esik gun sayisi boyunca iletisim kurulmadiginda, tenant'taki TUM aktif
+   * kullanicilara tek bir bildirim uretilir (K2, bkz. CLAUDE.md SS2.3.3). */
+  CONTACT_INACTIVITY_ALERT
+}
+
 enum ContactStatus {
   ACTIVE
   INACTIVE
-}
-
-enum InteractionType {
-  CALL
-  VISIT
-  MEETING
-  EMAIL
-  OTHER
 }
 
 enum InteractionStatus {
@@ -160,6 +171,7 @@ model Tenant {
   roles             Role[]
   calendarEvents    CalendarEvent[]
   interactions      Interaction[]
+  interactionTypeOptions InteractionTypeOption[]
   opportunities     Opportunity[]
   products          Product[]
   productLists      ProductList[]
@@ -172,6 +184,7 @@ model Tenant {
   messages          Message[]
   messageStars      MessageStar[]
   messageAttachments MessageAttachment[]
+  notifications     Notification[]
 
   @@map("tenants")
 }
@@ -699,8 +712,19 @@ model Interaction {
   tenantId           String
   accountId          String?
   contactId          String?
-  type               InteractionType
-  notes              String
+  /**
+   * Eskiden sabit InteractionType enum'iydi (CALL/VISIT/MEETING/EMAIL/OTHER) - kullanicinin
+   * ice aktardigi Excel'lerdeki "Gorusme Sekli" degerleri bu 5 sabitle sinirli olmadigindan
+   * tenant'in /settings?tab=crm'de yonettigi dinamik InteractionTypeOption listesine karsi
+   * dogrulanan serbest metne cevrildi (bkz. AccountsService.assertValidSector ile ayni "bos
+   * listede serbest gec" deseni, InteractionsService.assertValidInteractionType).
+   */
+  type               String
+  /** Ice aktarma (interaction-imports) "Konu" kolonu icin eklendi - serbest metin, zorunlu degil. */
+  subject            String?
+  /** Konu (subject) eklendikten sonra artik zorunlu degil - gorusme sadece bir konu
+   * basligiyla da anlamli olabilir. */
+  notes              String?
   occurredAt         DateTime
   status             InteractionStatus @default(OPEN)
   /**
@@ -711,6 +735,11 @@ model Interaction {
    * M1: bilinmeyen kisi serbest metinle girildiyse otomatik olusan kontak - bildirim icin.
    */
   contactAutoCreated Boolean           @default(false)
+  /**
+   * Excel/CSV ice aktarmada eslenmeyen sutunlar icin catch-all - Account.customFields ile
+   * ayni desen (bkz. docs/VARSAYIMLAR.md V41, /gorusmeler ice aktarma "ozel alan" secenegi).
+   */
+  customFields       Json              @default("{}")
   createdById        String
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -743,6 +772,23 @@ model InteractionParticipant {
   interaction Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
 
   @@map("crm_interaction_participants")
+}
+
+/**
+ * Gorusme ekleme/duzenleme formundaki "Gorusme Sekli" dropdown'unun tenant bazli listesi -
+ * PaymentMethodOption/SectorOption ile ayni desen. Ice aktarmada (interaction-imports) Excel
+ * degeri bu listede yoksa otomatik olarak buraya yeni bir satir eklenir (kullanici karari).
+ */
+model InteractionTypeOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_interaction_type_options")
 }
 
 /**
@@ -1190,4 +1236,31 @@ model MessageStar {
   @@unique([tenantId, userId, conversationId])
   @@index([tenantId, userId])
   @@map("crm_message_stars")
+}
+
+/**
+ * Generic bildirim - herhangi bir modul (Ajanda, ileride baskalari) belirli bir
+ * kullaniciya bildirim gondermek icin bunu kullanir. relatedEntityType/relatedEntityId
+ * CalendarEvent.relatedEntityType ile ayni desen (gercek FK degil, serbest metin) -
+ * bildirimin hangi tur kayda isaret edecegi onceden bilinen sabit bir kume degil,
+ * NotificationType arttikca cesitlenecek, bu yuzden Message.relatedEntity gibi
+ * kapali bir enum yerine string tercih edildi.
+ */
+model Notification {
+  id              String           @id @default(uuid())
+  tenantId        String
+  recipientUserId String
+  type            NotificationType
+  title           String
+  body            String?
+  relatedEntityType String?
+  relatedEntityId String?
+  createdById     String?
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, recipientUserId, readAt, createdAt])
+  @@map("notifications")
 }

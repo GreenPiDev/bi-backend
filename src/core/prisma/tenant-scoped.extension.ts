@@ -26,6 +26,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Role',
   'CalendarEvent',
   'Interaction',
+  'InteractionTypeOption',
   'Opportunity',
   'Product',
   'ProductList',
@@ -38,6 +39,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Message',
   'MessageStar',
   'MessageAttachment',
+  'Notification',
 ]);
 
 /**

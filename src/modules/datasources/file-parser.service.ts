@@ -20,16 +20,46 @@ function emptyFileError(): AppException {
   );
 }
 
-function cellValueToString(value: ExcelJS.CellValue): string {
+/** exceljs'in kendi utils.isDateFmt'iyle ayni desen (bkz. node_modules/exceljs/lib/
+ * utils/utils.js) - tirnak/koseli parantez icini atip kalan karakterlerde tarih
+ * bicimi harflerini arar. */
+function isDateNumFmt(fmt: string | undefined): boolean {
+  if (!fmt) {
+    return false;
+  }
+  const cleaned = fmt.replace(/\[[^\]]*]/g, '').replace(/"[^"]*"/g, '');
+  return /[ymdhMsb]+/.test(cleaned);
+}
+
+/** exceljs'in kendi utils.excelToDate'iyle ayni formul (1900 tarih sistemi) -
+ * exceljs bu fonksiyonu disariya acmiyor, kucuk oldugu icin burada tekrarlaniyor. */
+function excelSerialToDate(serial: number): Date {
+  return new Date(Math.round((serial - 25569) * 24 * 3600 * 1000));
+}
+
+/**
+ * exceljs'in streaming WorkbookReader'i formul hucrelerinde (orn. baska bir
+ * hucreye referans veren tarih kolonu) numFmt tarih olsa bile sonucu Date'e
+ * cevirmiyor, ham Excel seri numarasini ("46210.44...") birakiyor (bkz.
+ * node_modules/exceljs/lib/stream/xlsx/worksheet-reader.js - c.f dalinda isDateFmt
+ * kontrolu yok). numFmt burada elle kontrol edilip bu durum telafi ediliyor.
+ */
+function cellValueToString(value: ExcelJS.CellValue, numFmt?: string): string {
   if (value === null || value === undefined) {
     return '';
   }
   if (value instanceof Date) {
     return value.toISOString();
   }
+  if (typeof value === 'number' && isDateNumFmt(numFmt)) {
+    return excelSerialToDate(value).toISOString();
+  }
   if (typeof value === 'object') {
     if ('result' in value) {
-      return cellValueToString((value as { result: ExcelJS.CellValue }).result);
+      return cellValueToString(
+        (value as { result: ExcelJS.CellValue }).result,
+        numFmt,
+      );
     }
     if ('text' in value) {
       return String((value as { text: unknown }).text);
@@ -44,13 +74,11 @@ function cellValueToString(value: ExcelJS.CellValue): string {
   return String(value);
 }
 
-function rowValuesToStrings(
-  values: ExcelJS.CellValue[],
-  length: number,
-): string[] {
+function rowToStrings(row: ExcelJS.Row, length: number): string[] {
   const out: string[] = [];
   for (let i = 1; i <= length; i++) {
-    out.push(cellValueToString(values[i]).trim());
+    const cell = row.getCell(i);
+    out.push(cellValueToString(cell.value, cell.numFmt).trim());
   }
   return out;
 }
@@ -141,7 +169,17 @@ export class FileParserService {
     filePath: string,
     headerRowIndex: number,
   ): Promise<ParsedFile> {
-    const reader = new ExcelJS.stream.xlsx.WorkbookReader(filePath, {});
+    /**
+     * styles: 'cache' olmadan exceljs styles.xml'i hic okumaz (varsayilan 'ignore') -
+     * bu durumda hicbir hucrenin numFmt'i cozulemez ve Excel'de gercek tarih olarak
+     * saklanan (sayisal seri + tarih bicimi) her hucre ham seri numara ("46210.44...")
+     * olarak gelir; sadece exceljs'in kendi Date/tarih tanimasi degil, asagidaki
+     * isDateNumFmt/excelSerialToDate telafisi de bu secenege bagli. Bkz.
+     * node_modules/exceljs/lib/stream/xlsx/workbook-reader.js (styles varsayilani).
+     */
+    const reader = new ExcelJS.stream.xlsx.WorkbookReader(filePath, {
+      styles: 'cache',
+    });
     const headerLineNumber = headerRowIndex + 1;
     let headers: string[] | null = null;
     const rows: string[][] = [];
@@ -154,7 +192,7 @@ export class FileParserService {
         }
         const values = row.values as ExcelJS.CellValue[];
         if (rowIndex === headerLineNumber) {
-          headers = rowValuesToStrings(values, values.length - 1);
+          headers = rowToStrings(row, values.length - 1);
           continue;
         }
         /**
@@ -163,7 +201,7 @@ export class FileParserService {
          * headers.length kullanmak veri satirlarini yanlislikla kirpardi (bkz.
          * docs/VARSAYIMLAR.md V40, gercek Schneider dosyasinda bulunan regresyon).
          */
-        rows.push(rowValuesToStrings(values, values.length - 1));
+        rows.push(rowToStrings(row, values.length - 1));
       }
       break;
     }
