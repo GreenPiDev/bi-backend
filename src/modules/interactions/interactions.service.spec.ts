@@ -207,7 +207,6 @@ describe('InteractionsService', () => {
 
   it('create: firma bos, yeni contactName verilmisse firmasiz kisi olusturur', async () => {
     const prisma = createPrisma();
-    prisma.contact.findUnique = vi.fn().mockResolvedValue({ accountId: null });
     const service = new InteractionsService(
       prisma as never,
       fakeAudit,
@@ -239,7 +238,6 @@ describe('InteractionsService', () => {
 
   it('create: firma yokken opportunity istenirse VALIDATION_ERROR firlatir', async () => {
     const prisma = createPrisma();
-    prisma.contact.findUnique = vi.fn().mockResolvedValue({ accountId: null });
     const service = new InteractionsService(
       prisma as never,
       fakeAudit,
