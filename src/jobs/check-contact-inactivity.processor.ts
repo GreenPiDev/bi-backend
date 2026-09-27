@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Contact } from '@prisma/client';
 import { PrismaService } from '../core/prisma/prisma.service';
-import { MailService } from '../core/mail/mail.service';
+import { RealtimeService } from '../core/realtime/realtime.service';
 import {
   CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY,
   DEFAULT_CONTACT_INACTIVITY_THRESHOLD_DAYS,
@@ -19,7 +19,7 @@ export class CheckContactInactivityProcessor extends WorkerHost {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mail: MailService,
+    private readonly realtime: RealtimeService,
   ) {
     super();
   }
@@ -79,43 +79,39 @@ export class CheckContactInactivityProcessor extends WorkerHost {
     }
   }
 
-  private async recipientsFor(
-    tenantId: string,
-    contact: Contact,
-  ): Promise<string[]> {
-    if (contact.ownerId) {
-      const owner = await this.prisma.user.findFirst({
-        where: { id: contact.ownerId, tenantId, isActive: true },
-      });
-      if (owner) {
-        return [owner.email];
-      }
-    }
-    const admins = await this.prisma.user.findMany({
-      where: {
-        tenantId,
-        isActive: true,
-        roles: { some: { role: { isCompanyAdmin: true } } },
-      },
-    });
-    return admins.map((admin) => admin.email);
-  }
-
   private async notify(
     tenantId: string,
     contact: Contact,
     thresholdDays: number,
   ): Promise<void> {
-    const recipients = await this.recipientsFor(tenantId, contact);
-    if (recipients.length === 0) {
-      return;
-    }
-
-    await this.mail.send({
-      to: recipients,
-      subject: 'PiLens - Uzun suredir iletisim kurulmayan kisi',
-      text: `${contact.firstName} ${contact.lastName} ile ${thresholdDays} gundur iletisim kurulmadi.`,
+    const recipients = await this.prisma.user.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true },
     });
+
+    const title = `${contact.firstName} ${contact.lastName} ile ${thresholdDays} gündür iletişim kurulmadı.`;
+
+    await Promise.all(
+      recipients.map(async (user) => {
+        await this.prisma.notification.create({
+          data: {
+            tenantId,
+            recipientUserId: user.id,
+            type: 'CONTACT_INACTIVITY_ALERT',
+            title,
+            relatedEntityType: 'Contact',
+            relatedEntityId: contact.id,
+          },
+        });
+        this.realtime.emitToTenant(
+          tenantId,
+          'notifications.notification.created',
+          {
+            recipientUserId: user.id,
+          },
+        );
+      }),
+    );
 
     await this.prisma.contact.update({
       where: { id: contact.id },

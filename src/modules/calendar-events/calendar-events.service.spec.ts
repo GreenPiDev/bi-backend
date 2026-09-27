@@ -9,6 +9,7 @@ const fakeCalendarEventsCache = {
   invalidate: vi.fn(),
 } as never;
 const fakeRealtime = { emitToTenant: vi.fn() } as never;
+const fakeNotifications = { create: vi.fn() } as never;
 
 const EVENT_ID = '11111111-1111-1111-1111-111111111111';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -37,6 +38,7 @@ function createPrisma(eventRow: unknown = createEventRow()) {
           updatedAt: new Date('2026-09-01T00:00:00.000Z'),
         },
       ]),
+      findFirst: vi.fn().mockResolvedValue({ name: 'Ayse Yilmaz' }),
     },
     calendarEvent: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -62,6 +64,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await expect(service.getById('yok', USER_ID)).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -76,6 +79,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -99,6 +103,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -123,6 +128,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await expect(
       service.update('yok', { title: 'x' } as never, 'tenant-1'),
@@ -139,6 +145,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await service.update(
       EVENT_ID,
@@ -165,6 +172,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await service.update(
       EVENT_ID,
@@ -187,6 +195,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await service.remove(EVENT_ID, 'tenant-1');
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({
@@ -202,6 +211,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     const result = await service.listAssignableUsers();
     expect(prisma.user.findMany).toHaveBeenCalledWith({
@@ -224,6 +234,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
     await service.list({ from, to, order: 'asc' }, USER_ID);
     expect(prisma.calendarEvent.findMany).toHaveBeenCalledWith({
@@ -248,6 +259,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
 
     const asCreator = await service.list({ order: 'asc' } as never, USER_ID);
@@ -273,6 +285,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
 
     const asOther = await service.list(
@@ -294,6 +307,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       fakeRealtime,
+      fakeNotifications,
     );
 
     await expect(
@@ -313,6 +327,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       realtime,
+      fakeNotifications,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -321,6 +336,68 @@ describe('CalendarEventsService', () => {
     } as never);
     expect(
       (realtime as { emitToTenant: ReturnType<typeof vi.fn> }).emitToTenant,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('create: bugun icin kendine hatirlatici kurunca aninda bildirim gonderir', async () => {
+    const today = new Date();
+    const todayEvent = createEventRow({
+      createdById: USER_ID,
+      startAt: today,
+      endAt: today,
+      attendees: [{ userId: USER_ID }],
+    });
+    const prisma = createPrisma(todayEvent);
+    const notifications = { create: vi.fn() } as never;
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+      fakeCalendarEventsCache,
+      fakeRealtime,
+      notifications,
+    );
+    await service.create('tenant-1', USER_ID, {
+      title: 'Bugunku hatirlatici',
+      startAt: today,
+      endAt: today,
+    } as never);
+    expect(
+      (notifications as { create: ReturnType<typeof vi.fn> }).create,
+    ).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({
+        recipientUserId: USER_ID,
+        type: 'CALENDAR_REMINDERS_DUE_TODAY',
+      }),
+    );
+  });
+
+  it('create: ilerideki bir tarih icin kendine hatirlatici kurunca aninda bildirim gondermez', async () => {
+    const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const futureEvent = createEventRow({
+      createdById: USER_ID,
+      startAt: futureDate,
+      endAt: futureDate,
+      attendees: [{ userId: USER_ID }],
+    });
+    const prisma = createPrisma(futureEvent);
+    const notifications = { create: vi.fn() } as never;
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+      fakeCalendarEventsCache,
+      fakeRealtime,
+      notifications,
+    );
+    await service.create('tenant-1', USER_ID, {
+      title: 'Ileri tarihli hatirlatici',
+      startAt: futureDate,
+      endAt: futureDate,
+    } as never);
+    expect(
+      (notifications as { create: ReturnType<typeof vi.fn> }).create,
     ).not.toHaveBeenCalled();
   });
 
@@ -337,6 +414,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       realtime,
+      fakeNotifications,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -368,6 +446,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       realtime,
+      fakeNotifications,
     );
     await service.update(
       EVENT_ID,
@@ -392,6 +471,7 @@ describe('CalendarEventsService', () => {
       fakeFileUrl,
       fakeCalendarEventsCache,
       realtime,
+      fakeNotifications,
     );
     await service.remove(EVENT_ID, 'tenant-1');
     expect(

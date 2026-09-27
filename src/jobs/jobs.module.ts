@@ -11,6 +11,7 @@ import { AlertsSchedulerBootstrap } from './alerts-scheduler.bootstrap';
 import { CheckAlertsProcessor } from './check-alerts.processor';
 import { CheckContactInactivityProcessor } from './check-contact-inactivity.processor';
 import { CheckPostSaleFollowupProcessor } from './check-post-sale-followup.processor';
+import { CheckTodaysRemindersProcessor } from './check-todays-reminders.processor';
 import { CONTACT_INACTIVITY_QUEUE } from './contact-inactivity-queue.constants';
 import { ContactInactivitySchedulerBootstrap } from './contact-inactivity-scheduler.bootstrap';
 import { IngestDatasourceProcessor } from './ingest-datasource.processor';
@@ -24,6 +25,8 @@ import { REPORTS_QUEUE } from './reports-queue.constants';
 import { SendInteractionRemindersProcessor } from './send-interaction-reminders.processor';
 import { SendPostSaleSurveyProcessor } from './send-post-sale-survey.processor';
 import { SendScheduledReportProcessor } from './send-scheduled-report.processor';
+import { TODAYS_REMINDERS_QUEUE } from './todays-reminders-queue.constants';
+import { TodaysRemindersSchedulerBootstrap } from './todays-reminders-scheduler.bootstrap';
 
 @Module({
   imports: [
@@ -41,6 +44,7 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     BullModule.registerQueue({ name: INTERACTION_REMINDER_QUEUE }),
     BullModule.registerQueue({ name: POST_SALE_FOLLOWUP_QUEUE }),
     BullModule.registerQueue({ name: POST_SALE_SURVEY_QUEUE }),
+    BullModule.registerQueue({ name: TODAYS_REMINDERS_QUEUE }),
     DatasourcesModule,
     AuthModule,
     ExportsModule,
@@ -59,6 +63,8 @@ import { SendScheduledReportProcessor } from './send-scheduled-report.processor'
     CheckPostSaleFollowupProcessor,
     PostSaleFollowupSchedulerBootstrap,
     SendPostSaleSurveyProcessor,
+    CheckTodaysRemindersProcessor,
+    TodaysRemindersSchedulerBootstrap,
   ],
 })
 export class JobsModule {}

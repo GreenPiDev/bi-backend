@@ -8,6 +8,7 @@ import {
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CalendarEventsCacheService } from './calendar-events-cache.service';
 import type {
   CalendarEventQueryDto,
@@ -45,6 +46,20 @@ function emitCalendarEventChange(
   realtime.emitToTenant(tenantId, 'calendar-events.event.changed', {});
 }
 
+/** check-todays-reminders.processor.ts'teki gunluk toplu ozet, sadece BUGUNDEN ONCE
+ * kurulmus ("bugune gelmis") hatirlaticilari yakalamak icindir - ayni gun icinde
+ * kurulan bir hatirlatici icin kullanici sonraki job calismasina kadar beklemek
+ * istemez (bkz. kullanici geri bildirimi). Bu yuzden startAt bugunse create()
+ * kendisi de aninda bir bildirim yollar. */
+function isStartingToday(startAt: Date): boolean {
+  const now = new Date();
+  return (
+    startAt.getFullYear() === now.getFullYear() &&
+    startAt.getMonth() === now.getMonth() &&
+    startAt.getDate() === now.getDate()
+  );
+}
+
 @Injectable()
 export class CalendarEventsService {
   constructor(
@@ -53,7 +68,75 @@ export class CalendarEventsService {
     private readonly fileUrl: FileUrlService,
     private readonly cache: CalendarEventsCacheService,
     private readonly realtime: RealtimeService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** create() sonrasi cagrilir, iki ayri bildirim yolu vardir:
+   * 1) Olusturan disindaki her katilimciya "size bir hatirlatici olusturuldu"
+   *    (tarihten bagimsiz - kullanicinin kendi olusturdugu hatirlaticidan
+   *    kendisine bu bildirim gitmemesi istendigi icin createdById elenir).
+   * 2) Olusturan da katilimcilar arasindaysa VE etkinlik BUGUN icin kurulduysa,
+   *    olusturana da aninda "bugun icin bir hatirlaticiniz var" bildirimi gider
+   *    (bkz. isStartingToday). Ayni Notification turunu (CALENDAR_REMINDERS_DUE_TODAY)
+   *    kullandigi icin check-todays-reminders.processor.ts'in gunluk toplu ozeti
+   *    bunu da "bugun icin zaten bildirim var" sayar - cift bildirim gitmez. */
+  private async notifyAttendees(
+    tenantId: string,
+    event: CalendarEventWithAttendees,
+  ): Promise<void> {
+    const others = event.attendees.filter(
+      (attendee) => attendee.userId !== event.createdById,
+    );
+    const creatorIsAttendee = event.attendees.some(
+      (attendee) => attendee.userId === event.createdById,
+    );
+
+    const tasks: Promise<unknown>[] = [];
+
+    if (others.length > 0) {
+      tasks.push(this.notifyOtherAttendees(tenantId, event, others));
+    }
+
+    if (creatorIsAttendee && isStartingToday(event.startAt)) {
+      tasks.push(
+        this.notifications.create(tenantId, {
+          recipientUserId: event.createdById,
+          type: 'CALENDAR_REMINDERS_DUE_TODAY',
+          title: `Bugün için bir hatırlatıcınız var: ${event.title}`,
+          relatedEntityType: 'CalendarEvent',
+          relatedEntityId: event.id,
+          createdById: event.createdById,
+        }),
+      );
+    }
+
+    await Promise.all(tasks);
+  }
+
+  private async notifyOtherAttendees(
+    tenantId: string,
+    event: CalendarEventWithAttendees,
+    others: CalendarEventAttendee[],
+  ): Promise<void> {
+    const creator = await this.prisma.user.findFirst({
+      where: { id: event.createdById },
+      select: { name: true },
+    });
+    const creatorName = creator?.name ?? 'Bir kullanici';
+
+    await Promise.all(
+      others.map((attendee) =>
+        this.notifications.create(tenantId, {
+          recipientUserId: attendee.userId,
+          type: 'CALENDAR_REMINDER_ASSIGNED',
+          title: `${creatorName} size bir hatirlatici olusturdu: ${event.title}`,
+          relatedEntityType: 'CalendarEvent',
+          relatedEntityId: event.id,
+          createdById: event.createdById,
+        }),
+      ),
+    );
+  }
 
   /**
    * T2: katilimci/gorev atama secicisi icin - /users ucu 'settings' sayfasinin
@@ -177,6 +260,7 @@ export class CalendarEventsService {
     if (!isPrivateToCreator(event)) {
       emitCalendarEventChange(this.realtime, tenantId);
     }
+    await this.notifyAttendees(tenantId, event);
     return event;
   }
 

@@ -33,25 +33,51 @@ function createPrisma(overrides: Partial<Record<string, unknown>> = {}) {
       findFirst: vi.fn().mockResolvedValue(null),
     },
     user: {
-      findFirst: vi.fn().mockResolvedValue(null),
-      findMany: vi.fn().mockResolvedValue([{ email: 'admin@acme.com' }]),
+      findMany: vi.fn().mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]),
+    },
+    notification: {
+      create: vi.fn().mockResolvedValue({}),
     },
     ...overrides,
   };
 }
 
+function createRealtime() {
+  return { emitToTenant: vi.fn() };
+}
+
 describe('CheckContactInactivityProcessor', () => {
-  it('esigi asan aktif kisi icin e-posta gonderir ve inactivityNotifiedAt gunceller', async () => {
+  it("esigi asan aktif kisi icin tenant'taki tum aktif kullanicilara bildirim olusturur ve inactivityNotifiedAt gunceller", async () => {
     const prisma = createPrisma();
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckContactInactivityProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
     );
     await processor.process();
 
-    expect(mail.send).toHaveBeenCalledWith(
-      expect.objectContaining({ to: ['admin@acme.com'] }),
+    expect(prisma.notification.create).toHaveBeenCalledTimes(2);
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId: TENANT_ID,
+        recipientUserId: 'u1',
+        type: 'CONTACT_INACTIVITY_ALERT',
+        relatedEntityType: 'Contact',
+        relatedEntityId: 'c1',
+      }),
+    });
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ recipientUserId: 'u2' }),
+    });
+    expect(realtime.emitToTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      'notifications.notification.created',
+      { recipientUserId: 'u1' },
+    );
+    expect(realtime.emitToTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      'notifications.notification.created',
+      { recipientUserId: 'u2' },
     );
     expect(prisma.contact.update).toHaveBeenCalledWith({
       where: { id: 'c1' },
@@ -67,35 +93,30 @@ describe('CheckContactInactivityProcessor', () => {
       .mockResolvedValueOnce([
         createStaleContact({ inactivityNotifiedAt: daysAgo(1) }),
       ]);
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckContactInactivityProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
     );
     await processor.process();
 
-    expect(mail.send).not.toHaveBeenCalled();
+    expect(prisma.notification.create).not.toHaveBeenCalled();
   });
 
-  it('sahibi varsa sadece sahibine gonderir', async () => {
+  it("kontagin sahibi olsa bile tenant'taki tum aktif kullanicilara bildirim gider", async () => {
     const prisma = createPrisma();
     prisma.contact.findMany = vi
       .fn()
       .mockResolvedValueOnce([{ tenantId: TENANT_ID }])
       .mockResolvedValueOnce([createStaleContact({ ownerId: 'u1' })]);
-    prisma.user.findFirst = vi
-      .fn()
-      .mockResolvedValue({ email: 'owner@acme.com' });
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckContactInactivityProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
     );
     await processor.process();
 
-    expect(mail.send).toHaveBeenCalledWith(
-      expect.objectContaining({ to: ['owner@acme.com'] }),
-    );
+    expect(prisma.notification.create).toHaveBeenCalledTimes(2);
   });
 
   it('bir tenant hata verirse digerlerini etkilemez', async () => {
@@ -104,10 +125,10 @@ describe('CheckContactInactivityProcessor', () => {
       .fn()
       .mockResolvedValueOnce([{ tenantId: TENANT_ID }])
       .mockRejectedValueOnce(new Error('DB down'));
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckContactInactivityProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
     );
     await expect(processor.process()).resolves.toBeUndefined();
   });

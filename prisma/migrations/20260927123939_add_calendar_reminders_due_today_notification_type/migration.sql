@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE 'CALENDAR_REMINDERS_DUE_TODAY';
