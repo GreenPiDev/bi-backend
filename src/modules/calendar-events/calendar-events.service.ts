@@ -229,6 +229,27 @@ export class CalendarEventsService {
     return event;
   }
 
+  /** Katilimci userId'leri, tenant-scoped Prisma extension'in koruyamadigi
+   * bagimsiz bir alan (CalendarEventAttendee kendisi tenant-scoped degil) -
+   * bkz. interactions/opportunities'teki ayni desen. */
+  private async assertUsersExist(userIds: string[]): Promise<void> {
+    const ids = [...new Set(userIds)];
+    if (!ids.length) {
+      return;
+    }
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    if (users.length !== ids.length) {
+      throw new AppException(
+        'USER_NOT_FOUND',
+        'Atanan kullanicilardan biri bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   async create(
     tenantId: string,
     createdById: string,
@@ -237,6 +258,7 @@ export class CalendarEventsService {
     const attendees = dto.attendees?.length
       ? dto.attendees
       : [{ userId: createdById }];
+    await this.assertUsersExist(attendees.map((a) => a.userId));
     const event = await this.prisma.calendarEvent.create({
       data: {
         tenantId,
@@ -270,6 +292,9 @@ export class CalendarEventsService {
     tenantId: string,
   ): Promise<CalendarEventWithAttendees> {
     const before = await this.findExisting(id);
+    if (dto.attendees) {
+      await this.assertUsersExist(dto.attendees.map((a) => a.userId));
+    }
     const event = await this.prisma.$transaction(async (tx) => {
       if (dto.attendees) {
         await tx.calendarEventAttendee.deleteMany({ where: { eventId: id } });

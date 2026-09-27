@@ -162,6 +162,34 @@ export class OpportunitiesService {
       );
     }
 
+    const account = await this.prisma.account.findFirst({
+      where: { id: dto.accountId },
+    });
+    if (!account) {
+      throw new AppException(
+        'ACCOUNT_NOT_FOUND',
+        'Secilen firma bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (dto.reminder) {
+      const assigneeIds = [
+        ...new Set(dto.reminder.assignees.map((a) => a.userId)),
+      ];
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: assigneeIds } },
+        select: { id: true },
+      });
+      if (users.length !== assigneeIds.length) {
+        throw new AppException(
+          'USER_NOT_FOUND',
+          'Atanan kullanicilardan biri bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const reminderConflicts = dto.reminder
       ? await this.findReminderConflicts(
           dto.reminder.assignees.map((a) => a.userId),

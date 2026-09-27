@@ -39,10 +39,13 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
   const client = {
     account: {
       create: vi.fn().mockResolvedValue({ id: ACCOUNT_ID, name: 'Yeni Firma' }),
+      findFirst: vi.fn().mockResolvedValue({ id: ACCOUNT_ID, name: 'Acme' }),
     },
     contact: {
       create: vi.fn().mockResolvedValue({ id: 'contact-1' }),
-      findUnique: vi.fn().mockResolvedValue({ accountId: ACCOUNT_ID }),
+      findFirst: vi
+        .fn()
+        .mockResolvedValue({ id: 'contact-1', accountId: ACCOUNT_ID }),
     },
     interaction: {
       findFirst: vi.fn().mockResolvedValue(interactionRow),
@@ -55,6 +58,9 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
     opportunity: {
       create: vi.fn().mockResolvedValue({ id: 'opp-1' }),
     },
+    interactionTypeOption: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     calendarEvent: {
       create: vi.fn().mockResolvedValue({ id: 'event-1' }),
     },
@@ -62,7 +68,12 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
       findFirst: vi.fn().mockResolvedValue(null),
     },
     user: {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: vi
+        .fn()
+        .mockImplementation(
+          async (args: { where?: { id?: { in?: string[] } } } = {}) =>
+            (args.where?.id?.in ?? []).map((id) => ({ id })),
+        ),
     },
     $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(client)),
   };
@@ -181,9 +192,8 @@ describe('InteractionsService', () => {
       notes: 'notlar',
       occurredAt: new Date('2026-01-01'),
     } as never);
-    expect(prisma.contact.findUnique).toHaveBeenCalledWith({
+    expect(prisma.contact.findFirst).toHaveBeenCalledWith({
       where: { id: 'contact-1' },
-      select: { accountId: true },
     });
     expect(prisma.interaction.create).toHaveBeenCalledWith(
       expect.objectContaining({

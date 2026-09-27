@@ -465,6 +465,21 @@ export class MessagesService {
       subject = existing!.subject;
     }
 
+    const recipientIds = [...new Set([...dto.toUserIds, ...dto.ccUserIds])];
+    if (recipientIds.length) {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: recipientIds } },
+        select: { id: true },
+      });
+      if (users.length !== recipientIds.length) {
+        throw new AppException(
+          'USER_NOT_FOUND',
+          'Alicilardan biri bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
       return tx.message.create({
         data: {

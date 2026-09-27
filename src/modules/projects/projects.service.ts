@@ -96,6 +96,16 @@ export class ProjectsService {
   }
 
   async create(createdById: string, dto: CreateProjectDto): Promise<Project> {
+    const account = await this.prisma.account.findFirst({
+      where: { id: dto.accountId },
+    });
+    if (!account) {
+      throw new AppException(
+        'ACCOUNT_NOT_FOUND',
+        'Secilen firma bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     if (dto.quoteId) {
       await this.assertQuoteMatchesAccount(dto.quoteId, dto.accountId);
     }

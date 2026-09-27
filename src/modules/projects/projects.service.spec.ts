@@ -33,6 +33,9 @@ function createPrisma(
     quoteRow = { id: 'quote-1', accountId: 'account-1' },
   } = options;
   return {
+    account: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'account-1' }),
+    },
     project: {
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),

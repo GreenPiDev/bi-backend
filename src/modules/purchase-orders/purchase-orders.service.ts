@@ -217,6 +217,27 @@ export class PurchaseOrdersService {
 
     await this.prisma.$transaction(async (tx) => {
       if (dto.items) {
+        const productIds = [
+          ...new Set(
+            dto.items
+              .map((item) => item.productId)
+              .filter((id): id is string => !!id),
+          ),
+        ];
+        if (productIds.length) {
+          const products = await tx.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true },
+          });
+          if (products.length !== productIds.length) {
+            throw new AppException(
+              'PRODUCT_NOT_FOUND',
+              'Secilen urunlerden biri bulunamadi.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        }
+
         await tx.purchaseOrderItem.deleteMany({
           where: { purchaseOrderId: id },
         });

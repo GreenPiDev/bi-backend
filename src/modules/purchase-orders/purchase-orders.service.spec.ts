@@ -58,6 +58,9 @@ function createPrisma({
   stockItems = [],
 }: Setup = {}) {
   const tx = {
+    product: {
+      findMany: vi.fn().mockResolvedValue([{ id: 'product-1' }]),
+    },
     purchaseOrder: {
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue(purchaseOrderRow),

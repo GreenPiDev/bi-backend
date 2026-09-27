@@ -59,7 +59,12 @@ function createPrisma(messageRows: unknown[] = [createMessageRow()]) {
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     user: {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: vi
+        .fn()
+        .mockImplementation(
+          async (args: { where?: { id?: { in?: string[] } } } = {}) =>
+            (args.where?.id?.in ?? []).map((id) => ({ id })),
+        ),
     },
     quote: {
       findMany: vi.fn().mockResolvedValue([]),

@@ -271,6 +271,23 @@ export class InteractionsService {
     }
     await this.assertValidInteractionType(dto.type);
 
+    if (dto.reminder) {
+      const assigneeIds = [
+        ...new Set(dto.reminder.assignees.map((a) => a.userId)),
+      ];
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: assigneeIds } },
+        select: { id: true },
+      });
+      if (users.length !== assigneeIds.length) {
+        throw new AppException(
+          'USER_NOT_FOUND',
+          'Atanan kullanicilardan biri bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const reminderConflicts = dto.reminder
       ? await this.findReminderConflicts(
           dto.reminder.assignees.map((a) => a.userId),
@@ -282,7 +299,18 @@ export class InteractionsService {
     const interaction = await this.prisma.$transaction(async (tx) => {
       let accountId = dto.accountId;
       let accountAutoCreated = false;
-      if (!accountId && dto.accountName) {
+      if (accountId) {
+        const account = await tx.account.findFirst({
+          where: { id: accountId },
+        });
+        if (!account) {
+          throw new AppException(
+            'ACCOUNT_NOT_FOUND',
+            'Secilen firma bulunamadi.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      } else if (dto.accountName) {
         const account = await tx.account.create({
           data: { name: dto.accountName, createdById } as never,
         });
@@ -293,23 +321,29 @@ export class InteractionsService {
 
       let contactId = dto.contactId;
       let contactAutoCreated = false;
-      if (!contactId && dto.contactName) {
+      if (contactId) {
+        // findUnique tenant-scoped extension'in kapsami disindadir (bkz.
+        // tenant-scoped.extension.ts) - burada bilerek findFirst kullaniliyor.
+        const contact = await tx.contact.findFirst({
+          where: { id: contactId },
+        });
+        if (!contact) {
+          throw new AppException(
+            'CONTACT_NOT_FOUND',
+            'Secilen kisi bulunamadi.',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        if (!accountId) {
+          accountId = contact.accountId ?? undefined;
+        }
+      } else if (dto.contactName) {
         const { firstName, lastName } = splitFreeTextName(dto.contactName);
         const contact = await tx.contact.create({
           data: { accountId, firstName, lastName, createdById } as never,
         });
         contactId = contact.id;
         contactAutoCreated = true;
-      }
-
-      // Firma girilmediyse (sadece kisi secildiyse), o kisinin zaten bagli
-      // oldugu firmayi kullan - kullaniciya ayrica firma sordurma.
-      if (!accountId && contactId) {
-        const contact = await tx.contact.findUnique({
-          where: { id: contactId },
-          select: { accountId: true },
-        });
-        accountId = contact?.accountId ?? undefined;
       }
 
       if (!accountId && dto.opportunity) {

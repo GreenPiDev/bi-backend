@@ -30,14 +30,29 @@ function createEventRow(overrides: Partial<Record<string, unknown>> = {}) {
 function createPrisma(eventRow: unknown = createEventRow()) {
   const client = {
     user: {
-      findMany: vi.fn().mockResolvedValue([
-        {
-          id: USER_ID,
-          name: 'Ayse Yilmaz',
-          avatarKey: null,
-          updatedAt: new Date('2026-09-01T00:00:00.000Z'),
-        },
-      ]),
+      findMany: vi
+        .fn()
+        .mockImplementation(
+          async (args: { where?: { id?: { in?: string[] } } } = {}) => {
+            const ids = args.where?.id?.in;
+            if (!ids) {
+              return [
+                {
+                  id: USER_ID,
+                  name: 'Ayse Yilmaz',
+                  avatarKey: null,
+                  updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+                },
+              ];
+            }
+            return ids.map((id) => ({
+              id,
+              name: 'Ayse Yilmaz',
+              avatarKey: null,
+              updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+            }));
+          },
+        ),
       findFirst: vi.fn().mockResolvedValue({ name: 'Ayse Yilmaz' }),
     },
     calendarEvent: {

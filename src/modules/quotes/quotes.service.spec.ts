@@ -47,6 +47,9 @@ interface Setup {
 
 function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
   const tx = {
+    account: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'account-1' }),
+    },
     product: { findMany: vi.fn().mockResolvedValue(products) },
     contact: {
       findFirst: vi

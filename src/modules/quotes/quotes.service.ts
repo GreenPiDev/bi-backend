@@ -341,6 +341,17 @@ export class QuotesService {
     const ibanSnapshot = await this.resolveIbanSnapshot(dto.ibanOptionId);
 
     const { quoteId } = await this.prisma.$transaction(async (tx) => {
+      const account = await tx.account.findFirst({
+        where: { id: dto.accountId },
+      });
+      if (!account) {
+        throw new AppException(
+          'ACCOUNT_NOT_FOUND',
+          'Secilen firma bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       if (dto.contactId) {
         const contact = await tx.contact.findFirst({
           where: { id: dto.contactId },

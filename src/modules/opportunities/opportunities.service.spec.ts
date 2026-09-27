@@ -24,6 +24,12 @@ function createOpportunityRow(
 
 function createPrisma(row: unknown = createOpportunityRow()) {
   const prisma = {
+    account: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'account-1' }),
+    },
+    user: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     opportunity: {
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
