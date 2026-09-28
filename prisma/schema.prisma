@@ -993,6 +993,9 @@ model QuoteItem {
   productId    String
   quantity     Decimal  @db.Decimal(14, 3)
   unitPrice    Decimal  @db.Decimal(14, 2)
+  /** unitPrice ile ayni snapshot semantigi: satir olusturulurken/guncellenirken
+   * Product.currency'den kopyalanir, client'tan kabul edilmez (bkz. resolveItems). */
+  currency     String   @default("TRY")
   discountPct  Decimal  @default(0) @db.Decimal(5, 2)
   discountNote String?
   vatPct       Decimal  @default(0) @db.Decimal(5, 2)

@@ -76,6 +76,7 @@ interface ResolvedQuoteItem {
   productId: string;
   quantity: number;
   unitPrice: number | Prisma.Decimal;
+  currency: string;
   discountPct: number;
   vatPct: number;
   discountNote: string | null;
@@ -253,6 +254,7 @@ export class QuotesService {
         productId: item.productId,
         quantity: item.quantity,
         unitPrice,
+        currency: product.currency,
         discountPct: item.discountPct,
         vatPct: item.vatPct,
         discountNote:

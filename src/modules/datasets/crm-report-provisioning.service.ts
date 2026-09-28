@@ -86,9 +86,16 @@ const CRM_REPORT_DATASETS: readonly CrmReportDatasetSeed[] = [
       {
         sourceName: 'lineTotal',
         name: 'lineTotal',
-        label: 'Satır Tutarı (₺)',
+        label: 'Satır Tutarı',
         type: 'NUMBER',
         role: 'MEASURE',
+      },
+      {
+        sourceName: 'currency',
+        name: 'currency',
+        label: 'Para Birimi',
+        type: 'STRING',
+        role: 'DIMENSION',
       },
     ],
   },
