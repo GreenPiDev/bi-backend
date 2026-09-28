@@ -13,12 +13,13 @@ import type {
   ProductImportAttributeColumnsDto,
   ProductImportMappingDto,
 } from './dto/product-import.dto';
-import { parseImportNumber } from './number-format';
+import { normalizeCurrency, parseImportNumber } from './number-format';
 
 const PREVIEW_SAMPLE_SIZE = 10;
 const RAW_PREVIEW_ROW_COUNT = 14;
-/** parseImportNumber ile sayiya cevrilmesi gereken hedef alanlar - digerleri (name,
- * sku, unit, currency, description, category) string olarak birebir gecer. */
+/** parseImportNumber ile sayiya cevrilmesi gereken hedef alanlar - currency ayrica
+ * normalizeCurrency'den gecer (bkz. asagida), digerleri (name, sku, unit, description,
+ * category) string olarak birebir gecer. */
 const NUMERIC_TARGET_FIELDS = [
   'price',
   'costPrice',
@@ -160,6 +161,8 @@ export class ProductImportsService {
         }
         if ((NUMERIC_TARGET_FIELDS as readonly string[]).includes(target)) {
           mapped[target] = parseImportNumber(rawValue, numberFormat);
+        } else if (target === 'currency') {
+          mapped[target] = normalizeCurrency(rawValue);
         } else {
           mapped[target] = rawValue;
         }

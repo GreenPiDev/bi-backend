@@ -165,6 +165,7 @@ model Tenant {
   titleOptions      TitleOption[]
   productCategoryOptions ProductCategoryOption[]
   brandOptions      BrandOption[]
+  unitOptions       UnitOption[]
   paymentMethodOptions PaymentMethodOption[]
   ibanOptions       IbanOption[]
   settings          TenantSetting[]
@@ -597,6 +598,23 @@ model BrandOption {
 
   @@unique([tenantId, label])
   @@map("crm_brand_options")
+}
+
+/**
+ * Tenant kendi birim listesini yonetir (ör. adet, kg, kutu, metre); Product.unit artik
+ * serbest metin degil, bu listeden secilir - Sektor/Departman/Unvan/Urun Kategorisi/
+ * Marka ile ayni desen.
+ */
+model UnitOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_unit_options")
 }
 
 /**

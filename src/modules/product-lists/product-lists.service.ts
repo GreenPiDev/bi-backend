@@ -6,6 +6,8 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { RealtimeService } from '../../core/realtime/realtime.service';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import type {
   CreateProductListDto,
@@ -20,7 +22,19 @@ export class ProductListsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
+
+  /** /urunler/yeni'deki "Ürün Listesi" seçicisi başka bir sekmede yeni bir liste
+   * oluşturulunca sayfa yenilenmeden güncellensin diye (bkz. docs/YOL_HARITASI.md) -
+   * Marka/Kategori/Birim ile aynı desen. */
+  private async emitUpdated(): Promise<void> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const lists = await this.prisma.productList.findMany({
+      orderBy: { name: 'asc' },
+    });
+    this.realtime.emitToTenant(tenantId, 'productLists.updated', lists);
+  }
 
   async list(query: ProductListQueryDto): Promise<PagedResult<ProductList>> {
     const { page, pageSize, q } = query;
@@ -85,6 +99,7 @@ export class ProductListsService {
       entityId: productList.id,
       meta: { name: productList.name },
     });
+    await this.emitUpdated();
     return productList;
   }
 
@@ -107,6 +122,7 @@ export class ProductListsService {
       entity: 'ProductList',
       entityId: id,
     });
+    await this.emitUpdated();
     return productList;
   }
 
@@ -129,5 +145,6 @@ export class ProductListsService {
       entity: 'ProductList',
       entityId: id,
     });
+    await this.emitUpdated();
   }
 }

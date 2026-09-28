@@ -40,6 +40,7 @@ import { PaymentMethodOptionsModule } from './modules/payment-method-options/pay
 import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { BrandOptionsModule } from './modules/brand-options/brand-options.module';
+import { UnitOptionsModule } from './modules/unit-options/unit-options.module';
 import { ProductImportsModule } from './modules/product-imports/product-imports.module';
 import { ProductListsModule } from './modules/product-lists/product-lists.module';
 import { ProductsModule } from './modules/products/products.module';
@@ -95,6 +96,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     TitleOptionsModule,
     ProductCategoriesModule,
     BrandOptionsModule,
+    UnitOptionsModule,
     PaymentMethodOptionsModule,
     IbanOptionsModule,
     TenantSettingsModule,

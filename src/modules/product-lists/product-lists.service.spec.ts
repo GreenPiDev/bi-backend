@@ -1,8 +1,14 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { ProductListsService } from './product-lists.service';
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
+const fakeRealtime = { emitToTenant: vi.fn(), emitToAll: vi.fn() };
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
+}
 
 function createProductListRow(
   overrides: Partial<Record<string, unknown>> = {},
@@ -37,7 +43,11 @@ function createPrisma(row: unknown = createProductListRow(), productCount = 0) {
 describe('ProductListsService', () => {
   it('getById: bulunamayan urun listesi icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductListsService(prisma as never, fakeAudit);
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -45,8 +55,14 @@ describe('ProductListsService', () => {
 
   it('create: urun listesini olusturur ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProductListsService(prisma as never, fakeAudit);
-    await service.create({ name: 'Bayi Katalogu', isDefault: false });
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    await runInTenant(() =>
+      service.create({ name: 'Bayi Katalogu', isDefault: false }),
+    );
     expect(prisma.productList.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: { name: 'Bayi Katalogu', isDefault: false },
@@ -57,8 +73,14 @@ describe('ProductListsService', () => {
 
   it('create: varsayilan olarak isaretlenirse digerlerinin varsayilan bayragini kaldirir', async () => {
     const prisma = createPrisma();
-    const service = new ProductListsService(prisma as never, fakeAudit);
-    await service.create({ name: 'Bayi Katalogu', isDefault: true });
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    await runInTenant(() =>
+      service.create({ name: 'Bayi Katalogu', isDefault: true }),
+    );
     expect(prisma.productList.updateMany).toHaveBeenCalledWith({
       where: { isDefault: true },
       data: { isDefault: false },
@@ -72,15 +94,44 @@ describe('ProductListsService', () => {
 
   it('create: varsayilan degilse digerlerine dokunmaz', async () => {
     const prisma = createPrisma();
-    const service = new ProductListsService(prisma as never, fakeAudit);
-    await service.create({ name: 'Bayi Katalogu', isDefault: false });
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    await runInTenant(() =>
+      service.create({ name: 'Bayi Katalogu', isDefault: false }),
+    );
     expect(prisma.productList.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('create: basarili olursa tenant odasina yayinlar', async () => {
+    const prisma = createPrisma();
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    await runInTenant(() =>
+      service.create({ name: 'Bayi Katalogu', isDefault: false }),
+    );
+    expect(fakeRealtime.emitToTenant).toHaveBeenCalledWith(
+      't1',
+      'productLists.updated',
+      expect.any(Array),
+    );
   });
 
   it('update: varsayilan olarak isaretlenirse digerlerinin (kendisi haric) varsayilan bayragini kaldirir', async () => {
     const prisma = createPrisma();
-    const service = new ProductListsService(prisma as never, fakeAudit);
-    await service.update('product-list-1', { isDefault: true });
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    await runInTenant(() =>
+      service.update('product-list-1', { isDefault: true }),
+    );
     expect(prisma.productList.updateMany).toHaveBeenCalledWith({
       where: { isDefault: true, id: { not: 'product-list-1' } },
       data: { isDefault: false },
@@ -89,7 +140,11 @@ describe('ProductListsService', () => {
 
   it('update: bulunamayan urun listesi icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductListsService(prisma as never, fakeAudit);
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
     await expect(
       service.update('yok', { name: 'Yeni Ad' }),
     ).rejects.toMatchObject({
@@ -99,7 +154,11 @@ describe('ProductListsService', () => {
 
   it('remove: bulunamayan urun listesi icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductListsService(prisma as never, fakeAudit);
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
     await expect(service.remove('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -107,7 +166,11 @@ describe('ProductListsService', () => {
 
   it('remove: icinde urun varsa PRODUCT_LIST_NOT_EMPTY firlatir ve silmez', async () => {
     const prisma = createPrisma(createProductListRow(), 3);
-    const service = new ProductListsService(prisma as never, fakeAudit);
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
     await expect(service.remove('product-list-1')).rejects.toMatchObject({
       code: 'PRODUCT_LIST_NOT_EMPTY',
     });
@@ -116,8 +179,12 @@ describe('ProductListsService', () => {
 
   it('remove: liste bossa siler ve audit log yazar', async () => {
     const prisma = createPrisma(createProductListRow(), 0);
-    const service = new ProductListsService(prisma as never, fakeAudit);
-    await service.remove('product-list-1');
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    await runInTenant(() => service.remove('product-list-1'));
     expect(prisma.productList.delete).toHaveBeenCalledWith({
       where: { id: 'product-list-1' },
     });

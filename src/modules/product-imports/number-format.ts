@@ -33,3 +33,28 @@ export function parseImportNumber(
   const value = Number(trimmed.replace(/,/g, ''));
   return Number.isFinite(value) ? value : undefined;
 }
+
+/** Musteri Excel'lerinde para birimi ISO-4217 disinda gelebiliyor (orn. "TL", "$", "€") -
+ * Product.currency alani tam 3 karakter ISO kod bekliyor (bkz. product.dto.ts). Bilinen
+ * yaygin kisaltmalari/sembolleri ISO koda cevirir; eslesme yoksa buyuk harfe cevrilmis
+ * ham deger geri doner (Zod'un uzunluk hatasi kullaniciya orijinal degeri gostersin diye).
+ */
+const CURRENCY_ALIASES: Record<string, string> = {
+  TL: 'TRY',
+  '₺': 'TRY',
+  TRY: 'TRY',
+  $: 'USD',
+  USD: 'USD',
+  US$: 'USD',
+  '€': 'EUR',
+  EUR: 'EUR',
+  '£': 'GBP',
+  GBP: 'GBP',
+};
+
+export function normalizeCurrency(raw: string): string {
+  const trimmed = raw.trim();
+  const alias =
+    CURRENCY_ALIASES[trimmed.toUpperCase()] ?? CURRENCY_ALIASES[trimmed];
+  return alias ?? trimmed.toUpperCase();
+}
