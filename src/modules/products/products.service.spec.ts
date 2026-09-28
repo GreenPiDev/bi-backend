@@ -1,5 +1,10 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { ProductsService } from './products.service';
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
+}
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
@@ -38,6 +43,7 @@ function createPrisma(
     productList: {
       findFirst: vi.fn().mockResolvedValue(targetProductList),
     },
+    $queryRaw: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -98,6 +104,44 @@ describe('ProductsService', () => {
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(prisma.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('list: brand/category/attr filtrelerini where kosuluna ekler', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    await service.list({
+      page: 1,
+      pageSize: 25,
+      brand: 'Schneider',
+      category: 'Sayac',
+      attr: { Seri: 'kWH' },
+    } as never);
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          brand: 'Schneider',
+          category: 'Sayac',
+          AND: [
+            {
+              attributes: {
+                path: ['Seri'],
+                string_contains: 'kWH',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('getAttributeKeys: tenant genelindeki distinct ozel alan adlarini doner', async () => {
+    const prisma = createPrisma();
+    prisma.$queryRaw.mockResolvedValue([{ key: 'Renk' }, { key: 'Seri' }]);
+    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const result = await runInTenant(() => service.getAttributeKeys());
+    expect(result).toEqual(['Renk', 'Seri']);
+    expect(prisma.$queryRaw).toHaveBeenCalled();
   });
 
   it('bulkMove: secilen urunleri hedef listeye tasir', async () => {

@@ -7,6 +7,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
+import { normalizeAccountName } from '../accounts/account-name.util';
 import { CreateAccountSchema } from '../accounts/dto/account.dto';
 import { CreateContactSchema } from '../contacts/dto/contact.dto';
 import { FileParserService } from '../datasources/file-parser.service';
@@ -67,15 +68,9 @@ function applyMapping(
   return mapped;
 }
 
-/** Firma adlari ice aktarilirken TR locale'e gore buyuk harfe cevrilir (orn.
- * "Abc Sirketi" -> "ABC ŞİRKETİ") - kullanici karari, farkli musteri
- * dosyalarinda tutarli/aranabilir firma adlari icin. toLocaleUpperCase('tr-TR')
- * kullanilir, JS'in varsayilan toUpperCase()'i degil - "i" harfini yanlis
- * ("I" yerine "İ" olmasi gerekirken) buyutur (bkz. CLAUDE.md SS11 TR karakter
- * tuzagi notu). */
 function uppercaseAccountName(mapped: Record<string, unknown>): void {
   if (typeof mapped.name === 'string') {
-    mapped.name = mapped.name.toLocaleUpperCase('tr-TR');
+    mapped.name = normalizeAccountName(mapped.name);
   }
 }
 

@@ -6,15 +6,22 @@ import {
   HttpCode,
   Param,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
+import {
+  CurrentUser,
+  type RequestUser,
+} from '../../core/decorators/current-user.decorator';
 import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
+  CreatePurchaseOrderSchema,
   PurchaseOrderQuerySchema,
   UpdatePurchaseOrderSchema,
+  type CreatePurchaseOrderDto,
   type PurchaseOrderQueryDto,
   type UpdatePurchaseOrderDto,
 } from './dto/purchase-order.dto';
@@ -24,14 +31,26 @@ import {
 } from './purchase-orders.service';
 
 /**
- * SP1: dogrudan bir POST /purchase-orders ucu YOK - siparis olusturma sadece
- * QuotesController'daki POST /quotes/:id/create-purchase-order uzerinden yapilir
- * (bkz. PurchaseOrdersService.createFromQuote).
+ * SP1: teklif onaylandiginda QuotesController'daki
+ * POST /quotes/:id/create-purchase-order de siparis olusturur (bkz.
+ * PurchaseOrdersService.createFromQuote). Buradaki POST /purchase-orders ise
+ * /siparisler/yeni sayfasindan dogrudan, teklife bagli olmadan siparis
+ * olusturmak icin (ad-hoc, 2026-09-28) - PurchaseOrdersService.create.
  */
 @ModulePage('purchase-orders')
 @Controller('purchase-orders')
 export class PurchaseOrdersController {
   constructor(private readonly purchaseOrders: PurchaseOrdersService) {}
+
+  @Post()
+  @RequiresPermission('purchase-orders', 'CREATE')
+  create(
+    @Body(new ZodValidationPipe(CreatePurchaseOrderSchema))
+    dto: CreatePurchaseOrderDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<PurchaseOrderWithItems> {
+    return this.purchaseOrders.create(user.id, dto);
+  }
 
   @Get()
   @RequiresPermission('purchase-orders', 'VIEW')

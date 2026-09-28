@@ -1,0 +1,11 @@
+-- Reconciliation note (2026-09-28): this migration's original file was lost from the
+-- repo before it was ever committed (never appeared in git history). Its recorded
+-- effect (NotificationType.CONTACT_INACTIVITY_ALERT) was already applied by the
+-- preceding migration 20260927125908_interaction_type_options, which independently
+-- contains the same `ALTER TYPE "NotificationType" ADD VALUE 'CONTACT_INACTIVITY_ALERT'`
+-- statement. `prisma migrate diff` between schema.prisma and the live dev database
+-- confirmed no missing DDL beyond a benign FK constraint re-creation unrelated to this
+-- migration. This file is intentionally a no-op placeholder so the local migration
+-- history matches what Postgres's `_prisma_migrations` table already has recorded as
+-- applied, without re-running (and erroring on) the duplicate enum-value addition.
+SELECT 1;

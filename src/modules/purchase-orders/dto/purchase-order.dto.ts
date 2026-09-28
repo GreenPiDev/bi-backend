@@ -22,9 +22,23 @@ export type PurchaseOrderItemInputDto = z.infer<
 
 export const UpdatePurchaseOrderSchema = z.object({
   status: PurchaseOrderStatusSchema.optional(),
+  quoteId: z.string().uuid().nullable().optional(),
   items: z.array(PurchaseOrderItemInputSchema).min(1).max(200).optional(),
 });
 export type UpdatePurchaseOrderDto = z.infer<typeof UpdatePurchaseOrderSchema>;
+
+/** /siparisler/yeni - dogrudan POST /purchase-orders, teklif zorunlu degil (bkz.
+ * PurchaseOrdersService.create). Manuel olusturulan kalemler her zaman EXTRA'dir. */
+const CreatePurchaseOrderItemSchema = z.object({
+  productId: z.string().uuid().optional(),
+  description: z.string().trim().max(300).default(''),
+  quantity: z.number().positive(),
+});
+export const CreatePurchaseOrderSchema = z.object({
+  quoteId: z.string().uuid().optional(),
+  items: z.array(CreatePurchaseOrderItemSchema).min(1).max(200),
+});
+export type CreatePurchaseOrderDto = z.infer<typeof CreatePurchaseOrderSchema>;
 
 export const PurchaseOrderQuerySchema = ListQuerySchema.extend({
   quoteId: z.string().uuid().optional(),

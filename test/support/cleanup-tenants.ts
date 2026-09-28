@@ -44,13 +44,14 @@ export async function cleanupTestTenants(
   await prisma.feedbackSurvey.deleteMany({ where: tenantFilter });
   await prisma.postSaleCase.deleteMany({ where: tenantFilter });
   // PurchaseOrder (RESTRICT-referenced Quote, cascades purchaseOrderItems),
-  // before Project/Quote themselves.
+  // before Quote itself.
   await prisma.purchaseOrder.deleteMany({ where: tenantFilter });
-  // Project (RESTRICT-referenced Quote/Account), before those.
-  await prisma.project.deleteMany({ where: tenantFilter });
-  // Quote (cascades quoteItems), before Product (RESTRICT-referenced by those
-  // child rows) and Account themselves.
+  // Quote (cascades quoteItems) - Quote.projectId is SET NULL onDelete, so
+  // Project/Quote order between each other doesn't matter; Quote must still
+  // go before Product (RESTRICT-referenced by quoteItems) and Account.
   await prisma.quote.deleteMany({ where: tenantFilter });
+  // Project (RESTRICT-referenced Account), before Account itself.
+  await prisma.project.deleteMany({ where: tenantFilter });
   // StockItem (RESTRICT-referenced Product), before Product itself.
   await prisma.stockItem.deleteMany({ where: tenantFilter });
   await prisma.product.deleteMany({ where: tenantFilter });

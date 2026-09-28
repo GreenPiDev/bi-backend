@@ -932,6 +932,14 @@ model Quote {
   status       QuoteStatus @default(DRAFT)
   approvedAt   DateTime?
   approvedById String?
+  /**
+   * Bir proje birden fazla teklifle iliskilendirilebilir (1 Project : N Quote), ama bir
+   * teklif en fazla bir projeye baglidir - bu yuzden FK burada, Quote tarafinda (eskiden
+   * Project.quoteId @unique idi, tersiydi - bkz. docs/VARSAYIMLAR.md). Proje
+   * olustururken setlenmez; proje duzenleme formundaki "Teklifler" cok-secimli alaniyla
+   * (tam degisim/replace semantigi) ayarlanir (bkz. ProjectsService.update).
+   */
+  projectId    String?
   createdById  String
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -940,16 +948,17 @@ model Quote {
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   account        Account         @relation(fields: [accountId], references: [id])
   contact        Contact?        @relation(fields: [contactId], references: [id])
+  project        Project?        @relation(fields: [projectId], references: [id])
   items          QuoteItem[]
   opportunity    Opportunity?
   postSaleCase   PostSaleCase?
-  project        Project?
   purchaseOrders PurchaseOrder[]
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, accountId])
   @@index([tenantId, contactId])
   @@index([tenantId, status])
+  @@index([tenantId, projectId])
   @@index([tenantId, deletedAt])
   @@map("crm_quotes")
 }
@@ -1037,8 +1046,14 @@ model FeedbackSurvey {
 
 /**
  * Faz 11g (CLAUDE.md SS2.3.10 P1-P3). projectNumber formati PRJ-YYYY-AA-GG-NNN (Q1 ile
- * ayni gun-icinde-sirali desen, bkz. ProjectsService). quoteId opsiyonel (P2, "zorunlu
- * degil") - @unique, bir teklife en fazla bir proje baglanabilir. estimatedBudget/
+ * ayni gun-icinde-sirali desen, bkz. ProjectsService). Bir proje birden fazla teklifle
+ * iliskilendirilebilir, teklif setleme proje olusturulurken degil, proje duzenleme
+ * formundaki cok-secimli "Teklifler" alaniyla sonradan yapilir (bkz. Quote.projectId
+ * doc comment'i - FK orada). Bu iliski uzerinden gecen bir satin alma siparisi
+ * yoktur artik - PurchaseOrder sadece Quote'a baglidir, projesi (varsa)
+ * `purchaseOrder.quote.project` uzerinden turetilir (eskiden PurchaseOrder.projectId
+ * ayrica saklaniyordu, teklif<->proje iliskisi siparis olusturulduktan SONRA
+ * kurulursa senkronize kalamiyordu - bkz. docs/VARSAYIMLAR.md). estimatedBudget/
  * actualCost, raporlamadaki kazanc formulunun (teklif tutari - maliyet - masraf, P3)
  * girdileri - formulun kendisi bu fazda hesaplanmiyor/yazilmiyor, sadece degerler
  * saklaniyor. `name` taslak semada (CLAUDE.md SS7.2) yoktu, listede/UI'da projeyi
@@ -1050,7 +1065,6 @@ model Project {
   tenantId        String
   projectNumber   String
   accountId       String
-  quoteId         String?   @unique
   name            String
   estimatedBudget Decimal   @db.Decimal(14, 2)
   actualCost      Decimal?  @db.Decimal(14, 2)
@@ -1059,10 +1073,9 @@ model Project {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  account        Account         @relation(fields: [accountId], references: [id])
-  quote          Quote?          @relation(fields: [quoteId], references: [id])
-  purchaseOrders PurchaseOrder[]
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+  quotes  Quote[]
 
   @@unique([tenantId, projectNumber])
   @@index([tenantId, accountId])
@@ -1073,27 +1086,30 @@ model Project {
 /**
  * Faz 11h (CLAUDE.md SS2.3.11 SP1-SP3). Onaylanmis bir teklifden (Quote.status ==
  * APPROVED) olusturulur - QuotesController'daki POST /quotes/:id/create-purchase-order
- * ucu tetikler, ayri bir POST /purchase-orders ucu YOK (bkz. PurchaseOrdersService.
- * createFromQuote). orderNumber SIP-YYYY-AA-GG-NNN formatinda, Quote/Project ile ayni
- * gun-icinde-sirali sayac deseni. projectId, quoteId'ye baglanan bir Project varsa
- * otomatik doldurulur - kullanici tarafindan setlenmez.
+ * ucu tetikler. orderNumber SIP-YYYY-AA-GG-NNN formatinda, Quote/Project ile ayni
+ * gun-icinde-sirali sayac deseni. Kasitli olarak kendi projectId alani YOK - proje
+ * iliskisi her zaman `quote.project` uzerinden okunur, boylece teklif<->proje
+ * baglantisi siparis olusturulduktan sonra kurulsa/degisse bile tutarli kalir.
+ *
+ * Ad-hoc (2026-09-28, kullanici istegiyle): /siparisler/yeni sayfasindan dogrudan
+ * POST /purchase-orders ile de olusturulabilir (bkz. PurchaseOrdersService.create) -
+ * bu akiste teklif zorunlu degildir, quoteId opsiyonel bir baglantidir (Project.quoteId
+ * ile ayni "zorunlu degil" deseni, bkz. SP1-SP3 dokumaninda P2).
  */
 model PurchaseOrder {
   id          String              @id @default(uuid())
   tenantId    String
   orderNumber String
-  quoteId     String
-  projectId   String?
+  quoteId     String?
   status      PurchaseOrderStatus @default(DRAFT)
   createdById String
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
   deletedAt   DateTime?
 
-  tenant  Tenant              @relation(fields: [tenantId], references: [id])
-  quote   Quote               @relation(fields: [quoteId], references: [id])
-  project Project?            @relation(fields: [projectId], references: [id])
-  items   PurchaseOrderItem[]
+  tenant Tenant              @relation(fields: [tenantId], references: [id])
+  quote  Quote?              @relation(fields: [quoteId], references: [id])
+  items  PurchaseOrderItem[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId, deletedAt])

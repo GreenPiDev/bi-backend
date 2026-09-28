@@ -1,6 +1,12 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Product, PurchaseOrder, PurchaseOrderItem } from '@prisma/client';
+import type {
+  Product,
+  Project,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  Quote,
+} from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
@@ -10,6 +16,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PurchaseOrdersCacheService } from './purchase-orders-cache.service';
 import type {
+  CreatePurchaseOrderDto,
   PurchaseOrderQueryDto,
   UpdatePurchaseOrderDto,
 } from './dto/purchase-order.dto';
@@ -19,10 +26,12 @@ const PURCHASE_ORDER_NUMBER_CREATE_RETRIES = 5;
 
 const PURCHASE_ORDER_INCLUDE = {
   items: { include: { product: true }, orderBy: { createdAt: 'asc' as const } },
+  quote: { include: { project: true } },
 } as const;
 
 export type PurchaseOrderWithItems = PurchaseOrder & {
   items: (PurchaseOrderItem & { product: Product | null })[];
+  quote: (Quote & { project: Project | null }) | null;
 };
 
 function purchaseOrderNumberPrefix(date: Date): string {
@@ -56,7 +65,7 @@ export class PurchaseOrdersService {
 
     const where = {
       ...(quoteId ? { quoteId } : {}),
-      ...(projectId ? { projectId } : {}),
+      ...(projectId ? { quote: { projectId } } : {}),
       ...(status ? { status } : {}),
     };
 
@@ -94,10 +103,124 @@ export class PurchaseOrdersService {
     return purchaseOrder;
   }
 
+  /** /siparisler/yeni: teklif zorunlu degil, quoteId opsiyonel bir baglantidir.
+   * Kalemler her zaman EXTRA kaynaklidir (SP1'deki QUOTE kaynagi sadece
+   * createFromQuote akisina ozgudur). */
+  async create(
+    createdById: string,
+    dto: CreatePurchaseOrderDto,
+  ): Promise<PurchaseOrderWithItems> {
+    if (dto.quoteId) {
+      const quote = await this.prisma.quote.findFirst({
+        where: { id: dto.quoteId },
+      });
+      if (!quote) {
+        throw new AppException(
+          'NOT_FOUND',
+          'Teklif bulunamadi.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+    }
+
+    const productIds = [
+      ...new Set(
+        dto.items
+          .map((item) => item.productId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    if (productIds.length) {
+      const products = await this.prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true },
+      });
+      if (products.length !== productIds.length) {
+        throw new AppException(
+          'PRODUCT_NOT_FOUND',
+          'Secilen urunlerden biri bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const order = await this.createWithGeneratedNumber(tx, {
+        quoteId: dto.quoteId ?? null,
+        createdById,
+        items: dto.items.map((item) => ({
+          productId: item.productId ?? null,
+          description: item.description,
+          quantity: item.quantity,
+          source: 'EXTRA' as const,
+        })),
+      });
+      return order;
+    });
+
+    await this.audit.log({
+      action: 'CREATE',
+      entity: 'PurchaseOrder',
+      entityId: created.id,
+      meta: { orderNumber: created.orderNumber },
+    });
+    await this.cache.invalidate();
+    return this.getById(created.id);
+  }
+
+  private async createWithGeneratedNumber(
+    tx: Pick<TenantPrismaClient, 'purchaseOrder'>,
+    data: {
+      quoteId: string | null;
+      createdById: string;
+      items: {
+        productId: string | null;
+        description: string;
+        quantity: number;
+        source: 'QUOTE' | 'EXTRA';
+      }[];
+    },
+  ): Promise<PurchaseOrder> {
+    for (
+      let attempt = 0;
+      attempt < PURCHASE_ORDER_NUMBER_CREATE_RETRIES;
+      attempt += 1
+    ) {
+      const prefix = purchaseOrderNumberPrefix(new Date());
+      const countToday = await tx.purchaseOrder.count({
+        where: { orderNumber: { startsWith: prefix } },
+      });
+      const orderNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
+      try {
+        return await tx.purchaseOrder.create({
+          data: {
+            quoteId: data.quoteId,
+            orderNumber,
+            createdById: data.createdById,
+            items: { create: data.items },
+          } as never,
+        });
+      } catch (error) {
+        const isDuplicateNumber =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (
+          !isDuplicateNumber ||
+          attempt === PURCHASE_ORDER_NUMBER_CREATE_RETRIES - 1
+        ) {
+          throw error;
+        }
+      }
+    }
+    throw new AppException(
+      'PURCHASE_ORDER_NUMBER_CONFLICT',
+      'Siparis numarasi olusturulamadi, lutfen tekrar deneyin.',
+      HttpStatus.CONFLICT,
+    );
+  }
+
   /**
-   * SP1-SP3: onayli bir teklifden siparis olusturur. Sadece
-   * QuotesController'daki POST /quotes/:id/create-purchase-order ucu cagirir,
-   * dogrudan bir POST /purchase-orders ucu yoktur.
+   * SP1-SP3: onayli bir teklifden siparis olusturur.
    */
   async createFromQuote(
     createdById: string,
@@ -121,10 +244,6 @@ export class PurchaseOrdersService {
         HttpStatus.BAD_REQUEST,
       );
     }
-
-    const project = await this.prisma.project.findFirst({
-      where: { quoteId: quote.id },
-    });
 
     const productIds = [...new Set(quote.items.map((item) => item.productId))];
     const stockItems = productIds.length
@@ -154,50 +273,13 @@ export class PurchaseOrdersService {
       };
     });
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      let createdOrder: PurchaseOrder | undefined;
-      for (
-        let attempt = 0;
-        attempt < PURCHASE_ORDER_NUMBER_CREATE_RETRIES;
-        attempt += 1
-      ) {
-        const prefix = purchaseOrderNumberPrefix(new Date());
-        const countToday = await tx.purchaseOrder.count({
-          where: { orderNumber: { startsWith: prefix } },
-        });
-        const orderNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
-        try {
-          createdOrder = await tx.purchaseOrder.create({
-            data: {
-              quoteId: quote.id,
-              projectId: project?.id ?? null,
-              orderNumber,
-              createdById,
-              items: { create: itemsData },
-            } as never,
-          });
-          break;
-        } catch (error) {
-          const isDuplicateNumber =
-            error instanceof Prisma.PrismaClientKnownRequestError &&
-            error.code === 'P2002';
-          if (
-            !isDuplicateNumber ||
-            attempt === PURCHASE_ORDER_NUMBER_CREATE_RETRIES - 1
-          ) {
-            throw error;
-          }
-        }
-      }
-      if (!createdOrder) {
-        throw new AppException(
-          'PURCHASE_ORDER_NUMBER_CONFLICT',
-          'Siparis numarasi olusturulamadi, lutfen tekrar deneyin.',
-          HttpStatus.CONFLICT,
-        );
-      }
-      return createdOrder;
-    });
+    const created = await this.prisma.$transaction((tx) =>
+      this.createWithGeneratedNumber(tx, {
+        quoteId: quote.id,
+        createdById,
+        items: itemsData,
+      }),
+    );
 
     await this.audit.log({
       action: 'CREATE',
@@ -215,7 +297,26 @@ export class PurchaseOrdersService {
   ): Promise<PurchaseOrderWithItems> {
     await this.getById(id);
 
+    if (dto.quoteId) {
+      const quote = await this.prisma.quote.findFirst({
+        where: { id: dto.quoteId },
+      });
+      if (!quote) {
+        throw new AppException(
+          'NOT_FOUND',
+          'Teklif bulunamadi.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+    }
+
     await this.prisma.$transaction(async (tx) => {
+      if (dto.quoteId !== undefined) {
+        await tx.purchaseOrder.update({
+          where: { id },
+          data: { quoteId: dto.quoteId },
+        });
+      }
       if (dto.items) {
         const productIds = [
           ...new Set(

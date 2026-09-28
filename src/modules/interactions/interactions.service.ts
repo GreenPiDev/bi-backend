@@ -14,6 +14,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
+import { normalizeAccountName } from '../accounts/account-name.util';
 import { CalendarEventsCacheService } from '../calendar-events/calendar-events-cache.service';
 import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
 import { AuditService } from '../audit/audit.service';
@@ -312,7 +313,10 @@ export class InteractionsService {
         }
       } else if (dto.accountName) {
         const account = await tx.account.create({
-          data: { name: dto.accountName, createdById } as never,
+          data: {
+            name: normalizeAccountName(dto.accountName),
+            createdById,
+          } as never,
         });
         accountId = account.id;
         accountAutoCreated = true;
@@ -321,6 +325,7 @@ export class InteractionsService {
 
       let contactId = dto.contactId;
       let contactAutoCreated = false;
+      let contactLastContactedAt: Date | null = null;
       if (contactId) {
         // findUnique tenant-scoped extension'in kapsami disindadir (bkz.
         // tenant-scoped.extension.ts) - burada bilerek findFirst kullaniliyor.
@@ -337,6 +342,7 @@ export class InteractionsService {
         if (!accountId) {
           accountId = contact.accountId ?? undefined;
         }
+        contactLastContactedAt = contact.lastContactedAt;
       } else if (dto.contactName) {
         const { firstName, lastName } = splitFreeTextName(dto.contactName);
         const contact = await tx.contact.create({
@@ -384,6 +390,20 @@ export class InteractionsService {
             estimatedValue: dto.opportunity.estimatedValue,
             estimatedValueCurrency: dto.opportunity.estimatedValueCurrency,
           } as never,
+        });
+      }
+
+      // K2: gorusme kaydi, kisinin "en son iletisim" tarihini otomatik ileri
+      // tasir - kullanicinin /kisiler/:id'den elle guncellemesine ek olarak
+      // (bkz. ContactsService.update). Gecmis tarihli bir gorusme, o kisinin
+      // hali hazirda daha yeni bir lastContactedAt'ini geriye almaz.
+      if (
+        contactId &&
+        (!contactLastContactedAt || contactLastContactedAt < dto.occurredAt)
+      ) {
+        await tx.contact.update({
+          where: { id: contactId },
+          data: { lastContactedAt: dto.occurredAt, inactivityNotifiedAt: null },
         });
       }
 

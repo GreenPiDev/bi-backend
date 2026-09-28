@@ -42,6 +42,11 @@ export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
 
 export const ProductQuerySchema = ListQuerySchema.extend({
   productListId: z.string().uuid().optional(),
+  brand: z.string().trim().min(1).optional(),
+  category: z.string().trim().min(1).optional(),
+  /** Ozel alan (attributes JSONB) filtreleri: { "Seri": "kWH" } gibi, her key icin
+   * serbest metin (case-insensitive contains) araniyor - bkz. CLAUDE.md Faz B. */
+  attr: z.record(z.string(), z.string().trim().min(1)).optional(),
 });
 export type ProductQueryDto = z.infer<typeof ProductQuerySchema>;
 

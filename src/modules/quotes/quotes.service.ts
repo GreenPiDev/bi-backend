@@ -17,6 +17,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import {
   POST_SALE_SURVEY_QUEUE,
   SEND_POST_SALE_SURVEY_JOB,
@@ -333,6 +334,30 @@ export class QuotesService {
     return withName;
   }
 
+  /**
+   * Gunluk sira sayacinin taban sorgusu. `tx.quote.count()` yerine ham SQL
+   * kullaniyor: tenant-scoped extension SOFT_DELETE_MODELS icin okuma
+   * sorgularina otomatik `deletedAt: null` ekliyor, ama `quoteNumber` unique
+   * kisiti (`@@unique([tenantId, quoteNumber])`) soft-delete'li satirlari da
+   * kapsiyor. Silinmis bir teklif ayni gun-ici numarayi hala isgal ediyorken
+   * sayac onu gormezden gelip ayni numarayi tekrar uretirse `P2002` olusur -
+   * bu yuzden burada silinmisler dahil TUM satirlar sayilmali (bkz. sohbet
+   * gecmisi: kullanici tum teklifleri sildikten sonra bu hatayla karsilasti).
+   */
+  private async countQuoteNumbersForPrefix(
+    tx: Pick<TenantPrismaClient, '$queryRaw'>,
+    prefix: string,
+  ): Promise<number> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const rows = await tx.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM crm_quotes
+      WHERE "tenantId" = ${tenantId}
+        AND "quoteNumber" LIKE ${prefix + '%'}
+    `;
+    return Number(rows[0]?.count ?? 0);
+  }
+
   async create(
     createdById: string,
     dto: CreateQuoteDto,
@@ -340,46 +365,48 @@ export class QuotesService {
     await this.assertValidPaymentMethod(dto.paymentMethod);
     const ibanSnapshot = await this.resolveIbanSnapshot(dto.ibanOptionId);
 
-    const { quoteId } = await this.prisma.$transaction(async (tx) => {
-      const account = await tx.account.findFirst({
-        where: { id: dto.accountId },
-      });
-      if (!account) {
-        throw new AppException(
-          'ACCOUNT_NOT_FOUND',
-          'Secilen firma bulunamadi.',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+    /**
+     * `P2002` (quoteNumber cakismasi) gercek bir Postgres hatasidir; ayni
+     * transaction icinde tekrar denemek `25P02 current transaction is
+     * aborted` ile sonuclanir (Postgres, SAVEPOINT olmadan hatali bir
+     * statement'tan sonraki komutlari transaction rollback edilene kadar
+     * reddeder). Bu yuzden her deneme kendi TAZE transaction'inda yapilir.
+     */
+    let quoteId: string | undefined;
+    for (let attempt = 0; attempt < QUOTE_NUMBER_CREATE_RETRIES; attempt += 1) {
+      try {
+        quoteId = await this.prisma.$transaction(async (tx) => {
+          const account = await tx.account.findFirst({
+            where: { id: dto.accountId },
+          });
+          if (!account) {
+            throw new AppException(
+              'ACCOUNT_NOT_FOUND',
+              'Secilen firma bulunamadi.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
 
-      if (dto.contactId) {
-        const contact = await tx.contact.findFirst({
-          where: { id: dto.contactId },
-        });
-        if (!contact || contact.accountId !== dto.accountId) {
-          throw new AppException(
-            'CONTACT_ACCOUNT_MISMATCH',
-            'Secilen kisi bu firmaya ait degil.',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      }
+          if (dto.contactId) {
+            const contact = await tx.contact.findFirst({
+              where: { id: dto.contactId },
+            });
+            if (!contact || contact.accountId !== dto.accountId) {
+              throw new AppException(
+                'CONTACT_ACCOUNT_MISMATCH',
+                'Secilen kisi bu firmaya ait degil.',
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+          }
 
-      const { items } = await this.resolveItems(tx, dto.items);
+          const { items } = await this.resolveItems(tx, dto.items);
 
-      let created: Quote | undefined;
-      for (
-        let attempt = 0;
-        attempt < QUOTE_NUMBER_CREATE_RETRIES;
-        attempt += 1
-      ) {
-        const prefix = quoteNumberPrefix(new Date());
-        const countToday = await tx.quote.count({
-          where: { quoteNumber: { startsWith: prefix } },
-        });
-        const quoteNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
-        try {
-          created = await tx.quote.create({
+          const prefix = quoteNumberPrefix(new Date());
+          const countToday = await this.countQuoteNumbersForPrefix(tx, prefix);
+          const quoteNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
+
+          const created = await tx.quote.create({
             data: {
               accountId: dto.accountId,
               contactId: dto.contactId ?? null,
@@ -396,42 +423,39 @@ export class QuotesService {
               items: { create: items },
             } as never,
           });
-          break;
-        } catch (error) {
-          const isDuplicateNumber =
-            error instanceof Prisma.PrismaClientKnownRequestError &&
-            error.code === 'P2002';
-          if (
-            !isDuplicateNumber ||
-            attempt === QUOTE_NUMBER_CREATE_RETRIES - 1
-          ) {
-            throw error;
+
+          if (dto.opportunity) {
+            await tx.opportunity.create({
+              data: {
+                accountId: dto.accountId,
+                quoteId: created.id,
+                name: dto.opportunity.name,
+                stage: dto.opportunity.stage,
+                estimatedValue: dto.opportunity.estimatedValue,
+                createdById,
+              } as never,
+            });
           }
+
+          return created.id;
+        });
+        break;
+      } catch (error) {
+        const isDuplicateNumber =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (!isDuplicateNumber) {
+          throw error;
         }
       }
-      if (!created) {
-        throw new AppException(
-          'QUOTE_NUMBER_CONFLICT',
-          'Teklif numarasi olusturulamadi, lutfen tekrar deneyin.',
-          HttpStatus.CONFLICT,
-        );
-      }
-
-      if (dto.opportunity) {
-        await tx.opportunity.create({
-          data: {
-            accountId: dto.accountId,
-            quoteId: created.id,
-            name: dto.opportunity.name,
-            stage: dto.opportunity.stage,
-            estimatedValue: dto.opportunity.estimatedValue,
-            createdById,
-          } as never,
-        });
-      }
-
-      return { quoteId: created.id };
-    });
+    }
+    if (!quoteId) {
+      throw new AppException(
+        'QUOTE_NUMBER_CONFLICT',
+        'Teklif numarasi olusturulamadi, lutfen tekrar deneyin.',
+        HttpStatus.CONFLICT,
+      );
+    }
 
     await this.audit.log({
       action: 'CREATE',

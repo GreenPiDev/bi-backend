@@ -7,6 +7,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { normalizeAccountName } from './account-name.util';
 import { AccountsCacheService } from './accounts-cache.service';
 import type {
   AccountQueryDto,
@@ -61,6 +62,13 @@ function normalize<T extends object>(dto: T): T {
     if (key in result && result[key] === '') {
       result[key] = null;
     }
+  }
+  // Manuel formdan (/firmalar/yeni, /firmalar/:id/duzenle) girilen firma adi da
+  // ice aktarma/gorusme akislarindaki (bkz. account-name.util.ts) ayni TR-locale
+  // buyuk harf normalizasyonuna tabi - aksi halde bu formdan girilen bir firma,
+  // sonraki bir import/gorusme eslestirmesinde bulunamayip duplike olusabilir.
+  if (typeof result.name === 'string') {
+    result.name = normalizeAccountName(result.name);
   }
   return result as T;
 }

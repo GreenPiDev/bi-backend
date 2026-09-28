@@ -6,6 +6,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import { ProductsCacheService } from './products-cache.service';
 import type {
@@ -35,14 +36,26 @@ export class ProductsService {
       return cached;
     }
 
-    const { page, pageSize, q, productListId } = query;
+    const { page, pageSize, q, productListId, brand, category, attr } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'name',
       direction: 'asc',
     });
 
+    const attrConditions = attr
+      ? Object.entries(attr).map(([key, value]) => ({
+          attributes: {
+            path: [key],
+            string_contains: value,
+            mode: 'insensitive' as const,
+          },
+        }))
+      : [];
+
     const where = {
       ...(productListId ? { productListId } : {}),
+      ...(brand ? { brand } : {}),
+      ...(category ? { category } : {}),
       ...(q
         ? {
             OR: [
@@ -51,6 +64,7 @@ export class ProductsService {
             ],
           }
         : {}),
+      ...(attrConditions.length > 0 ? { AND: attrConditions } : {}),
     };
 
     const [data, total] = await Promise.all([
@@ -74,6 +88,25 @@ export class ProductsService {
 
   async getById(id: string): Promise<ProductView> {
     return this.findOrThrow(id);
+  }
+
+  /**
+   * Faz B (attributes JSONB, bkz. docs/VARSAYIMLAR.md V40) icin: tenant genelinde,
+   * urun listesinden bagimsiz, kullanimda olan tum ozel alan adlarinin (ornek: "Seri")
+   * distinct havuzu - filtre panelinde dinamik metin alani render etmek icin.
+   * tenant-scoped extension raw sorgulari kapsamiyor, bu yuzden tenantId elle eklenir.
+   */
+  async getAttributeKeys(): Promise<string[]> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const rows = await this.prisma.$queryRaw<{ key: string }[]>`
+      SELECT DISTINCT jsonb_object_keys(attributes) as key
+      FROM crm_products
+      WHERE "tenantId" = ${tenantId}
+        AND "deletedAt" IS NULL
+        AND attributes IS NOT NULL
+      ORDER BY key
+    `;
+    return rows.map((row) => row.key);
   }
 
   private async findOrThrow(id: string): Promise<ProductWithProductList> {

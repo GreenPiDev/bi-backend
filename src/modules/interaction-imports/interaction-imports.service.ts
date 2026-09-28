@@ -11,6 +11,7 @@ import { generateTemporaryPassword } from '../../core/security/temporary-passwor
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { parseFlexibleDate } from '../../core/validators/date';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
+import { normalizeAccountName } from '../accounts/account-name.util';
 import { FileParserService } from '../datasources/file-parser.service';
 import { InteractionTypeSchema } from '../interactions/dto/interaction.dto';
 import { InteractionsCacheService } from '../interactions/interactions-cache.service';
@@ -309,11 +310,20 @@ export class InteractionImportsService {
   }
 
   /**
-   * Her satir icin firma/kisi adi mevcut kayitlara karsi (case-insensitive) eslenir;
-   * bulunamazsa M1/M2'deki (interactions.service.ts) tek-kayitlik "otomatik olustur"
-   * davranisiyla ayni sekilde yeni kayit acilir. Tek fark: ayni firma adi dosyada
-   * birden fazla satirda geciyorsa (toplu ice aktarmada beklenen durum) her satirda
-   * yeni bir cari acmak yerine dosyanin geri kalaninda ayni kayit yeniden kullanilir.
+   * Her satir icin firma/kisi adi mevcut kayitlara karsi eslenir; bulunamazsa
+   * M1/M2'deki (interactions.service.ts) tek-kayitlik "otomatik olustur" davranisiyla
+   * ayni sekilde yeni kayit acilir. Tek fark: ayni firma adi dosyada birden fazla
+   * satirda geciyorsa (toplu ice aktarmada beklenen durum) her satirda yeni bir cari
+   * acmak yerine dosyanin geri kalaninda ayni kayit yeniden kullanilir.
+   *
+   * Firma eslestirmesi Postgres'in `mode: 'insensitive'` (ILIKE) ozelligine degil,
+   * `normalizeAccountName` (bkz. account-name.util.ts) ile normalize edilmis exact-match'e
+   * dayanir - cunku Account.name zaten her zaman bu normalizasyonla (TR-locale buyuk harf)
+   * saklanir (imports.service.ts, interactions.service.ts) ve Postgres'in varsayilan "C"
+   * locale'i Turkce aksanli harflerde (İ/ı, Ş/ş, Ğ/ğ, Ü/ü, Ö/ö, Ç/ç) ILIKE karsilastirmasini
+   * yanlis sonuclandirir - orn. excel'deki "3Ab Enerji..." ile DB'deki
+   * "3AB ENERJİ..." arasindaki "İ" DB seviyesinde eslesmez ve ayni firma ikinci kez
+   * (duplike) olusturulur.
    */
   async importInteractions(
     createdById: string,
@@ -404,24 +414,22 @@ export class InteractionImportsService {
       try {
         let accountId: string | undefined;
         if (row.accountName) {
-          const key = row.accountName.toLocaleLowerCase('tr-TR');
-          accountId = accountIdByName.get(key);
+          const normalizedName = normalizeAccountName(row.accountName);
+          accountId = accountIdByName.get(normalizedName);
           if (!accountId) {
             const existing = await this.prisma.account.findFirst({
-              where: {
-                name: { equals: row.accountName, mode: 'insensitive' as const },
-              },
+              where: { name: normalizedName },
             });
             if (existing) {
               accountId = existing.id;
             } else {
               const created = await this.prisma.account.create({
-                data: { name: row.accountName, createdById } as never,
+                data: { name: normalizedName, createdById } as never,
               });
               accountId = created.id;
               anyAccountCreated = true;
             }
-            accountIdByName.set(key, accountId);
+            accountIdByName.set(normalizedName, accountId);
           }
         }
 

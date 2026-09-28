@@ -6,8 +6,6 @@ const MAX_DECIMAL_14_2 = 999_999_999_999.99;
 
 export const CreateProjectSchema = z.object({
   accountId: z.string().uuid(),
-  /** P2: opsiyonel, zorunlu degil. */
-  quoteId: z.string().uuid().optional(),
   name: z.string().trim().min(2, 'Proje adi en az 2 karakter olmalidir.'),
   estimatedBudget: z
     .number()
@@ -33,6 +31,13 @@ export const UpdateProjectSchema = z.object({
     .nonnegative()
     .max(MAX_DECIMAL_14_2, 'Gerceklesen maliyet cok buyuk.')
     .optional(),
+  /**
+   * Bu projeyle iliskilendirilecek tekliflerin tam listesi (replace semantigi) -
+   * proje olustururken degil, sadece duzenlerken setlenir. Verilirse, halihazirda
+   * bu projeye bagli ama listede olmayan teklifler unlink edilir (bkz.
+   * ProjectsService.update).
+   */
+  quoteIds: z.array(z.string().uuid()).max(200).optional(),
 });
 export type UpdateProjectDto = z.infer<typeof UpdateProjectSchema>;
 

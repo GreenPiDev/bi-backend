@@ -26,7 +26,7 @@ import {
   type ProjectQueryDto,
   type UpdateProjectDto,
 } from './dto/project.dto';
-import { ProjectsService } from './projects.service';
+import { ProjectsService, type ProjectWithQuotes } from './projects.service';
 
 @ModulePage('projects')
 @Controller('projects')
@@ -44,7 +44,7 @@ export class ProjectsController {
 
   @Get(':id')
   @RequiresPermission('projects', 'VIEW')
-  getById(@Param('id') id: string): Promise<Project> {
+  getById(@Param('id') id: string): Promise<ProjectWithQuotes> {
     return this.projects.getById(id);
   }
 
@@ -54,7 +54,7 @@ export class ProjectsController {
     @Body(new ZodValidationPipe(CreateProjectSchema))
     dto: CreateProjectDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<Project> {
+  ): Promise<ProjectWithQuotes> {
     return this.projects.create(user.id, dto);
   }
 
@@ -64,7 +64,7 @@ export class ProjectsController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateProjectSchema))
     dto: UpdateProjectDto,
-  ): Promise<Project> {
+  ): Promise<ProjectWithQuotes> {
     return this.projects.update(id, dto);
   }
 

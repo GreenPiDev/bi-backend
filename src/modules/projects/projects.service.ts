@@ -1,12 +1,13 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Project } from '@prisma/client';
+import type { Project, Quote } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import { ProjectsCacheService } from './projects-cache.service';
 import type {
@@ -17,6 +18,10 @@ import type {
 
 const SORTABLE_FIELDS = ['projectNumber', 'name', 'createdAt'] as const;
 const PROJECT_NUMBER_CREATE_RETRIES = 5;
+
+const PROJECT_INCLUDE = { quotes: true } as const;
+
+export type ProjectWithQuotes = Project & { quotes: Quote[] };
 
 function projectNumberPrefix(date: Date): string {
   const yyyy = date.getFullYear();
@@ -67,8 +72,11 @@ export class ProjectsService {
     return result;
   }
 
-  async getById(id: string): Promise<Project> {
-    const project = await this.prisma.project.findFirst({ where: { id } });
+  async getById(id: string): Promise<ProjectWithQuotes> {
+    const project = await this.prisma.project.findFirst({
+      where: { id },
+      include: PROJECT_INCLUDE,
+    });
     if (!project) {
       throw new AppException(
         'NOT_FOUND',
@@ -79,23 +87,72 @@ export class ProjectsService {
     return project;
   }
 
-  /** P2: quoteId verilirse, o teklif ayni firmaya ait olmali (Quotes'daki
-   * contactId/accountId eslesme kontrolu ile ayni desen). */
-  private async assertQuoteMatchesAccount(
-    quoteId: string,
+  /**
+   * Proje duzenleme formundaki cok-secimli "Teklifler" alani icin: her teklif (a)
+   * var olmali, (b) projenin firmasina ait olmali, (c) baska bir projeye zaten
+   * bagli olmamali (bloklayici tasarim - kullanici once o teklifi diger projeden
+   * cikarmali).
+   */
+  private async assertQuotesAssignable(
+    quoteIds: string[],
     accountId: string,
+    projectId: string,
   ): Promise<void> {
-    const quote = await this.prisma.quote.findFirst({ where: { id: quoteId } });
-    if (!quote || quote.accountId !== accountId) {
+    if (quoteIds.length === 0) {
+      return;
+    }
+    const quotes = await this.prisma.quote.findMany({
+      where: { id: { in: quoteIds } },
+    });
+    if (quotes.length !== new Set(quoteIds).size) {
       throw new AppException(
-        'QUOTE_ACCOUNT_MISMATCH',
-        'Secilen teklif bu firmaya ait degil.',
+        'QUOTE_NOT_FOUND',
+        'Secilen tekliflerden biri bulunamadi.',
         HttpStatus.BAD_REQUEST,
       );
     }
+    for (const quote of quotes) {
+      if (quote.accountId !== accountId) {
+        throw new AppException(
+          'QUOTE_ACCOUNT_MISMATCH',
+          'Secilen tekliflerden biri bu firmaya ait degil.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (quote.projectId && quote.projectId !== projectId) {
+        throw new AppException(
+          'QUOTE_ALREADY_LINKED_TO_PROJECT',
+          'Secilen tekliflerden biri baska bir projeye zaten bagli.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
   }
 
-  async create(createdById: string, dto: CreateProjectDto): Promise<Project> {
+  /**
+   * Gunluk sira sayacinin taban sorgusu. `count()` yerine ham SQL kullaniyor:
+   * tenant-scoped extension SOFT_DELETE_MODELS icin okuma sorgularina
+   * otomatik `deletedAt: null` ekliyor, ama `projectNumber` unique kisiti
+   * (`@@unique([tenantId, projectNumber])`) soft-delete'li satirlari da
+   * kapsiyor. Silinmis bir proje ayni gun-ici numarayi hala isgal ediyorken
+   * sayac onu gormezden gelip ayni numarayi tekrar uretirse `P2002` olusur
+   * (quotes.service.ts'teki ayni sinif hatanin projects karsiligi).
+   */
+  private async countProjectNumbersForPrefix(prefix: string): Promise<number> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const rows = await this.prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM crm_projects
+      WHERE "tenantId" = ${tenantId}
+        AND "projectNumber" LIKE ${prefix + '%'}
+    `;
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  async create(
+    createdById: string,
+    dto: CreateProjectDto,
+  ): Promise<ProjectWithQuotes> {
     const account = await this.prisma.account.findFirst({
       where: { id: dto.accountId },
     });
@@ -106,9 +163,6 @@ export class ProjectsService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (dto.quoteId) {
-      await this.assertQuoteMatchesAccount(dto.quoteId, dto.accountId);
-    }
 
     let created: Project | undefined;
     for (
@@ -117,9 +171,7 @@ export class ProjectsService {
       attempt += 1
     ) {
       const prefix = projectNumberPrefix(new Date());
-      const countToday = await this.prisma.project.count({
-        where: { projectNumber: { startsWith: prefix } },
-      });
+      const countToday = await this.countProjectNumbersForPrefix(prefix);
       const projectNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
       try {
         created = await this.prisma.project.create({
@@ -156,22 +208,41 @@ export class ProjectsService {
       meta: { projectNumber: created.projectNumber },
     });
     await this.cache.invalidate();
-    return created;
+    return this.getById(created.id);
   }
 
-  async update(id: string, dto: UpdateProjectDto): Promise<Project> {
-    await this.getById(id);
-    const project = await this.prisma.project.update({
-      where: { id },
-      data: dto,
+  async update(id: string, dto: UpdateProjectDto): Promise<ProjectWithQuotes> {
+    const project = await this.getById(id);
+    const { quoteIds, ...fields } = dto;
+    if (quoteIds !== undefined) {
+      await this.assertQuotesAssignable(quoteIds, project.accountId, id);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (Object.keys(fields).length > 0) {
+        await tx.project.update({ where: { id }, data: fields });
+      }
+      if (quoteIds !== undefined) {
+        await tx.quote.updateMany({
+          where: { projectId: id },
+          data: { projectId: null },
+        });
+        if (quoteIds.length > 0) {
+          await tx.quote.updateMany({
+            where: { id: { in: quoteIds } },
+            data: { projectId: id },
+          });
+        }
+      }
     });
+
     await this.audit.log({
       action: 'UPDATE',
       entity: 'Project',
       entityId: id,
     });
     await this.cache.invalidate();
-    return project;
+    return this.getById(id);
   }
 
   async remove(id: string): Promise<void> {

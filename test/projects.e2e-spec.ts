@@ -25,7 +25,9 @@ describe('Projects (e2e)', () => {
   let accountIdA: string;
   let otherAccountIdA: string;
   let quoteIdA: string;
+  let quoteIdA2: string;
   let projectId: string;
+  let otherProjectId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -116,50 +118,107 @@ describe('Projects (e2e)', () => {
       });
     expect(quoteRes.status).toBe(201);
     quoteIdA = quoteRes.body.id as string;
-  });
 
-  it('POST /projects: baska firmaya ait teklif secilirse 400 QUOTE_ACCOUNT_MISMATCH doner', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/api/v1/projects')
+    const quoteRes2 = await request(app.getHttpServer())
+      .post('/api/v1/quotes')
       .set('Cookie', cookiesA)
       .send({
-        accountId: otherAccountIdA,
-        quoteId: quoteIdA,
-        name: 'Depo genisletme',
-        estimatedBudget: 10000,
+        accountId: accountIdA,
+        items: [
+          { productId: product.id, quantity: 2, discountPct: 0, vatPct: 0 },
+        ],
       });
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('QUOTE_ACCOUNT_MISMATCH');
+    expect(quoteRes2.status).toBe(201);
+    quoteIdA2 = quoteRes2.body.id as string;
   });
 
-  it('POST /projects: proje olusturur, PRJ-YYYY-AA-GG-NNN numarasi uretir (P1/P2)', async () => {
+  it('POST /projects: proje olusturur, PRJ-YYYY-AA-GG-NNN numarasi uretir, teklif olmadan (P1/P2)', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/projects')
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        quoteId: quoteIdA,
         name: 'Depo genisletme',
         estimatedBudget: 10000,
       });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Depo genisletme');
-    expect(res.body.quoteId).toBe(quoteIdA);
+    expect(res.body.quotes).toEqual([]);
     expect(res.body.projectNumber).toMatch(/^PRJ-\d{4}-\d{2}-\d{2}-\d{3}$/);
     projectId = res.body.id as string;
   });
 
-  it('POST /projects: quoteId olmadan da (opsiyonel, P2) olusturulabilir', async () => {
+  it('PATCH /projects/:id: baska firmaya ait teklif quoteIds icinde verilirse 400 QUOTE_ACCOUNT_MISMATCH doner', async () => {
+    const otherQuoteRes = await request(app.getHttpServer())
+      .post('/api/v1/quotes')
+      .set('Cookie', cookiesA)
+      .send({ accountId: otherAccountIdA, items: [] });
+    expect(otherQuoteRes.status).toBe(201);
+
     const res = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${projectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [otherQuoteRes.body.id] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('QUOTE_ACCOUNT_MISMATCH');
+  });
+
+  it('PATCH /projects/:id: quoteIds ile teklifi projeye baglar', async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${projectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [quoteIdA] });
+    expect(res.status).toBe(200);
+    expect((res.body.quotes as { id: string }[]).map((q) => q.id)).toEqual([
+      quoteIdA,
+    ]);
+  });
+
+  it('PATCH /projects/:id: baska bir projeye zaten bagli teklif verilirse 400 QUOTE_ALREADY_LINKED_TO_PROJECT doner', async () => {
+    const otherProjectRes = await request(app.getHttpServer())
       .post('/api/v1/projects')
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
-        name: 'Ofis tadilati',
-        estimatedBudget: 5000,
+        name: 'Baska proje',
+        estimatedBudget: 1000,
       });
-    expect(res.status).toBe(201);
-    expect(res.body.quoteId).toBeNull();
+    expect(otherProjectRes.status).toBe(201);
+    otherProjectId = otherProjectRes.body.id as string;
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${otherProjectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [quoteIdA] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('QUOTE_ALREADY_LINKED_TO_PROJECT');
+  });
+
+  it('PATCH /projects/:id: quoteIds tam degisim (replace) yapar, bos dizi tum iliskileri kaldirir', async () => {
+    const replaceRes = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${projectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [quoteIdA2] });
+    expect(replaceRes.status).toBe(200);
+    expect(
+      (replaceRes.body.quotes as { id: string }[]).map((q) => q.id),
+    ).toEqual([quoteIdA2]);
+
+    const clearRes = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${projectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [] });
+    expect(clearRes.status).toBe(200);
+    expect(clearRes.body.quotes).toEqual([]);
+
+    // quoteIdA hala serbest (ilk baglandigi projeden bu adimda cikarilmadi,
+    // yalnizca projectId'nin kendi iliskisi degisti) - sonraki testler icin
+    // tekrar bu projeye baglayalim.
+    const relinkRes = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${projectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [quoteIdA] });
+    expect(relinkRes.status).toBe(200);
   });
 
   it('GET /projects: sayfali liste doner, accountId ile filtrelenebilir', async () => {

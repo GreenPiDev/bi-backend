@@ -215,6 +215,78 @@ describe('Purchase Orders & Stock (e2e)', () => {
     );
   });
 
+  it('POST /purchase-orders: teklif olmadan (quoteId olmadan) dogrudan siparis olusturur', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/purchase-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        items: [{ description: 'Ofis sarf malzemesi', quantity: 2 }],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.orderNumber).toMatch(/^SIP-\d{4}-\d{2}-\d{2}-\d{3}$/);
+    expect(res.body.quote).toBeNull();
+    expect(res.body.items).toHaveLength(1);
+  });
+
+  it('POST /purchase-orders: quoteId verilirse siparisi o teklife baglar', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/purchase-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        quoteId: approvedQuoteId,
+        items: [
+          { productId: productWithStockId, description: '', quantity: 1 },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.quote.id).toBe(approvedQuoteId);
+  });
+
+  it('POST /purchase-orders: var olmayan teklife baglanmaya calisilirsa 404 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/purchase-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        quoteId: randomUUID(),
+        items: [{ description: 'x', quantity: 1 }],
+      });
+    expect(res.status).toBe(404);
+  });
+
+  it('proje, siparis olusturulduktan SONRA teklife baglansa bile quote.project uzerinden gorunur (regresyon)', async () => {
+    const projectRes = await request(app.getHttpServer())
+      .post('/api/v1/projects')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        name: 'Sonradan baglanan proje',
+        estimatedBudget: 5000,
+      });
+    expect(projectRes.status).toBe(201);
+    const projectId = projectRes.body.id as string;
+
+    const linkRes = await request(app.getHttpServer())
+      .patch(`/api/v1/projects/${projectId}`)
+      .set('Cookie', cookiesA)
+      .send({ quoteIds: [approvedQuoteId] });
+    expect(linkRes.status).toBe(200);
+
+    const poRes = await request(app.getHttpServer())
+      .get(`/api/v1/purchase-orders/${purchaseOrderId}`)
+      .set('Cookie', cookiesA);
+    expect(poRes.status).toBe(200);
+    expect(poRes.body.quote.project.id).toBe(projectId);
+
+    const listRes = await request(app.getHttpServer())
+      .get('/api/v1/purchase-orders')
+      .query({ projectId })
+      .set('Cookie', cookiesA);
+    expect(listRes.status).toBe(200);
+    expect((listRes.body.data as { id: string }[]).map((p) => p.id)).toContain(
+      purchaseOrderId,
+    );
+  });
+
   it('PATCH /purchase-orders/:id: ek kalem eklenebilir (SP3) ve durum guncellenebilir', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/purchase-orders/${purchaseOrderId}`)

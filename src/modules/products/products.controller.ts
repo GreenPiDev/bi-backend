@@ -38,6 +38,12 @@ export class ProductsController {
     return this.products.list(query);
   }
 
+  @Get('attribute-keys')
+  @RequiresPermission('products', 'VIEW')
+  getAttributeKeys(): Promise<string[]> {
+    return this.products.getAttributeKeys();
+  }
+
   @Get(':id')
   @RequiresPermission('products', 'VIEW')
   getById(@Param('id') id: string): Promise<ProductView> {

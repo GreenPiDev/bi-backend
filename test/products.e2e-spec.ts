@@ -118,6 +118,58 @@ describe('Products (e2e)', () => {
     );
   });
 
+  it('GET /products: brand/category/attr filtreleriyle daraltir', async () => {
+    const filtered = await prisma.product.create({
+      data: {
+        tenantId: tenantIdA,
+        productListId,
+        name: 'Sayac X100',
+        brand: 'Schneider',
+        category: 'Sayac',
+        attributes: { Seri: 'kWH olcerler' },
+      },
+    });
+
+    const byBrand = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .query({ brand: 'Schneider' })
+      .set('Cookie', cookiesA);
+    expect(byBrand.status).toBe(200);
+    expect((byBrand.body.data as { id: string }[]).map((p) => p.id)).toEqual([
+      filtered.id,
+    ]);
+
+    const byCategory = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .query({ category: 'Sayac' })
+      .set('Cookie', cookiesA);
+    expect((byCategory.body.data as { id: string }[]).map((p) => p.id)).toEqual(
+      [filtered.id],
+    );
+
+    const byAttr = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .query({ 'attr[Seri]': 'kwh' })
+      .set('Cookie', cookiesA);
+    expect((byAttr.body.data as { id: string }[]).map((p) => p.id)).toEqual([
+      filtered.id,
+    ]);
+
+    const noMatch = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .query({ brand: 'Baska Marka' })
+      .set('Cookie', cookiesA);
+    expect(noMatch.body.data).toEqual([]);
+  });
+
+  it('GET /products/attribute-keys: tenant genelindeki ozel alan adlarini doner', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/products/attribute-keys')
+      .set('Cookie', cookiesA);
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('Seri');
+  });
+
   it('PATCH /products/:id: gunceller', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/products/${productId}`)

@@ -1,8 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { ProductCategoriesService } from './product-categories.service';
 
 const fakeAudit = { log: vi.fn() };
+const fakeRealtime = { emitToTenant: vi.fn(), emitToAll: vi.fn() };
 
 function createPrisma() {
   return {
@@ -14,6 +16,10 @@ function createPrisma() {
       delete: vi.fn(),
     },
   };
+}
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
 }
 
 describe('ProductCategoriesService', () => {
@@ -28,8 +34,11 @@ describe('ProductCategoriesService', () => {
     const service = new ProductCategoriesService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await expect(service.create({ label: 'Elektrik' })).rejects.toMatchObject({
+    await expect(
+      runInTenant(() => service.create({ label: 'Elektrik' })),
+    ).rejects.toMatchObject({
       code: 'PRODUCT_CATEGORY_ALREADY_EXISTS',
     } satisfies Partial<AppException>);
   });
@@ -39,15 +48,16 @@ describe('ProductCategoriesService', () => {
     const service = new ProductCategoriesService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
     await expect(
-      service.update('yok', { label: 'Elektrik' }),
+      runInTenant(() => service.update('yok', { label: 'Elektrik' })),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
   });
 
-  it('update: basarili olursa audit loglar', async () => {
+  it('update: basarili olursa audit loglar ve tenant odasina yayinlar', async () => {
     const prisma = createPrisma();
     prisma.productCategoryOption.findFirst.mockResolvedValue({
       id: 'p1',
@@ -60,10 +70,18 @@ describe('ProductCategoriesService', () => {
     const service = new ProductCategoriesService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    const result = await service.update('p1', { label: 'Elektronik' });
+    const result = await runInTenant(() =>
+      service.update('p1', { label: 'Elektronik' }),
+    );
     expect(result.label).toBe('Elektronik');
     expect(fakeAudit.log).toHaveBeenCalled();
+    expect(fakeRealtime.emitToTenant).toHaveBeenCalledWith(
+      't1',
+      'productCategoryOptions.updated',
+      expect.any(Array),
+    );
   });
 
   it('remove: bulunamayan kategori icin NOT_FOUND firlatir', async () => {
@@ -71,13 +89,16 @@ describe('ProductCategoriesService', () => {
     const service = new ProductCategoriesService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await expect(service.remove('yok')).rejects.toMatchObject({
+    await expect(
+      runInTenant(() => service.remove('yok')),
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
   });
 
-  it('create: basarili olursa audit loglar', async () => {
+  it('create: basarili olursa audit loglar ve tenant odasina yayinlar', async () => {
     const prisma = createPrisma();
     prisma.productCategoryOption.create.mockResolvedValue({
       id: 'p1',
@@ -86,9 +107,17 @@ describe('ProductCategoriesService', () => {
     const service = new ProductCategoriesService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    const result = await service.create({ label: 'Elektrik' });
+    const result = await runInTenant(() =>
+      service.create({ label: 'Elektrik' }),
+    );
     expect(result.label).toBe('Elektrik');
     expect(fakeAudit.log).toHaveBeenCalled();
+    expect(fakeRealtime.emitToTenant).toHaveBeenCalledWith(
+      't1',
+      'productCategoryOptions.updated',
+      expect.any(Array),
+    );
   });
 });

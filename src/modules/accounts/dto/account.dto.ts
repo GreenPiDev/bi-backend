@@ -31,12 +31,7 @@ export const CreateAccountSchema = z.object({
   taxOffice: z.string().trim().max(200).optional(),
   sector: z.array(z.string().trim().max(200)).max(20).optional(),
   accountTypes: z.array(AccountTypeSchema).max(4).optional(),
-  website: z
-    .string()
-    .trim()
-    .url('Gecersiz web adresi.')
-    .optional()
-    .or(z.literal('')),
+  website: z.string().trim().max(300).optional().or(z.literal('')),
   phone: z.string().trim().max(50).optional(),
   landlinePhone: z.string().trim().max(20).optional(),
   email: z

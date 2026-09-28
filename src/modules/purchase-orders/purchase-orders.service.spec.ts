@@ -37,7 +37,6 @@ function createPurchaseOrderRow(
     id: 'po-1',
     orderNumber: 'SIP-2026-09-07-001',
     quoteId: 'quote-1',
-    projectId: null,
     status: 'DRAFT',
     items: [],
     ...overrides,
@@ -47,14 +46,12 @@ function createPurchaseOrderRow(
 interface Setup {
   quoteRow?: unknown;
   purchaseOrderRow?: unknown;
-  projectRow?: unknown;
   stockItems?: unknown[];
 }
 
 function createPrisma({
   quoteRow = createQuoteRow(),
   purchaseOrderRow = createPurchaseOrderRow(),
-  projectRow = null,
   stockItems = [],
 }: Setup = {}) {
   const tx = {
@@ -75,8 +72,8 @@ function createPrisma({
     quote: {
       findFirst: vi.fn().mockResolvedValue(quoteRow),
     },
-    project: {
-      findFirst: vi.fn().mockResolvedValue(projectRow),
+    product: {
+      findMany: vi.fn().mockResolvedValue([{ id: 'product-1' }]),
     },
     stockItem: {
       findMany: vi.fn().mockResolvedValue(stockItems),
@@ -208,8 +205,8 @@ describe('PurchaseOrdersService', () => {
     );
   });
 
-  it('createFromQuote: quoteId ile eslesen bir Project varsa projectId setler (SP1 akis notu)', async () => {
-    const prisma = createPrisma({ projectRow: { id: 'project-1' } });
+  it('createFromQuote: kendi projectId alanini setlemez, proje iliskisi quote.project uzerinden turetilir (SP1 akis notu)', async () => {
+    const prisma = createPrisma();
     const service = new PurchaseOrdersService(
       prisma as never,
       fakeAudit,
@@ -224,7 +221,7 @@ describe('PurchaseOrdersService', () => {
     ).__tx;
     expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ projectId: 'project-1' }),
+        data: expect.not.objectContaining({ projectId: expect.anything() }),
       }),
     );
   });
@@ -250,6 +247,128 @@ describe('PurchaseOrdersService', () => {
         }),
       }),
     );
+  });
+
+  it('create: teklif verilmeden (quoteId olmadan) manuel siparis olusturur', async () => {
+    const prisma = createPrisma();
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await service.create('user-1', {
+      items: [{ description: 'Ek malzeme', quantity: 3 }],
+    } as never);
+
+    const tx = (
+      prisma as unknown as {
+        __tx: { purchaseOrder: { create: ReturnType<typeof vi.fn> } };
+      }
+    ).__tx;
+    expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          quoteId: null,
+          items: {
+            create: [
+              expect.objectContaining({
+                productId: null,
+                description: 'Ek malzeme',
+                quantity: 3,
+                source: 'EXTRA',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(auditLog).toHaveBeenCalled();
+  });
+
+  it('create: quoteId verilirse siparisi o teklife baglar', async () => {
+    const prisma = createPrisma();
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await service.create('user-1', {
+      quoteId: 'quote-1',
+      items: [{ productId: 'product-1', description: '', quantity: 1 }],
+    } as never);
+
+    const tx = (
+      prisma as unknown as {
+        __tx: { purchaseOrder: { create: ReturnType<typeof vi.fn> } };
+      }
+    ).__tx;
+    expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ quoteId: 'quote-1' }),
+      }),
+    );
+  });
+
+  it('create: quoteId verilip teklif bulunamazsa NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma({ quoteRow: null });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await expect(
+      service.create('user-1', {
+        quoteId: 'yok',
+        items: [{ description: 'x', quantity: 1 }],
+      } as never),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('create: secilen urun bulunamazsa PRODUCT_NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.product.findMany.mockResolvedValue([]);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await expect(
+      service.create('user-1', {
+        items: [{ productId: 'yok', description: '', quantity: 1 }],
+      } as never),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NOT_FOUND' });
+  });
+
+  it('update: quoteId ile bulunamayan teklife baglanirsa NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma({ quoteRow: null });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await expect(
+      service.update('po-1', { quoteId: 'yok' } as never),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('update: quoteId null verilirse siparisin teklif baglantisini kaldirir', async () => {
+    const prisma = createPrisma();
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await service.update('po-1', { quoteId: null } as never);
+
+    const tx = (
+      prisma as unknown as {
+        __tx: { purchaseOrder: { update: ReturnType<typeof vi.fn> } };
+      }
+    ).__tx;
+    expect(tx.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: 'po-1' },
+      data: { quoteId: null },
+    });
   });
 
   it('update: bulunamayan siparis icin NOT_FOUND firlatir', async () => {
