@@ -383,7 +383,7 @@ export class InteractionImportsService {
 
       const customFields: Record<string, string> = {};
       for (const column of attributeColumns) {
-        const value = record[column];
+        const value = record[column]?.trim();
         if (value) {
           customFields[column] = value;
         }
