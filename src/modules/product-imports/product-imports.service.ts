@@ -1,13 +1,15 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { DataSourceType } from '@prisma/client';
+import type { DataSourceType, Prisma, Product } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { CreateProductSchema } from '../products/dto/product.dto';
+import { ProductPriceHistoryCacheService } from '../products/product-price-history-cache.service';
 import { ProductsCacheService } from '../products/products-cache.service';
 import { FileParserService } from '../datasources/file-parser.service';
+import { AuditService } from '../audit/audit.service';
 import type {
   NumberFormat,
   ProductImportAttributeColumnsDto,
@@ -35,6 +37,8 @@ export interface ProductImportRowError {
 export interface ProductImportResult {
   totalRows: number;
   imported: number;
+  created: number;
+  updated: number;
   errors: ProductImportRowError[];
 }
 
@@ -69,12 +73,29 @@ function mappingIncompleteError(message: string): AppException {
   );
 }
 
+/** Ayni excel'i tekrar yuklerken kesisen urunleri eslestirmek icin (bkz.
+ * docs/VARSAYIMLAR.md V44) - bastaki/sondaki bosluk ve buyuk/kucuk harf farki ayni
+ * urun sayilir. */
+function normalizeProductName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+interface ValidImportRow {
+  data: Record<string, unknown>;
+  /** Dosyada gercekten eslenmis (bos olmayan) hedef alanlar - guncellemede sadece
+   * bunlar yazilir, eslenmemis alanlara dokunulmaz. */
+  providedFields: string[];
+  attributes: Record<string, string>;
+}
+
 @Injectable()
 export class ProductImportsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly fileParser: FileParserService,
     private readonly productsCache: ProductsCacheService,
+    private readonly priceHistoryCache: ProductPriceHistoryCacheService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -147,7 +168,7 @@ export class ProductImportsService {
     );
     const records = rowsToRecords(headers, rows);
     const errors: ProductImportRowError[] = [];
-    const validRows: Record<string, unknown>[] = [];
+    const validRows: ValidImportRow[] = [];
 
     records.forEach((record, index) => {
       const mapped: Record<string, unknown> = { productListId };
@@ -188,17 +209,147 @@ export class ProductImportsService {
         return;
       }
       validRows.push({
-        ...result.data,
-        attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+        data: result.data as Record<string, unknown>,
+        providedFields: Object.keys(mapped).filter(
+          (key) => key !== 'productListId',
+        ),
+        attributes,
       });
     });
 
+    let created = 0;
+    let updated = 0;
+
     if (validRows.length > 0) {
-      await this.prisma.product.createMany({ data: validRows as never });
+      // Ayni excel iki kez (veya kismen kesisen iki excel) yuklenirse, ikinci
+      // yuklemede ayni ada sahip urunler tekrar eklenmez, mevcut kaydin uzerine
+      // yazilir - urun adi tenant genelinde (secili urun listesiyle sinirli
+      // olmadan), bas/son bosluk ve buyuk/kucuk harf yok sayilarak eslestirilir.
+      // Dosyada eslenmemis alanlara dokunulmaz, attributes (marka'ya ozgu kolonlar)
+      // birlestirilir (eski anahtarlar silinmez). Bkz. docs/VARSAYIMLAR.md V44.
+      const existingProducts = await this.prisma.product.findMany();
+      const byName = new Map<string, Product>();
+      for (const product of existingProducts) {
+        byName.set(normalizeProductName(product.name), product);
+      }
+
+      for (const row of validRows) {
+        const key = normalizeProductName(row.data.name as string);
+        const existing = byName.get(key);
+
+        if (existing) {
+          const updateData: Record<string, unknown> = {};
+          for (const field of row.providedFields) {
+            updateData[field] = row.data[field];
+          }
+          if (Object.keys(row.attributes).length > 0) {
+            const existingAttributes =
+              (existing.attributes as Record<string, string> | null) ?? {};
+            updateData.attributes = {
+              ...existingAttributes,
+              ...row.attributes,
+            };
+          }
+
+          const previousPrice = existing.price;
+          const previousCurrency = existing.currency;
+          const product = await this.prisma.product.update({
+            where: { id: existing.id },
+            data: updateData as never,
+          });
+          byName.set(key, product);
+          updated++;
+
+          await this.audit.log({
+            action: 'UPDATE',
+            entity: 'Product',
+            entityId: product.id,
+          });
+          if (
+            row.providedFields.includes('price') &&
+            Number(product.price ?? 0) !== Number(previousPrice ?? 0)
+          ) {
+            await this.logPriceChange(
+              'UPDATE',
+              product.id,
+              product.name,
+              previousPrice,
+              previousCurrency,
+              product.price == null ? null : Number(product.price),
+              product.currency,
+            );
+          }
+        } else {
+          const product = await this.prisma.product.create({
+            data: {
+              ...row.data,
+              attributes:
+                Object.keys(row.attributes).length > 0
+                  ? row.attributes
+                  : undefined,
+            } as never,
+          });
+          byName.set(key, product);
+          created++;
+
+          await this.audit.log({
+            action: 'CREATE',
+            entity: 'Product',
+            entityId: product.id,
+            meta: { name: product.name },
+          });
+          if (product.price != null) {
+            await this.logPriceChange(
+              'CREATE',
+              product.id,
+              product.name,
+              null,
+              null,
+              Number(product.price),
+              product.currency,
+            );
+          }
+        }
+      }
+
       await this.productsCache.invalidate();
     }
 
-    return { totalRows: records.length, imported: validRows.length, errors };
+    return {
+      totalRows: records.length,
+      imported: created + updated,
+      created,
+      updated,
+      errors,
+    };
+  }
+
+  /** Urunun fiyati olusturulurken/guncellenirken degistiginde 'ProductPrice' adinda
+   * ayri bir denetim-kaydi kovasina yazar - ProductsService.logPriceChange ile ayni
+   * desen, Fiyat Gecmisi (/envanter?tab=priceHistory) bunu okur. */
+  private async logPriceChange(
+    action: 'CREATE' | 'UPDATE',
+    productId: string,
+    productName: string,
+    previousPrice: Prisma.Decimal | null,
+    previousCurrency: string | null,
+    price: number | null,
+    currency: string,
+  ): Promise<void> {
+    await this.audit.log({
+      action,
+      entity: 'ProductPrice',
+      entityId: productId,
+      meta: {
+        productId,
+        productName,
+        previousPrice,
+        previousCurrency,
+        price,
+        currency,
+      },
+    });
+    await this.priceHistoryCache.invalidate(productId);
   }
 
   private async readRows(

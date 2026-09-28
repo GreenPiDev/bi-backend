@@ -94,6 +94,33 @@ describe('AuditService', () => {
     ]);
   });
 
+  it('list: entity verilirse where filtresine ekler', async () => {
+    const prisma = createPrisma();
+    const service = new AuditService(prisma as never);
+    await service.list('StockItem');
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { entity: 'StockItem' } }),
+    );
+  });
+
+  it('list: userId ve meta filtreleri where kosuluna eklenir', async () => {
+    const prisma = createPrisma();
+    const service = new AuditService(prisma as never);
+    await service.list('StockItem', {
+      userId: 'u1',
+      meta: { productId: 'p1' },
+    });
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          entity: 'StockItem',
+          userId: 'u1',
+          AND: [{ meta: { path: ['productId'], equals: 'p1' } }],
+        },
+      }),
+    );
+  });
+
   it('list: eslesen kullanici bulunamazsa tire ile doner', async () => {
     const prisma = createPrisma();
     prisma.auditLog.findMany.mockResolvedValue([

@@ -13,6 +13,11 @@ const fakeCache = {
   set: vi.fn(),
   invalidate: vi.fn(),
 } as never;
+const fakePriceHistoryCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -29,16 +34,18 @@ function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
 function createPrisma(
   row: unknown = createProductRow(),
   targetProductList: unknown = { id: 'product-list-2', name: 'Bayi' },
+  findManyRows: unknown[] = [],
 ) {
   return {
     product: {
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockResolvedValue(findManyRows),
       count: vi.fn().mockResolvedValue(0),
       findFirst: vi.fn().mockResolvedValue(row),
       create: vi.fn().mockResolvedValue(row),
       update: vi.fn().mockResolvedValue(row),
       updateMany: vi.fn().mockResolvedValue({ count: 2 }),
       delete: vi.fn().mockResolvedValue(row),
+      deleteMany: vi.fn().mockResolvedValue({ count: 2 }),
     },
     productList: {
       findFirst: vi.fn().mockResolvedValue(targetProductList),
@@ -54,7 +61,13 @@ describe('ProductsService', () => {
 
   it('getById: bulunamayan urun icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -62,7 +75,13 @@ describe('ProductsService', () => {
 
   it('create: urunu olusturur ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     await service.create({
       name: 'Dizustu Bilgisayar',
       unit: 'adet',
@@ -77,7 +96,13 @@ describe('ProductsService', () => {
 
   it('update: bulunamayan urun icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     await expect(
       service.update('yok', { name: 'x' } as never),
     ).rejects.toMatchObject({
@@ -87,7 +112,13 @@ describe('ProductsService', () => {
 
   it('remove: urunu siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     await service.remove('product-1');
     expect(prisma.product.delete).toHaveBeenCalledWith({
       where: { id: 'product-1' },
@@ -96,7 +127,13 @@ describe('ProductsService', () => {
 
   it('bulkMove: bulunamayan hedef liste icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(createProductRow(), null);
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     await expect(
       service.bulkMove({
         productIds: ['product-1'],
@@ -108,7 +145,13 @@ describe('ProductsService', () => {
 
   it('list: brand/category/attr filtrelerini where kosuluna ekler', async () => {
     const prisma = createPrisma();
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     await service.list({
       page: 1,
       pageSize: 25,
@@ -138,7 +181,13 @@ describe('ProductsService', () => {
   it('getAttributeKeys: tenant genelindeki distinct ozel alan adlarini doner', async () => {
     const prisma = createPrisma();
     prisma.$queryRaw.mockResolvedValue([{ key: 'Renk' }, { key: 'Seri' }]);
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     const result = await runInTenant(() => service.getAttributeKeys());
     expect(result).toEqual(['Renk', 'Seri']);
     expect(prisma.$queryRaw).toHaveBeenCalled();
@@ -146,7 +195,13 @@ describe('ProductsService', () => {
 
   it('bulkMove: secilen urunleri hedef listeye tasir', async () => {
     const prisma = createPrisma();
-    const service = new ProductsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
     const result = await service.bulkMove({
       productIds: ['product-1', 'product-2'],
       targetProductListId: 'product-list-2',
@@ -157,5 +212,99 @@ describe('ProductsService', () => {
     });
     expect(result).toEqual({ movedCount: 2 });
     expect(auditLog).toHaveBeenCalled();
+  });
+
+  it('bulkRemove: secilen urunleri yumusak siler ve audit log yazar', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.bulkRemove({
+      productIds: ['product-1', 'product-2'],
+    });
+    expect(prisma.product.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['product-1', 'product-2'] } },
+    });
+    expect(result).toEqual({ deletedCount: 2 });
+    expect(auditLog).toHaveBeenCalled();
+  });
+
+  it('list: includeDeleted=true iken tenantId elle eklenmis ham client kullanir (deletedAt filtresi atlanir)', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    await runInTenant(() =>
+      service.list({
+        page: 1,
+        pageSize: 25,
+        includeDeleted: true,
+      } as never),
+    );
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ tenantId: 't1' }),
+      }),
+    );
+  });
+
+  it('list: includeDeleted=false iken tenant-scoped client kullanir, where.tenantId elle eklenmez', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    await service.list({
+      page: 1,
+      pageSize: 25,
+      includeDeleted: false,
+    } as never);
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({ tenantId: expect.anything() }),
+      }),
+    );
+  });
+
+  it('list: stockItems kaydi olan urun icin gercek stockQuantity doner', async () => {
+    const rowWithStock = createProductRow({
+      stockItems: [{ quantity: '12.5' }],
+    });
+    const prisma = createPrisma(undefined, undefined, [rowWithStock]);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.list({ page: 1, pageSize: 25 } as never);
+    expect(result.data[0]).toMatchObject({ stockQuantity: '12.5' });
+    expect(result.data[0]).not.toHaveProperty('stockItems');
+  });
+
+  it('list: hic StockItem kaydi olmayan urun icin stockQuantity 0 doner', async () => {
+    const rowWithoutStock = createProductRow({ stockItems: [] });
+    const prisma = createPrisma(undefined, undefined, [rowWithoutStock]);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.list({ page: 1, pageSize: 25 } as never);
+    expect(String(result.data[0].stockQuantity)).toBe('0');
   });
 });

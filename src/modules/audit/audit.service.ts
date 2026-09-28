@@ -53,8 +53,26 @@ export class AuditService {
     }
   }
 
-  async list(): Promise<AuditLogView[]> {
+  /**
+   * `meta` filtresi, JSON `meta` alanindaki bir anahtarin degerine gore filtreler
+   * (ornegin stok gecmisinde `{ productId }` - bkz. StockItemsService.listHistory).
+   * `userId` ise duz bir kolon oldugu icin ayrica gecirilir.
+   */
+  async list(
+    entity?: string,
+    filters?: { userId?: string; meta?: Record<string, string> },
+  ): Promise<AuditLogView[]> {
+    const metaFilters = Object.entries(filters?.meta ?? {}).map(
+      ([key, value]) => ({
+        meta: { path: [key], equals: value },
+      }),
+    );
     const logs = await this.prisma.auditLog.findMany({
+      where: {
+        ...(entity ? { entity } : {}),
+        ...(filters?.userId ? { userId: filters.userId } : {}),
+        ...(metaFilters.length > 0 ? { AND: metaFilters } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: LIST_LIMIT,
     });

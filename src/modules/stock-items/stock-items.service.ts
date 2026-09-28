@@ -9,6 +9,7 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
 import type {
+  StockHistoryQueryDto,
   StockItemQueryDto,
   UpsertStockItemDto,
 } from './dto/stock-item.dto';
@@ -17,6 +18,19 @@ export type StockItemWithProduct = Pick<
   StockItem,
   'id' | 'productId' | 'quantity' | 'createdAt' | 'updatedAt'
 > & { product: Product };
+
+export interface StockMovementView {
+  id: string;
+  productId: string;
+  productName: string;
+  userName: string;
+  userEmail: string;
+  note: string | null;
+  previousQuantity: number;
+  quantity: number;
+  delta: number;
+  createdAt: Date;
+}
 
 /** Henuz hic miktar girilmemis (StockItem kaydi olmayan) urunler icin de bir
  * satir uretmek amaciyla kullanilan sentetik id - StockItemsController hicbir
@@ -144,10 +158,45 @@ export class StockItemsService {
             productName: product.name,
             previousQuantity: existing.quantity,
             quantity: dto.quantity,
+            note: dto.note ?? null,
           }
-        : { productId, productName: product.name, quantity: dto.quantity },
+        : {
+            productId,
+            productName: product.name,
+            quantity: dto.quantity,
+            note: dto.note ?? null,
+          },
     });
 
     return { ...stockItem, product };
+  }
+
+  /** Stok Gecmisi (/envanter?tab=stockHistory): AuditService'in genel denetim
+   * kaydini StockItem entity'sine gore filtreleyip tabloya uygun sekle cevirir. */
+  async listHistory(query: StockHistoryQueryDto): Promise<StockMovementView[]> {
+    const logs = await this.audit.list('StockItem', {
+      userId: query.userId,
+      meta: query.productId ? { productId: query.productId } : undefined,
+    });
+    return logs.map((log) => {
+      const meta = (log.meta ?? {}) as Record<string, unknown>;
+      const quantity = Number(meta.quantity ?? 0);
+      const previousQuantity = Number(meta.previousQuantity ?? 0);
+      return {
+        id: log.id,
+        productId: String(meta.productId ?? ''),
+        productName: String(meta.productName ?? '—'),
+        userName: log.userName,
+        userEmail: log.userEmail,
+        note:
+          typeof meta.note === 'string' && meta.note.length > 0
+            ? meta.note
+            : null,
+        previousQuantity,
+        quantity,
+        delta: quantity - previousQuantity,
+        createdAt: log.createdAt,
+      };
+    });
   }
 }

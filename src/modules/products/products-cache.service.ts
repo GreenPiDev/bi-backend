@@ -4,7 +4,7 @@ import type { Redis } from 'ioredis';
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { REDIS_CLIENT } from '../../core/redis/redis-client.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
-import type { ProductView } from './products.service';
+import type { ProductListItem } from './products.service';
 
 function hashParams(params: unknown): string {
   return createHash('sha256').update(JSON.stringify(params)).digest('hex');
@@ -25,16 +25,19 @@ export class ProductsCacheService {
     return `tenant:${tenantId}:products:list:${hashParams(params)}`;
   }
 
-  async get(params: unknown): Promise<PagedResult<ProductView> | null> {
+  async get(params: unknown): Promise<PagedResult<ProductListItem> | null> {
     const { tenantId } = TenantContext.getOrThrow();
     const raw = await this.redis.get(this.buildKey(tenantId, params));
     if (!raw) {
       return null;
     }
-    return JSON.parse(raw) as PagedResult<ProductView>;
+    return JSON.parse(raw) as PagedResult<ProductListItem>;
   }
 
-  async set(params: unknown, result: PagedResult<ProductView>): Promise<void> {
+  async set(
+    params: unknown,
+    result: PagedResult<ProductListItem>,
+  ): Promise<void> {
     const { tenantId } = TenantContext.getOrThrow();
     await this.redis.set(
       this.buildKey(tenantId, params),

@@ -4,7 +4,15 @@ import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 export const StockItemQuerySchema = ListQuerySchema.extend({});
 export type StockItemQueryDto = z.infer<typeof StockItemQuerySchema>;
 
+/** Stok Gecmisi filtre penceresi: urune ve guncellemeyi yapan kullaniciya gore. */
+export const StockHistoryQuerySchema = z.object({
+  productId: z.string().optional(),
+  userId: z.string().optional(),
+});
+export type StockHistoryQueryDto = z.infer<typeof StockHistoryQuerySchema>;
+
 export const UpsertStockItemSchema = z.object({
   quantity: z.number().nonnegative(),
+  note: z.string().trim().max(500).optional(),
 });
 export type UpsertStockItemDto = z.infer<typeof UpsertStockItemSchema>;

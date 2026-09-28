@@ -47,6 +47,13 @@ export const ProductQuerySchema = ListQuerySchema.extend({
   /** Ozel alan (attributes JSONB) filtreleri: { "Seri": "kWH" } gibi, her key icin
    * serbest metin (case-insensitive contains) araniyor - bkz. CLAUDE.md Faz B. */
   attr: z.record(z.string(), z.string().trim().min(1)).optional(),
+  /** "Silinmis Urunleri Goster" switch'i - varsayilan false (yumusak silinmis urunler
+   * gizli kalir, tenant-scoped extension'in normal davranisi). true iken hem aktif hem
+   * yumusak silinmis urunler donuyor (bkz. products.service.ts list()). z.coerce.boolean()
+   * kullanilmadi: query string'de "false" JS'te Boolean("false")===true'ya coerce olurdu. */
+  includeDeleted: z
+    .preprocess((value) => value === 'true' || value === true, z.boolean())
+    .default(false),
 });
 export type ProductQueryDto = z.infer<typeof ProductQuerySchema>;
 
@@ -57,3 +64,18 @@ export const BulkMoveProductsSchema = z.object({
     .uuid('Gecerli bir hedef urun listesi seciniz.'),
 });
 export type BulkMoveProductsDto = z.infer<typeof BulkMoveProductsSchema>;
+
+export const BulkDeleteProductsSchema = z.object({
+  productIds: z.array(z.string().uuid()).min(1, 'En az bir urun seciniz.'),
+});
+export type BulkDeleteProductsDto = z.infer<typeof BulkDeleteProductsSchema>;
+
+/** Fiyat Gecmisi (/envanter?tab=priceHistory) filtre penceresi: urune ve degisikligi
+ * yapan kullaniciya gore - StockHistoryQuerySchema ile ayni desen. */
+export const ProductPriceHistoryQuerySchema = z.object({
+  productId: z.string().optional(),
+  userId: z.string().optional(),
+});
+export type ProductPriceHistoryQueryDto = z.infer<
+  typeof ProductPriceHistoryQuerySchema
+>;

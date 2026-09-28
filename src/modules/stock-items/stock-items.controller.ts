@@ -4,14 +4,17 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
+  StockHistoryQuerySchema,
   StockItemQuerySchema,
   UpsertStockItemSchema,
+  type StockHistoryQueryDto,
   type StockItemQueryDto,
   type UpsertStockItemDto,
 } from './dto/stock-item.dto';
 import {
   StockItemsService,
   type StockItemWithProduct,
+  type StockMovementView,
 } from './stock-items.service';
 
 @ModulePage('stock')
@@ -23,6 +26,15 @@ export class StockItemsController {
   @RequiresPermission('stock', 'VIEW')
   listLowStock(): Promise<StockItemWithProduct[]> {
     return this.stockItems.listLowStock();
+  }
+
+  @Get('history')
+  @RequiresPermission('stock', 'VIEW')
+  listHistory(
+    @Query(new ZodValidationPipe(StockHistoryQuerySchema))
+    query: StockHistoryQueryDto,
+  ): Promise<StockMovementView[]> {
+    return this.stockItems.listHistory(query);
   }
 
   @Get()

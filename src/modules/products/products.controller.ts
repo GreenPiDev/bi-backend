@@ -14,16 +14,25 @@ import { RequiresPermission } from '../../core/decorators/requires-permission.de
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
+  BulkDeleteProductsSchema,
   BulkMoveProductsSchema,
   CreateProductSchema,
+  ProductPriceHistoryQuerySchema,
   ProductQuerySchema,
   UpdateProductSchema,
+  type BulkDeleteProductsDto,
   type BulkMoveProductsDto,
   type CreateProductDto,
+  type ProductPriceHistoryQueryDto,
   type ProductQueryDto,
   type UpdateProductDto,
 } from './dto/product.dto';
-import { ProductsService, type ProductView } from './products.service';
+import {
+  ProductsService,
+  type ProductListItem,
+  type ProductPriceMovementView,
+  type ProductView,
+} from './products.service';
 
 @ModulePage('products')
 @Controller('products')
@@ -34,7 +43,7 @@ export class ProductsController {
   @RequiresPermission('products', 'VIEW')
   list(
     @Query(new ZodValidationPipe(ProductQuerySchema)) query: ProductQueryDto,
-  ): Promise<PagedResult<ProductView>> {
+  ): Promise<PagedResult<ProductListItem>> {
     return this.products.list(query);
   }
 
@@ -42,6 +51,15 @@ export class ProductsController {
   @RequiresPermission('products', 'VIEW')
   getAttributeKeys(): Promise<string[]> {
     return this.products.getAttributeKeys();
+  }
+
+  @Get('price-history')
+  @RequiresPermission('products', 'VIEW')
+  listPriceHistory(
+    @Query(new ZodValidationPipe(ProductPriceHistoryQuerySchema))
+    query: ProductPriceHistoryQueryDto,
+  ): Promise<ProductPriceMovementView[]> {
+    return this.products.listPriceHistory(query);
   }
 
   @Get(':id')
@@ -74,6 +92,15 @@ export class ProductsController {
     @Body(new ZodValidationPipe(UpdateProductSchema)) dto: UpdateProductDto,
   ): Promise<ProductView> {
     return this.products.update(id, dto);
+  }
+
+  @Post('bulk-delete')
+  @RequiresPermission('products', 'DELETE')
+  bulkRemove(
+    @Body(new ZodValidationPipe(BulkDeleteProductsSchema))
+    dto: BulkDeleteProductsDto,
+  ): Promise<{ deletedCount: number }> {
+    return this.products.bulkRemove(dto);
   }
 
   @Delete(':id')
