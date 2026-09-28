@@ -71,7 +71,7 @@ describe('AccountsService', () => {
     } as never);
     expect(prisma.account.create).toHaveBeenCalledWith({
       data: {
-        name: 'Acme A.S.',
+        name: 'ACME A.S.',
         website: null,
         email: null,
         createdById: CREATED_BY_ID,

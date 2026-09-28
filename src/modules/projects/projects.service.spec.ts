@@ -1,5 +1,13 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { ProjectsService } from './projects.service';
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run(
+    { tenantId: 't1', userId: 'user-1', roleIds: [] },
+    fn,
+  );
+}
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
@@ -54,6 +62,7 @@ function createPrisma(
     quote: {
       findMany: vi.fn().mockResolvedValue(quoteRows),
     },
+    $queryRaw: vi.fn().mockResolvedValue([{ count: 0n }]),
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx)),
     __tx: tx,
   };
@@ -71,11 +80,13 @@ describe('ProjectsService', () => {
   it('create: PRJ-YYYY-AA-GG-NNN formatinda numara uretir ve audit log yazar', async () => {
     const prisma = createPrisma();
     const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
-    await service.create('user-1', {
-      accountId: 'account-1',
-      name: 'Depo genisletme',
-      estimatedBudget: 10000,
-    } as never);
+    await runInTenant(() =>
+      service.create('user-1', {
+        accountId: 'account-1',
+        name: 'Depo genisletme',
+        estimatedBudget: 10000,
+      } as never),
+    );
     expect(prisma.project.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

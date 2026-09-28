@@ -46,6 +46,7 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
       findFirst: vi
         .fn()
         .mockResolvedValue({ id: 'contact-1', accountId: ACCOUNT_ID }),
+      update: vi.fn().mockResolvedValue({ id: 'contact-1' }),
     },
     interaction: {
       findFirst: vi.fn().mockResolvedValue(interactionRow),
@@ -140,7 +141,7 @@ describe('InteractionsService', () => {
       occurredAt: new Date('2026-01-01'),
     } as never);
     expect(prisma.account.create).toHaveBeenCalledWith({
-      data: { name: 'Yeni Firma', createdById: USER_ID },
+      data: { name: 'YENİ FİRMA', createdById: USER_ID },
     });
     expect(prisma.interaction.create).toHaveBeenCalledWith(
       expect.objectContaining({

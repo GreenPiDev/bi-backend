@@ -1,5 +1,13 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { QuotesService } from './quotes.service';
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run(
+    { tenantId: 'tenant-1', userId: 'user-1', roleIds: [] },
+    fn,
+  );
+}
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
@@ -70,6 +78,7 @@ function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
       create: vi.fn().mockResolvedValue(quoteRow),
       update: vi.fn().mockResolvedValue(quoteRow),
     },
+    $queryRaw: vi.fn().mockResolvedValue([{ count: 0n }]),
     quoteItem: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -124,18 +133,20 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
     );
-    await service.create('user-1', {
-      accountId: 'account-1',
-      items: [
-        {
-          productId: 'product-1',
-          quantity: 1,
-          unitPrice: 100,
-          discountPct: 25,
-          vatPct: 20,
-        },
-      ],
-    } as never);
+    await runInTenant(() =>
+      service.create('user-1', {
+        accountId: 'account-1',
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 1,
+            unitPrice: 100,
+            discountPct: 25,
+            vatPct: 20,
+          },
+        ],
+      } as never),
+    );
 
     expect(prisma.__tx.quote.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -157,12 +168,14 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
     );
-    await service.create('user-1', {
-      accountId: 'account-1',
-      items: [
-        { productId: 'product-1', quantity: 1, discountPct: 0, vatPct: 0 },
-      ],
-    } as never);
+    await runInTenant(() =>
+      service.create('user-1', {
+        accountId: 'account-1',
+        items: [
+          { productId: 'product-1', quantity: 1, discountPct: 0, vatPct: 0 },
+        ],
+      } as never),
+    );
 
     expect(prisma.__tx.quote.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -235,19 +248,21 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
     );
-    await service.create('user-1', {
-      accountId: 'account-1',
-      items: [
-        {
-          productId: 'product-1',
-          quantity: 1,
-          unitPrice: 10,
-          discountPct: 0,
-          vatPct: 0,
-        },
-      ],
-      opportunity: { name: 'Yeni firsat' },
-    } as never);
+    await runInTenant(() =>
+      service.create('user-1', {
+        accountId: 'account-1',
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 1,
+            unitPrice: 10,
+            discountPct: 0,
+            vatPct: 0,
+          },
+        ],
+        opportunity: { name: 'Yeni firsat' },
+      } as never),
+    );
 
     expect(prisma.__tx.opportunity.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -303,19 +318,21 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
     );
-    await service.create('user-1', {
-      accountId: 'account-1',
-      contactId: 'contact-1',
-      items: [
-        {
-          productId: 'product-1',
-          quantity: 1,
-          unitPrice: 10,
-          discountPct: 0,
-          vatPct: 0,
-        },
-      ],
-    } as never);
+    await runInTenant(() =>
+      service.create('user-1', {
+        accountId: 'account-1',
+        contactId: 'contact-1',
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 1,
+            unitPrice: 10,
+            discountPct: 0,
+            vatPct: 0,
+          },
+        ],
+      } as never),
+    );
 
     expect(prisma.__tx.postSaleCase.create).not.toHaveBeenCalled();
     expect(surveyQueueAdd).not.toHaveBeenCalled();
