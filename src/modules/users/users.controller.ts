@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -31,6 +32,7 @@ import {
   UpdateProfileDto,
   UpdateProfileSchema,
 } from './dto/update-profile.dto';
+import { UpdateActiveDto, UpdateActiveSchema } from './dto/update-active.dto';
 import { UpdateRoleDto, UpdateRoleSchema } from './dto/update-role.dto';
 import {
   type UserProfile,
@@ -44,8 +46,10 @@ export class UsersController {
 
   @Get()
   @RequiresPermission('settings', 'VIEW', 'users')
-  list(): Promise<SafeUser[]> {
-    return this.users.list();
+  list(
+    @Query('includeInactive') includeInactive?: string,
+  ): Promise<SafeUser[]> {
+    return this.users.list(includeInactive === 'true');
   }
 
   @Get(':id/stats')
@@ -125,5 +129,15 @@ export class UsersController {
     @Body(new ZodValidationPipe(UpdateRoleSchema)) dto: UpdateRoleDto,
   ): Promise<SafeUser> {
     return this.users.updateRole(user, id, dto);
+  }
+
+  @UseGuards(CompanyAdminGuard)
+  @Patch(':id/active')
+  setActive(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateActiveSchema)) dto: UpdateActiveDto,
+  ): Promise<SafeUser> {
+    return this.users.setActive(user, id, dto.isActive);
   }
 }

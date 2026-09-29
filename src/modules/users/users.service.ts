@@ -58,8 +58,9 @@ export class UsersService {
     private readonly fileUrl: FileUrlService,
   ) {}
 
-  async list(): Promise<SafeUser[]> {
+  async list(includeInactive = false): Promise<SafeUser[]> {
     const users = await this.prisma.user.findMany({
+      where: includeInactive ? {} : { isActive: true },
       orderBy: { createdAt: 'asc' },
       include: USER_WITH_ROLES_INCLUDE,
     });
@@ -231,6 +232,45 @@ export class UsersService {
       entityId: targetUserId,
       meta: { previousRoleIds, newRoleIds: dto.roleIds },
     });
+    return toSafeUser(updated as UserWithRoles, this.fileUrl);
+  }
+
+  async setActive(
+    actingUser: RequestUser,
+    targetUserId: string,
+    isActive: boolean,
+  ): Promise<SafeUser> {
+    if (targetUserId === actingUser.id) {
+      throw new AppException(
+        'CANNOT_CHANGE_OWN_STATUS',
+        'Kendi hesabini pasiflestiremezsin.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetUserId },
+    });
+    if (!target) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { isActive },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+
+    await this.audit.log({
+      action: isActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+      entity: 'User',
+      entityId: targetUserId,
+    });
+
     return toSafeUser(updated as UserWithRoles, this.fileUrl);
   }
 
@@ -438,7 +478,6 @@ export class UsersService {
   private toProfile(user: UserWithRoles): UserProfile {
     return {
       ...toSafeUser(user, this.fileUrl),
-      isActive: user.isActive,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
     };
