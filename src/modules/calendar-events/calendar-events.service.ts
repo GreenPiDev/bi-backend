@@ -8,6 +8,7 @@ import {
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { AuditService } from '../audit/audit.service';
+import { CalendarSharesService } from '../calendar-shares/calendar-shares.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CalendarEventsCacheService } from './calendar-events-cache.service';
 import type {
@@ -69,6 +70,7 @@ export class CalendarEventsService {
     private readonly cache: CalendarEventsCacheService,
     private readonly realtime: RealtimeService,
     private readonly notifications: NotificationsService,
+    private readonly calendarShares: CalendarSharesService,
   ) {}
 
   /** create() sonrasi cagrilir, iki ayri bildirim yolu vardir:
@@ -170,11 +172,34 @@ export class CalendarEventsService {
    * sadece olusturanin listesinde gorunur. Cache tum sonucu (filtresiz) tutar,
    * filtre her istekte kullaniciya gore uygulanir - boylece ayni cache anahtari
    * farkli kullanicilar arasinda guvenle paylasilabilir.
+   *
+   * `query.userId` verilirse (Ajanda paylasimi ozelligi): kendim disinda biri
+   * istenmisse once CalendarShare uzerinden izin kontrol edilir, sonra sonuc
+   * TAMAMEN farkli bir kurala gore filtrelenir - "kendim" gorunumundeki tenant
+   * genelindeki paylasimli-etkinlik birlestirmesi degil, sadece o kullanicinin
+   * katilimci oldugu etkinlikler (onun kendi ajandasina bakiyormus gibi).
+   * `query` (userId dahil) cache anahtarina girdigi icin farkli goruntulenen
+   * kullanicilar ayri cache anahtarlarina duser (bkz. calendar-events-cache.service.ts).
    */
   async list(
     query: CalendarEventQueryDto,
     currentUserId: string,
   ): Promise<CalendarEventWithAttendees[]> {
+    const targetUserId = query.userId ?? currentUserId;
+    if (targetUserId !== currentUserId) {
+      const allowed = await this.calendarShares.canView(
+        targetUserId,
+        currentUserId,
+      );
+      if (!allowed) {
+        throw new AppException(
+          'CALENDAR_NOT_SHARED',
+          'Bu ajandayi goruntuleme izniniz yok.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
     const cached = await this.cache.get(query);
     const result =
       cached ??
@@ -192,9 +217,14 @@ export class CalendarEventsService {
         return rows;
       })());
 
-    return result.filter(
-      (event) =>
-        !isPrivateToCreator(event) || event.createdById === currentUserId,
+    if (targetUserId === currentUserId) {
+      return result.filter(
+        (event) =>
+          !isPrivateToCreator(event) || event.createdById === currentUserId,
+      );
+    }
+    return result.filter((event) =>
+      event.attendees.some((attendee) => attendee.userId === targetUserId),
     );
   }
 

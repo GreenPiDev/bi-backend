@@ -10,6 +10,9 @@ const fakeCalendarEventsCache = {
 } as never;
 const fakeRealtime = { emitToTenant: vi.fn() } as never;
 const fakeNotifications = { create: vi.fn() } as never;
+const fakeCalendarShares = {
+  canView: vi.fn().mockResolvedValue(true),
+} as never;
 
 const EVENT_ID = '11111111-1111-1111-1111-111111111111';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -80,6 +83,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await expect(service.getById('yok', USER_ID)).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -95,6 +99,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -119,6 +124,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -144,6 +150,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await expect(
       service.update('yok', { title: 'x' } as never, 'tenant-1'),
@@ -161,6 +168,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.update(
       EVENT_ID,
@@ -188,6 +196,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.update(
       EVENT_ID,
@@ -211,6 +220,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.remove(EVENT_ID, 'tenant-1');
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({
@@ -227,6 +237,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     const result = await service.listAssignableUsers();
     expect(prisma.user.findMany).toHaveBeenCalledWith({
@@ -250,6 +261,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.list({ from, to, order: 'asc' }, USER_ID);
     expect(prisma.calendarEvent.findMany).toHaveBeenCalledWith({
@@ -275,6 +287,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
 
     const asCreator = await service.list({ order: 'asc' } as never, USER_ID);
@@ -301,6 +314,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
 
     const asOther = await service.list(
@@ -308,6 +322,79 @@ describe('CalendarEventsService', () => {
       OTHER_USER_ID,
     );
     expect(asOther).toEqual([sharedEvent]);
+  });
+
+  it('list: userId verilmemisse (kendim) mevcut birlestirilmis davranis degismez', async () => {
+    const otherPersonEvent = createEventRow({
+      id: 'other-event',
+      createdById: OTHER_USER_ID,
+      attendees: [{ userId: OTHER_USER_ID }, { userId: 'third-user' }],
+    });
+    const prisma = createPrisma();
+    prisma.calendarEvent.findMany = vi
+      .fn()
+      .mockResolvedValue([otherPersonEvent]);
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+      fakeCalendarEventsCache,
+      fakeRealtime,
+      fakeNotifications,
+      fakeCalendarShares,
+    );
+    const result = await service.list({ order: 'asc' } as never, USER_ID);
+    expect(result).toEqual([otherPersonEvent]);
+  });
+
+  it('list: izin verilmemis bir userId istenirse FORBIDDEN firlatir', async () => {
+    const prisma = createPrisma();
+    const calendarShares = { canView: vi.fn().mockResolvedValue(false) };
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+      fakeCalendarEventsCache,
+      fakeRealtime,
+      fakeNotifications,
+      calendarShares as never,
+    );
+    await expect(
+      service.list({ order: 'asc', userId: OTHER_USER_ID } as never, USER_ID),
+    ).rejects.toMatchObject({ code: 'CALENDAR_NOT_SHARED' });
+    expect(calendarShares.canView).toHaveBeenCalledWith(OTHER_USER_ID, USER_ID);
+  });
+
+  it('list: izinli userId sadece o kullanicinin katildigi etkinliklere daraltir', async () => {
+    const ownEvent = createEventRow({
+      id: 'own-event',
+      createdById: OTHER_USER_ID,
+      attendees: [{ userId: OTHER_USER_ID }],
+    });
+    const unrelatedEvent = createEventRow({
+      id: 'unrelated-event',
+      createdById: USER_ID,
+      attendees: [{ userId: USER_ID }],
+    });
+    const prisma = createPrisma();
+    prisma.calendarEvent.findMany = vi
+      .fn()
+      .mockResolvedValue([ownEvent, unrelatedEvent]);
+    const calendarShares = { canView: vi.fn().mockResolvedValue(true) };
+    const service = new CalendarEventsService(
+      prisma as never,
+      fakeAudit,
+      fakeFileUrl,
+      fakeCalendarEventsCache,
+      fakeRealtime,
+      fakeNotifications,
+      calendarShares as never,
+    );
+    const result = await service.list(
+      { order: 'asc', userId: OTHER_USER_ID } as never,
+      USER_ID,
+    );
+    expect(result).toEqual([ownEvent]);
   });
 
   it('getById: baskasinin ozel etkinligi icin NOT_FOUND firlatir', async () => {
@@ -323,6 +410,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
 
     await expect(
@@ -343,6 +431,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       realtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -371,6 +460,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       notifications,
+      fakeCalendarShares,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Bugunku hatirlatici',
@@ -405,6 +495,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       fakeRealtime,
       notifications,
+      fakeCalendarShares,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Ileri tarihli hatirlatici',
@@ -430,6 +521,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       realtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.create('tenant-1', USER_ID, {
       title: 'Musteri ziyareti',
@@ -462,6 +554,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       realtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.update(
       EVENT_ID,
@@ -487,6 +580,7 @@ describe('CalendarEventsService', () => {
       fakeCalendarEventsCache,
       realtime,
       fakeNotifications,
+      fakeCalendarShares,
     );
     await service.remove(EVENT_ID, 'tenant-1');
     expect(

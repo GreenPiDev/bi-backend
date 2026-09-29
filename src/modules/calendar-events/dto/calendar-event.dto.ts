@@ -47,5 +47,10 @@ export const CalendarEventQuerySchema = z.object({
   to: z.coerce.date().optional(),
   /** T3: "bizimle ilgili" ters kronolojik liste gorunumu icin. Ay gorunumu asc kullanir. */
   order: z.enum(['asc', 'desc']).default('asc'),
+  /** Verilmezse istegi atan kullanicinin kendi ajandasi (mevcut, degismeyen
+   * davranis). Baska bir kullanicinin id'si verilirse, o kullanicinin ajandasi
+   * kendisine ozel bir izin (CalendarShare) varsa goruntulenir - bkz.
+   * CalendarEventsService.list(). */
+  userId: z.string().uuid().optional(),
 });
 export type CalendarEventQueryDto = z.infer<typeof CalendarEventQuerySchema>;

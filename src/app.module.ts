@@ -17,6 +17,7 @@ import { AlertsModule } from './modules/alerts/alerts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CalendarEventsModule } from './modules/calendar-events/calendar-events.module';
+import { CalendarSharesModule } from './modules/calendar-shares/calendar-shares.module';
 import { CacheModule } from './modules/cache/cache.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
@@ -102,6 +103,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     IbanOptionsModule,
     TenantSettingsModule,
     CalendarEventsModule,
+    CalendarSharesModule,
     ReminderTypeOptionsModule,
     InteractionsModule,
     InteractionImportsModule,

@@ -53,14 +53,18 @@ enum MessageRecipientKind {
  */
 enum NotificationType {
   CALENDAR_REMINDER_ASSIGNED
-  /** Gunluk zamanlayici (check-todays-reminders.processor.ts): bugun baslayan,
+  /**
+   * Gunluk zamanlayici (check-todays-reminders.processor.ts): bugun baslayan,
    * kullanicinin katilimci oldugu TUM CalendarEvent'leri (kaynagi ne olursa olsun -
    * dogrudan /ajanda'dan kurulan veya bir gorusmeye bagli) tek bir bildirimde
-   * toplar, kullanici basina gunde en fazla 1 kez uretilir. */
+   * toplar, kullanici basina gunde en fazla 1 kez uretilir.
+   */
   CALENDAR_REMINDERS_DUE_TODAY
-  /** Gunluk zamanlayici (check-contact-inactivity.processor.ts): bir kontakla
+  /**
+   * Gunluk zamanlayici (check-contact-inactivity.processor.ts): bir kontakla
    * esik gun sayisi boyunca iletisim kurulmadiginda, tenant'taki TUM aktif
-   * kullanicilara tek bir bildirim uretilir (K2, bkz. CLAUDE.md SS2.3.3). */
+   * kullanicilara tek bir bildirim uretilir (K2, bkz. CLAUDE.md SS2.3.3).
+   */
   CONTACT_INACTIVITY_ALERT
 }
 
@@ -144,49 +148,52 @@ model Tenant {
   name      String
   slug      String   @unique
   plan      String   @default("trial")
-  /** Sirket logosu (R2 storage key) - kullanici avatariyla ayni desen
-   * (bkz. R2StorageService doc comment'i), /settings?tab=crm'de yonetilir. */
+  /**
+   * Sirket logosu (R2 storage key) - kullanici avatariyla ayni desen
+   * (bkz. R2StorageService doc comment'i), /settings?tab=crm'de yonetilir.
+   */
   logoKey   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users             User[]
-  dataSources       DataSource[]
-  datasets          Dataset[]
-  dashboards        Dashboard[]
-  scheduledReports  ScheduledReport[]
-  alerts            Alert[]
-  auditLogs         AuditLog[]
-  modules           TenantModule[]
-  accounts          Account[]
-  contacts          Contact[]
-  sectorOptions     SectorOption[]
-  departmentOptions DepartmentOption[]
-  titleOptions      TitleOption[]
+  users                  User[]
+  dataSources            DataSource[]
+  datasets               Dataset[]
+  dashboards             Dashboard[]
+  scheduledReports       ScheduledReport[]
+  alerts                 Alert[]
+  auditLogs              AuditLog[]
+  modules                TenantModule[]
+  accounts               Account[]
+  contacts               Contact[]
+  sectorOptions          SectorOption[]
+  departmentOptions      DepartmentOption[]
+  titleOptions           TitleOption[]
   productCategoryOptions ProductCategoryOption[]
-  brandOptions      BrandOption[]
-  unitOptions       UnitOption[]
-  paymentMethodOptions PaymentMethodOption[]
-  ibanOptions       IbanOption[]
-  settings          TenantSetting[]
-  roles             Role[]
-  calendarEvents    CalendarEvent[]
-  reminderTypeOptions ReminderTypeOption[]
-  interactions      Interaction[]
+  brandOptions           BrandOption[]
+  unitOptions            UnitOption[]
+  paymentMethodOptions   PaymentMethodOption[]
+  ibanOptions            IbanOption[]
+  settings               TenantSetting[]
+  roles                  Role[]
+  calendarEvents         CalendarEvent[]
+  calendarShares         CalendarShare[]
+  reminderTypeOptions    ReminderTypeOption[]
+  interactions           Interaction[]
   interactionTypeOptions InteractionTypeOption[]
-  opportunities     Opportunity[]
-  products          Product[]
-  productLists      ProductList[]
-  quotes            Quote[]
-  postSaleCases     PostSaleCase[]
-  feedbackSurveys   FeedbackSurvey[]
-  projects          Project[]
-  purchaseOrders    PurchaseOrder[]
-  stockItems        StockItem[]
-  messages          Message[]
-  messageStars      MessageStar[]
-  messageAttachments MessageAttachment[]
-  notifications     Notification[]
+  opportunities          Opportunity[]
+  products               Product[]
+  productLists           ProductList[]
+  quotes                 Quote[]
+  postSaleCases          PostSaleCase[]
+  feedbackSurveys        FeedbackSurvey[]
+  projects               Project[]
+  purchaseOrders         PurchaseOrder[]
+  stockItems             StockItem[]
+  messages               Message[]
+  messageStars           MessageStar[]
+  messageAttachments     MessageAttachment[]
+  notifications          Notification[]
 
   @@map("tenants")
 }
@@ -509,7 +516,9 @@ model Contact {
   lastContactedAt      DateTime?
   inactivityNotifiedAt DateTime?
   customFields         Json          @default("{}")
-  /** bkz. Account.createdById doc comment - ayni gerekce/nullable karari. */
+  /**
+   * bkz. Account.createdById doc comment - ayni gerekce/nullable karari.
+   */
   createdById          String?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
@@ -643,13 +652,13 @@ model PaymentMethodOption {
  * sonradan degistirilse/silinse bile mevcut teklifler etkilenmez.
  */
 model IbanOption {
-  id                 String   @id @default(uuid())
-  tenantId           String
-  bankName           String
-  accountHolderName  String
-  accountNumber      String?
-  iban               String
-  createdAt          DateTime @default(now())
+  id                String   @id @default(uuid())
+  tenantId          String
+  bankName          String
+  accountHolderName String
+  accountNumber     String?
+  iban              String
+  createdAt         DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -682,9 +691,11 @@ model CalendarEvent {
   tenantId          String
   title             String
   description       String?
-  /** Tenant'in /settings?tab=crm > Ajanda'da yonettigi dinamik ReminderTypeOption
+  /**
+   * Tenant'in /settings?tab=crm > Ajanda'da yonettigi dinamik ReminderTypeOption
    * listesine karsi dogrulanan serbest metin - InteractionTypeOption/Interaction.type
-   * ile ayni desen (bkz. CalendarEventsService.assertValidReminderType). */
+   * ile ayni desen (bkz. CalendarEventsService.assertValidReminderType).
+   */
   reminderType      String?
   startAt           DateTime
   endAt             DateTime
@@ -702,6 +713,27 @@ model CalendarEvent {
   @@index([tenantId, startAt])
   @@index([tenantId, deletedAt])
   @@map("crm_calendar_events")
+}
+
+/**
+ * Ajanda paylasim izni: ownerId kendi ajandasini viewerId'ye acar (tek yonlu,
+ * karsilikli degil). CalendarEventAttendee.userId ile ayni desen: gercek FK
+ * degil (User relation'i yok, sadece id). /profile?tab=security'de ownerId=ben
+ * olan satirlar (kime izin verdigim) coklu secim ile yonetilir; /ajanda'daki
+ * tek secimli dropdown viewerId=ben olan satirlari (kimin ajandasini gorebilirim)
+ * listeler.
+ */
+model CalendarShare {
+  id        String   @id @default(uuid())
+  tenantId  String
+  ownerId   String
+  viewerId  String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, ownerId, viewerId])
+  @@map("crm_calendar_shares")
 }
 
 /**
@@ -743,10 +775,14 @@ model Interaction {
    * listede serbest gec" deseni, InteractionsService.assertValidInteractionType).
    */
   type               String
-  /** Ice aktarma (interaction-imports) "Konu" kolonu icin eklendi - serbest metin, zorunlu degil. */
+  /**
+   * Ice aktarma (interaction-imports) "Konu" kolonu icin eklendi - serbest metin, zorunlu degil.
+   */
   subject            String?
-  /** Konu (subject) eklendikten sonra artik zorunlu degil - gorusme sadece bir konu
-   * basligiyla da anlamli olabilir. */
+  /**
+   * Konu (subject) eklendikten sonra artik zorunlu degil - gorusme sadece bir konu
+   * basligiyla da anlamli olabilir.
+   */
   notes              String?
   occurredAt         DateTime
   status             InteractionStatus @default(OPEN)
@@ -835,21 +871,21 @@ model ReminderTypeOption {
  * docs/VARSAYIMLAR.md V26 (baslangicta gevsek birakilma gerekcesi) / V27 (O2, FK'ya yukseltme).
  */
 model Opportunity {
-  id             String           @id @default(uuid())
-  tenantId       String
-  accountId      String
-  interactionId  String?          @unique
-  quoteId        String?          @unique
-  name           String
-  stage          OpportunityStage @default(NEW)
-  estimatedValue Decimal?         @db.Decimal(14, 2)
-  estimatedValueCurrency CurrencyCode @default(TRY)
-  description    String?
-  occurredAt     DateTime         @default(now())
-  createdById    String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  deletedAt      DateTime?
+  id                     String           @id @default(uuid())
+  tenantId               String
+  accountId              String
+  interactionId          String?          @unique
+  quoteId                String?          @unique
+  name                   String
+  stage                  OpportunityStage @default(NEW)
+  estimatedValue         Decimal?         @db.Decimal(14, 2)
+  estimatedValueCurrency CurrencyCode     @default(TRY)
+  description            String?
+  occurredAt             DateTime         @default(now())
+  createdById            String
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  deletedAt              DateTime?
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   account     Account      @relation(fields: [accountId], references: [id])
@@ -927,8 +963,8 @@ model ProductList {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  products   Product[]
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  products Product[]
 
   @@index([tenantId, deletedAt])
   @@map("crm_product_lists")
@@ -939,27 +975,33 @@ model ProductList {
  * basina benzersiz, gun icinde sirali (Q1).
  */
 model Quote {
-  id           String      @id @default(uuid())
-  tenantId     String
-  accountId    String
+  id                    String      @id @default(uuid())
+  tenantId              String
+  accountId             String
   /**
    * S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - teklif olustururken opsiyonel
    * secilir, PostSaleCase/FeedbackSurvey bunu teklif uzerinden miras alir.
    */
-  contactId    String?
-  quoteNumber  String
-  /** Kullanicinin teklife elle verdigi tarih - quoteNumber'in gun-icinde-sayaci
+  contactId             String?
+  quoteNumber           String
+  /**
+   * Kullanicinin teklife elle verdigi tarih - quoteNumber'in gun-icinde-sayaci
    * (sistemin "simdi"si) ile karistirilmamali, teklif belgesinde gorunen tarih
-   * kullanici tarafindan gecmis/gelecek bir gune ayarlanabilir. */
-  quoteDate    DateTime    @default(now())
-  /** Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta". */
-  leadTime     String?
-  /** Tenant'in crm_payment_method_options listesine karsi dogrulanir (bkz.
-   * QuotesService.assertValidPaymentMethod, sektor alaniyla ayni desen). */
-  paymentMethod String?
-  title         String?
-  salesTerms    String?
-  deliveryTerms String?
+   * kullanici tarafindan gecmis/gelecek bir gune ayarlanabilir.
+   */
+  quoteDate             DateTime    @default(now())
+  /**
+   * Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta".
+   */
+  leadTime              String?
+  /**
+   * Tenant'in crm_payment_method_options listesine karsi dogrulanir (bkz.
+   * QuotesService.assertValidPaymentMethod, sektor alaniyla ayni desen).
+   */
+  paymentMethod         String?
+  title                 String?
+  salesTerms            String?
+  deliveryTerms         String?
   /**
    * Secilen IbanOption'in 4 alani olusturma/guncelleme aninda buraya kopyalanir
    * (bkz. IbanOption doc comment'i) - FK degil, snapshot.
@@ -968,9 +1010,9 @@ model Quote {
   ibanAccountHolderName String?
   ibanAccountNumber     String?
   ibanNumber            String?
-  status       QuoteStatus @default(DRAFT)
-  approvedAt   DateTime?
-  approvedById String?
+  status                QuoteStatus @default(DRAFT)
+  approvedAt            DateTime?
+  approvedById          String?
   /**
    * Bir proje birden fazla teklifle iliskilendirilebilir (1 Project : N Quote), ama bir
    * teklif en fazla bir projeye baglidir - bu yuzden FK burada, Quote tarafinda (eskiden
@@ -978,11 +1020,11 @@ model Quote {
    * olustururken setlenmez; proje duzenleme formundaki "Teklifler" cok-secimli alaniyla
    * (tam degisim/replace semantigi) ayarlanir (bkz. ProjectsService.update).
    */
-  projectId    String?
-  createdById  String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  deletedAt    DateTime?
+  projectId             String?
+  createdById           String
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  deletedAt             DateTime?
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   account        Account         @relation(fields: [accountId], references: [id])
@@ -1014,8 +1056,10 @@ model QuoteItem {
   productId    String
   quantity     Decimal  @db.Decimal(14, 3)
   unitPrice    Decimal  @db.Decimal(14, 2)
-  /** unitPrice ile ayni snapshot semantigi: satir olusturulurken/guncellenirken
-   * Product.currency'den kopyalanir, client'tan kabul edilmez (bkz. resolveItems). */
+  /**
+   * unitPrice ile ayni snapshot semantigi: satir olusturulurken/guncellenirken
+   * Product.currency'den kopyalanir, client'tan kabul edilmez (bkz. resolveItems).
+   */
   currency     String   @default("TRY")
   discountPct  Decimal  @default(0) @db.Decimal(5, 2)
   discountNote String?
@@ -1132,7 +1176,6 @@ model Project {
  * gun-icinde-sirali sayac deseni. Kasitli olarak kendi projectId alani YOK - proje
  * iliskisi her zaman `quote.project` uzerinden okunur, boylece teklif<->proje
  * baglantisi siparis olusturulduktan sonra kurulsa/degisse bile tutarli kalir.
- *
  * Ad-hoc (2026-09-28, kullanici istegiyle): /siparisler/yeni sayfasindan dogrudan
  * POST /purchase-orders ile de olusturulabilir (bkz. PurchaseOrdersService.create) -
  * bu akiste teklif zorunlu degildir, quoteId opsiyonel bir baglantidir (Project.quoteId
@@ -1222,7 +1265,7 @@ model Message {
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
-  tenant      Tenant               @relation(fields: [tenantId], references: [id])
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
   recipients  MessageRecipient[]
   attachments MessageAttachment[]
 
@@ -1305,17 +1348,17 @@ model MessageStar {
  * kapali bir enum yerine string tercih edildi.
  */
 model Notification {
-  id              String           @id @default(uuid())
-  tenantId        String
-  recipientUserId String
-  type            NotificationType
-  title           String
-  body            String?
+  id                String           @id @default(uuid())
+  tenantId          String
+  recipientUserId   String
+  type              NotificationType
+  title             String
+  body              String?
   relatedEntityType String?
-  relatedEntityId String?
-  createdById     String?
-  readAt          DateTime?
-  createdAt       DateTime         @default(now())
+  relatedEntityId   String?
+  createdById       String?
+  readAt            DateTime?
+  createdAt         DateTime         @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
