@@ -681,8 +681,19 @@ export class CalendarEventsService {
     }));
   }
 
-  async remove(id: string, tenantId: string): Promise<void> {
+  async remove(
+    id: string,
+    tenantId: string,
+    currentUserId: string,
+  ): Promise<void> {
     const existing = await this.findExisting(id);
+    if (existing.createdById !== currentUserId) {
+      throw new AppException(
+        'NOT_EVENT_CREATOR',
+        'Yalnizca etkinligi olusturan kisi silebilir.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     await this.prisma.calendarEvent.delete({ where: { id } });
     await this.audit.log({
       action: 'DELETE',

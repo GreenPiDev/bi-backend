@@ -96,7 +96,11 @@ export class NotificationsService {
     };
   }
 
-  async markRead(id: string, recipientUserId: string): Promise<void> {
+  async setRead(
+    id: string,
+    recipientUserId: string,
+    read: boolean,
+  ): Promise<void> {
     const existing = await this.prisma.notification.findFirst({
       where: { id, recipientUserId },
     });
@@ -107,10 +111,11 @@ export class NotificationsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    if (existing.readAt) return;
+    const isRead = Boolean(existing.readAt);
+    if (isRead === read) return;
     await this.prisma.notification.update({
       where: { id },
-      data: { readAt: new Date() },
+      data: { readAt: read ? new Date() : null },
     });
   }
 }

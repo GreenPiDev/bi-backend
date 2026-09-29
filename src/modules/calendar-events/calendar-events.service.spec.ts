@@ -461,10 +461,20 @@ describe('CalendarEventsService', () => {
   it('remove: etkinligi siler ve audit log yazar', async () => {
     const prisma = createPrisma();
     const service = makeService(prisma);
-    await service.remove(EVENT_ID, 'tenant-1');
+    await service.remove(EVENT_ID, 'tenant-1', USER_ID);
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({
       where: { id: EVENT_ID },
     });
+  });
+
+  it('remove: olusturan olmayan kullanici icin NOT_EVENT_CREATOR firlatir', async () => {
+    const OTHER_USER_ID = '33333333-3333-3333-3333-333333333333';
+    const prisma = createPrisma();
+    const service = makeService(prisma);
+    await expect(
+      service.remove(EVENT_ID, 'tenant-1', OTHER_USER_ID),
+    ).rejects.toMatchObject({ code: 'NOT_EVENT_CREATOR' });
+    expect(prisma.calendarEvent.delete).not.toHaveBeenCalled();
   });
 
   it('listAssignableUsers: aktif kullanicilari isim/id/avatarUrl ile doner', async () => {
@@ -758,7 +768,7 @@ describe('CalendarEventsService', () => {
     const prisma = createPrisma(privateEvent);
     const realtime = { emitToTenant: vi.fn() } as never;
     const service = makeService(prisma, { realtime });
-    await service.remove(EVENT_ID, 'tenant-1');
+    await service.remove(EVENT_ID, 'tenant-1', USER_ID);
     expect(
       (realtime as { emitToTenant: ReturnType<typeof vi.fn> }).emitToTenant,
     ).not.toHaveBeenCalled();

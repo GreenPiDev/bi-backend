@@ -68,7 +68,7 @@ describe('NotificationsService', () => {
     );
   });
 
-  it('markRead: baskasinin bildirimini isaretlemeye calisirsa NOT_FOUND firlatir', async () => {
+  it('setRead: baskasinin bildirimini isaretlemeye calisirsa NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ findFirst: vi.fn().mockResolvedValue(null) });
     const service = new NotificationsService(
       prisma as never,
@@ -78,14 +78,14 @@ describe('NotificationsService', () => {
     );
 
     await expect(
-      service.markRead('notif-1', OTHER_USER_ID),
+      service.setRead('notif-1', OTHER_USER_ID, true),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
     expect(prisma.notification.update).not.toHaveBeenCalled();
   });
 
-  it('markRead: sahibi ise readAt setler', async () => {
+  it('setRead: sahibi ise readAt setler', async () => {
     const prisma = createPrisma({
       findFirst: vi.fn().mockResolvedValue({
         id: 'notif-1',
@@ -100,7 +100,7 @@ describe('NotificationsService', () => {
       } as never,
     );
 
-    await service.markRead('notif-1', RECIPIENT_ID);
+    await service.setRead('notif-1', RECIPIENT_ID, true);
 
     expect(prisma.notification.update).toHaveBeenCalledWith({
       where: { id: 'notif-1' },
@@ -108,7 +108,7 @@ describe('NotificationsService', () => {
     });
   });
 
-  it('markRead: zaten okunmussa tekrar update cagirmaz', async () => {
+  it('setRead: zaten okunmussa read=true tekrar update cagirmaz', async () => {
     const prisma = createPrisma({
       findFirst: vi.fn().mockResolvedValue({
         id: 'notif-1',
@@ -123,7 +123,50 @@ describe('NotificationsService', () => {
       } as never,
     );
 
-    await service.markRead('notif-1', RECIPIENT_ID);
+    await service.setRead('notif-1', RECIPIENT_ID, true);
+
+    expect(prisma.notification.update).not.toHaveBeenCalled();
+  });
+
+  it('setRead: read=false ile okunmus bildirimi tekrar okunmadi yapar', async () => {
+    const prisma = createPrisma({
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'notif-1',
+        recipientUserId: RECIPIENT_ID,
+        readAt: new Date('2026-01-01'),
+      }),
+    });
+    const service = new NotificationsService(
+      prisma as never,
+      {
+        emitToTenant: vi.fn(),
+      } as never,
+    );
+
+    await service.setRead('notif-1', RECIPIENT_ID, false);
+
+    expect(prisma.notification.update).toHaveBeenCalledWith({
+      where: { id: 'notif-1' },
+      data: { readAt: null },
+    });
+  });
+
+  it('setRead: zaten okunmamissa read=false tekrar update cagirmaz', async () => {
+    const prisma = createPrisma({
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'notif-1',
+        recipientUserId: RECIPIENT_ID,
+        readAt: null,
+      }),
+    });
+    const service = new NotificationsService(
+      prisma as never,
+      {
+        emitToTenant: vi.fn(),
+      } as never,
+    );
+
+    await service.setRead('notif-1', RECIPIENT_ID, false);
 
     expect(prisma.notification.update).not.toHaveBeenCalled();
   });

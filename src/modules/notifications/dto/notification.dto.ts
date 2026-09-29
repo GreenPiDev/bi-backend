@@ -8,3 +8,8 @@ export const NotificationQuerySchema = ListQuerySchema.pick({
   pageSize: true,
 });
 export type NotificationQueryDto = z.infer<typeof NotificationQuerySchema>;
+
+export const SetNotificationReadSchema = z.object({
+  read: z.boolean().default(true),
+});
+export type SetNotificationReadDto = z.infer<typeof SetNotificationReadSchema>;

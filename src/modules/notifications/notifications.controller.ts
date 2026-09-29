@@ -1,4 +1,12 @@
-import { Controller, Get, HttpCode, Param, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import type { Notification } from '@prisma/client';
 import {
   CurrentUser,
@@ -8,7 +16,9 @@ import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   NotificationQuerySchema,
+  SetNotificationReadSchema,
   type NotificationQueryDto,
+  type SetNotificationReadDto,
 } from './dto/notification.dto';
 import { NotificationsService } from './notifications.service';
 
@@ -38,10 +48,12 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @HttpCode(204)
-  markRead(
+  setRead(
     @Param('id') id: string,
+    @Body(new ZodValidationPipe(SetNotificationReadSchema))
+    dto: SetNotificationReadDto,
     @CurrentUser() user: RequestUser,
   ): Promise<void> {
-    return this.notifications.markRead(id, user.id);
+    return this.notifications.setRead(id, user.id, dto.read);
   }
 }

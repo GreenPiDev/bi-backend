@@ -120,6 +120,6 @@ export class CalendarEventsController {
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
   ): Promise<void> {
-    return this.calendarEvents.remove(id, user.tenantId);
+    return this.calendarEvents.remove(id, user.tenantId, user.id);
   }
 }
