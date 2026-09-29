@@ -8,6 +8,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { ProductsCacheService } from '../products/products-cache.service';
 import type {
   StockHistoryQueryDto,
   StockItemQueryDto,
@@ -45,6 +46,7 @@ export class StockItemsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly productsCache: ProductsCacheService,
   ) {}
 
   /**
@@ -167,6 +169,8 @@ export class StockItemsService {
             note: dto.note ?? null,
           },
     });
+
+    await this.productsCache.invalidate();
 
     return { ...stockItem, product };
   }

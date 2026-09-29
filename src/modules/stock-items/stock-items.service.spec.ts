@@ -4,6 +4,8 @@ import { StockItemsService } from './stock-items.service';
 const auditLog = vi.fn();
 const auditList = vi.fn();
 const fakeAudit = { log: auditLog, list: auditList } as never;
+const productsCacheInvalidate = vi.fn();
+const fakeProductsCache = { invalidate: productsCacheInvalidate } as never;
 
 function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -66,7 +68,11 @@ describe('StockItemsService', () => {
     const prisma = createPrisma({
       products: [createProductRow({ stockItems: [] })],
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     const result = await service.list({ page: 1, pageSize: 20 } as never);
     expect(result.data).toHaveLength(1);
     expect(result.data[0].productId).toBe('product-1');
@@ -84,7 +90,11 @@ describe('StockItemsService', () => {
         }),
       ],
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     const result = await service.list({ page: 1, pageSize: 20 } as never);
     expect(result.data[0].id).toBe('stock-1');
     expect(Number(result.data[0].quantity)).toBe(10);
@@ -102,7 +112,11 @@ describe('StockItemsService', () => {
         }),
       ],
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     const result = await service.listLowStock();
     expect(result).toHaveLength(0);
   });
@@ -134,7 +148,11 @@ describe('StockItemsService', () => {
         }), // ustunde -> disarida
       ],
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     const result = await service.listLowStock();
     expect(result.map((r) => r.productId)).toEqual(['product-1', 'product-2']);
   });
@@ -143,14 +161,22 @@ describe('StockItemsService', () => {
     const prisma = createPrisma({
       products: [createProductRow({ minStockLevel: 5, stockItems: [] })],
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     const result = await service.listLowStock();
     expect(result).toHaveLength(1);
   });
 
   it('upsertByProductId: urun bulunamazsa NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ productRow: null });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     await expect(
       service.upsertByProductId('yok', { quantity: 5 }),
     ).rejects.toMatchObject({
@@ -160,7 +186,11 @@ describe('StockItemsService', () => {
 
   it('upsertByProductId: mevcut stok kaydi yoksa create eder', async () => {
     const prisma = createPrisma({ existingStockItem: null });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     await service.upsertByProductId('product-1', { quantity: 12 });
     expect(prisma.stockItem.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -181,7 +211,11 @@ describe('StockItemsService', () => {
         quantity: '3',
       },
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     await service.upsertByProductId('product-1', { quantity: 20 });
     expect(prisma.stockItem.update).toHaveBeenCalledWith({
       where: { id: 'stock-1' },
@@ -201,7 +235,11 @@ describe('StockItemsService', () => {
         quantity: '3',
       },
     });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     await service.upsertByProductId('product-1', { quantity: 20 });
     expect(auditLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -216,7 +254,11 @@ describe('StockItemsService', () => {
 
   it('upsertByProductId: not girilirse denetim kaydinda note null olur, girilirse aynen yazilir', async () => {
     const prisma = createPrisma({ existingStockItem: null });
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     await service.upsertByProductId('product-1', { quantity: 12 });
     expect(auditLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -257,7 +299,11 @@ describe('StockItemsService', () => {
       },
     ]);
     const prisma = createPrisma();
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     const result = await service.listHistory({});
     expect(auditList).toHaveBeenCalledWith('StockItem', {
       userId: undefined,
@@ -282,7 +328,11 @@ describe('StockItemsService', () => {
   it('listHistory: productId ve userId filtreleri AuditService.list cagrisina aktarilir', async () => {
     auditList.mockResolvedValue([]);
     const prisma = createPrisma();
-    const service = new StockItemsService(prisma as never, fakeAudit);
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
     await service.listHistory({ productId: 'product-1', userId: 'u1' });
     expect(auditList).toHaveBeenCalledWith('StockItem', {
       userId: 'u1',
