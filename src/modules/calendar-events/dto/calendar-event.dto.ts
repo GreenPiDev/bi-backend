@@ -9,6 +9,7 @@ export const CreateCalendarEventSchema = z
   .object({
     title: z.string().trim().min(2, 'Baslik en az 2 karakter olmalidir.'),
     description: z.string().trim().max(2000).optional(),
+    reminderType: z.string().trim().max(200).optional(),
     startAt: z.coerce.date(),
     endAt: z.coerce.date(),
     allDay: z.boolean().optional(),
@@ -29,6 +30,7 @@ export const UpdateCalendarEventSchema = z
       .min(2, 'Baslik en az 2 karakter olmalidir.')
       .optional(),
     description: z.string().trim().max(2000).optional(),
+    reminderType: z.string().trim().max(200).optional(),
     startAt: z.coerce.date().optional(),
     endAt: z.coerce.date().optional(),
     allDay: z.boolean().optional(),

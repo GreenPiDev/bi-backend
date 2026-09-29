@@ -48,6 +48,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { QueryModule } from './modules/query/query.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
+import { ReminderTypeOptionsModule } from './modules/reminder-type-options/reminder-type-options.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
@@ -101,6 +102,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     IbanOptionsModule,
     TenantSettingsModule,
     CalendarEventsModule,
+    ReminderTypeOptionsModule,
     InteractionsModule,
     InteractionImportsModule,
     InteractionTypeOptionsModule,

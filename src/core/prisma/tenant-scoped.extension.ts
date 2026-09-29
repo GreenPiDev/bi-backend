@@ -26,6 +26,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'TenantSetting',
   'Role',
   'CalendarEvent',
+  'ReminderTypeOption',
   'Interaction',
   'InteractionTypeOption',
   'Opportunity',

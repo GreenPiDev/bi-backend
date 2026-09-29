@@ -171,6 +171,7 @@ model Tenant {
   settings          TenantSetting[]
   roles             Role[]
   calendarEvents    CalendarEvent[]
+  reminderTypeOptions ReminderTypeOption[]
   interactions      Interaction[]
   interactionTypeOptions InteractionTypeOption[]
   opportunities     Opportunity[]
@@ -681,6 +682,10 @@ model CalendarEvent {
   tenantId          String
   title             String
   description       String?
+  /** Tenant'in /settings?tab=crm > Ajanda'da yonettigi dinamik ReminderTypeOption
+   * listesine karsi dogrulanan serbest metin - InteractionTypeOption/Interaction.type
+   * ile ayni desen (bkz. CalendarEventsService.assertValidReminderType). */
+  reminderType      String?
   startAt           DateTime
   endAt             DateTime
   allDay            Boolean   @default(false)
@@ -807,6 +812,22 @@ model InteractionTypeOption {
 
   @@unique([tenantId, label])
   @@map("crm_interaction_type_options")
+}
+
+/**
+ * "Yeni Etkinlik" modalindeki "Hatirlatici Turu" dropdown'unun tenant bazli listesi -
+ * InteractionTypeOption ile ayni desen. /settings?tab=crm > Ajanda bolumunden yonetilir.
+ */
+model ReminderTypeOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_reminder_type_options")
 }
 
 /**

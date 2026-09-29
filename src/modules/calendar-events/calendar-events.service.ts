@@ -229,6 +229,23 @@ export class CalendarEventsService {
     return event;
   }
 
+  /** Hatirlatici turu, tenant'in tanimladigi listeye karsi dogrulanir - gorusme sekli
+   * alaniyla ayni desen (bkz. InteractionsService.assertValidInteractionType). Tenant
+   * henuz hic hatirlatici turu tanimlamadiysa serbest metin kabul edilir. */
+  private async assertValidReminderType(reminderType: string): Promise<void> {
+    const options = await this.prisma.reminderTypeOption.findMany();
+    if (options.length === 0) {
+      return;
+    }
+    if (!options.some((option) => option.label === reminderType)) {
+      throw new AppException(
+        'INVALID_REMINDER_TYPE',
+        'Belirtilen hatirlatici turu tanimli degil.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   /** Katilimci userId'leri, tenant-scoped Prisma extension'in koruyamadigi
    * bagimsiz bir alan (CalendarEventAttendee kendisi tenant-scoped degil) -
    * bkz. interactions/opportunities'teki ayni desen. */
@@ -259,12 +276,16 @@ export class CalendarEventsService {
       ? dto.attendees
       : [{ userId: createdById }];
     await this.assertUsersExist(attendees.map((a) => a.userId));
+    if (dto.reminderType) {
+      await this.assertValidReminderType(dto.reminderType);
+    }
     const event = await this.prisma.calendarEvent.create({
       data: {
         tenantId,
         createdById,
         title: dto.title,
         description: dto.description,
+        reminderType: dto.reminderType,
         startAt: dto.startAt,
         endAt: dto.endAt,
         allDay: dto.allDay ?? false,
@@ -295,6 +316,9 @@ export class CalendarEventsService {
     if (dto.attendees) {
       await this.assertUsersExist(dto.attendees.map((a) => a.userId));
     }
+    if (dto.reminderType) {
+      await this.assertValidReminderType(dto.reminderType);
+    }
     const event = await this.prisma.$transaction(async (tx) => {
       if (dto.attendees) {
         await tx.calendarEventAttendee.deleteMany({ where: { eventId: id } });
@@ -304,6 +328,7 @@ export class CalendarEventsService {
         data: {
           title: dto.title,
           description: dto.description,
+          reminderType: dto.reminderType,
           startAt: dto.startAt,
           endAt: dto.endAt,
           allDay: dto.allDay,
