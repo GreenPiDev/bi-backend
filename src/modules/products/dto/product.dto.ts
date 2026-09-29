@@ -24,6 +24,16 @@ export const CreateProductSchema = z.object({
 });
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 
+/** `POST /products` (tekil, elle "Yeni Ürün" formu) icin `CreateProductSchema`'nin fiyati
+ * zorunlu kilan sikilastirilmis hali - bkz. kullanici bildirimi. Toplu ice aktarma
+ * (`product-imports.service.ts`) hala temel `CreateProductSchema`'yi kullanir, cunku
+ * Excel/CSV satirlarinin cogu fiyat kolonu esletirilmeden gelebilir (bkz. CLAUDE.md Faz B,
+ * docs/VARSAYIMLAR.md V40) - o akisi kirmamak icin ayri bir sema tutuluyor. */
+export const CreateProductManualSchema = CreateProductSchema.required({
+  price: true,
+});
+export type CreateProductManualDto = z.infer<typeof CreateProductManualSchema>;
+
 export const UpdateProductSchema = z.object({
   productListId: z.string().uuid().optional(),
   name: z.string().trim().min(2).optional(),

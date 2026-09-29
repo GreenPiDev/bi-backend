@@ -16,13 +16,13 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   BulkDeleteProductsSchema,
   BulkMoveProductsSchema,
-  CreateProductSchema,
+  CreateProductManualSchema,
   ProductPriceHistoryQuerySchema,
   ProductQuerySchema,
   UpdateProductSchema,
   type BulkDeleteProductsDto,
   type BulkMoveProductsDto,
-  type CreateProductDto,
+  type CreateProductManualDto,
   type ProductPriceHistoryQueryDto,
   type ProductQueryDto,
   type UpdateProductDto,
@@ -71,7 +71,8 @@ export class ProductsController {
   @Post()
   @RequiresPermission('products', 'CREATE')
   create(
-    @Body(new ZodValidationPipe(CreateProductSchema)) dto: CreateProductDto,
+    @Body(new ZodValidationPipe(CreateProductManualSchema))
+    dto: CreateProductManualDto,
   ): Promise<ProductView> {
     return this.products.create(dto);
   }
