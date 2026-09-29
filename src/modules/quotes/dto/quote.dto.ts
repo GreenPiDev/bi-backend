@@ -7,6 +7,7 @@ export const QuoteStatusSchema = z.enum([
   'PENDING_APPROVAL',
   'APPROVED',
   'REJECTED',
+  'REVIZE',
 ]);
 
 const QuoteItemInputSchema = z.object({

@@ -118,6 +118,7 @@ enum QuoteStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED
+  REVIZE
 }
 
 enum DataSourceType {

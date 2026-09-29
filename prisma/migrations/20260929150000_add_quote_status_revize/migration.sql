@@ -1,0 +1,1 @@
+ALTER TYPE "QuoteStatus" ADD VALUE 'REVIZE';
