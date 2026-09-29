@@ -9,7 +9,7 @@ function createAttendee(overrides: Partial<Record<string, unknown>> = {}) {
       id: 'event-1',
       title: 'Hatirlatma: musteri arayacagiz',
       relatedEntityId: 'interaction-1',
-      attendees: [{ userId: 'user-1' }],
+      attendees: [{ userId: 'user-1', status: 'ACCEPTED' }],
     },
     ...overrides,
   };
@@ -69,7 +69,7 @@ describe('SendInteractionRemindersProcessor', () => {
     expect(prisma.calendarEventAttendee.update).not.toHaveBeenCalled();
   });
 
-  it('M4: diger katilimcilari CC olarak ekler', async () => {
+  it('M4: diger ACCEPTED katilimcilari CC olarak ekler', async () => {
     const prisma = createPrisma({
       calendarEventAttendee: {
         findMany: vi.fn().mockResolvedValue([
@@ -78,7 +78,11 @@ describe('SendInteractionRemindersProcessor', () => {
               id: 'event-1',
               title: 'Toplanti hatirlatmasi',
               relatedEntityId: 'interaction-1',
-              attendees: [{ userId: 'user-1' }, { userId: 'user-2' }],
+              attendees: [
+                { userId: 'user-1', status: 'ACCEPTED' },
+                { userId: 'user-2', status: 'ACCEPTED' },
+                { userId: 'user-3', status: 'PENDING' },
+              ],
             },
           }),
         ]),
@@ -97,6 +101,22 @@ describe('SendInteractionRemindersProcessor', () => {
 
     expect(mail.send).toHaveBeenCalledWith(
       expect.objectContaining({ cc: ['user2@acme.com'] }),
+    );
+  });
+
+  it('sadece ACCEPTED katilimcilari sorgular (PENDING/DECLINED harici tutulur)', async () => {
+    const prisma = createPrisma();
+    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const processor = new SendInteractionRemindersProcessor(
+      prisma as never,
+      mail as never,
+    );
+    await processor.process();
+
+    expect(prisma.calendarEventAttendee.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'ACCEPTED' }),
+      }),
     );
   });
 

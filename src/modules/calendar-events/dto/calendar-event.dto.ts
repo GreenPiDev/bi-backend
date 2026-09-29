@@ -42,6 +42,20 @@ export const UpdateCalendarEventSchema = z
   });
 export type UpdateCalendarEventDto = z.infer<typeof UpdateCalendarEventSchema>;
 
+export const RespondToCalendarEventSchema = z
+  .object({
+    status: z.enum(['ACCEPTED', 'DECLINED']),
+    /** DECLINED'ta zorunlu, ACCEPTED'ta opsiyonel (bkz. refine asagida). */
+    responseNote: z.string().trim().max(1000).optional(),
+  })
+  .refine((dto) => dto.status !== 'DECLINED' || Boolean(dto.responseNote), {
+    message: 'Reddetme nedeni girilmelidir.',
+    path: ['responseNote'],
+  });
+export type RespondToCalendarEventDto = z.infer<
+  typeof RespondToCalendarEventSchema
+>;
+
 export const CalendarEventQuerySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),

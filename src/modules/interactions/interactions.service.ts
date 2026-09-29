@@ -16,6 +16,7 @@ import {
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { normalizeAccountName } from '../accounts/account-name.util';
 import { CalendarEventsCacheService } from '../calendar-events/calendar-events-cache.service';
+import { CalendarEventsService } from '../calendar-events/calendar-events.service';
 import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
 import { AuditService } from '../audit/audit.service';
 import { InteractionsCacheService } from './interactions-cache.service';
@@ -86,6 +87,7 @@ export class InteractionsService {
     private readonly audit: AuditService,
     private readonly accountsCache: AccountsCacheService,
     private readonly calendarEventsCache: CalendarEventsCacheService,
+    private readonly calendarEvents: CalendarEventsService,
     private readonly interactionsCache: InteractionsCacheService,
     private readonly opportunitiesCache: OpportunitiesCacheService,
   ) {}
@@ -297,139 +299,163 @@ export class InteractionsService {
       : [];
 
     let accountWasCreated = false;
-    const interaction = await this.prisma.$transaction(async (tx) => {
-      let accountId = dto.accountId;
-      let accountAutoCreated = false;
-      if (accountId) {
-        const account = await tx.account.findFirst({
-          where: { id: accountId },
-        });
-        if (!account) {
+    const { interactionId, reminderEvent } = await this.prisma.$transaction(
+      async (tx) => {
+        let accountId = dto.accountId;
+        let accountAutoCreated = false;
+        if (accountId) {
+          const account = await tx.account.findFirst({
+            where: { id: accountId },
+          });
+          if (!account) {
+            throw new AppException(
+              'ACCOUNT_NOT_FOUND',
+              'Secilen firma bulunamadi.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        } else if (dto.accountName) {
+          const account = await tx.account.create({
+            data: {
+              name: normalizeAccountName(dto.accountName),
+              createdById,
+            } as never,
+          });
+          accountId = account.id;
+          accountAutoCreated = true;
+          accountWasCreated = true;
+        }
+
+        let contactId = dto.contactId;
+        let contactAutoCreated = false;
+        let contactLastContactedAt: Date | null = null;
+        if (contactId) {
+          // findUnique tenant-scoped extension'in kapsami disindadir (bkz.
+          // tenant-scoped.extension.ts) - burada bilerek findFirst kullaniliyor.
+          const contact = await tx.contact.findFirst({
+            where: { id: contactId },
+          });
+          if (!contact) {
+            throw new AppException(
+              'CONTACT_NOT_FOUND',
+              'Secilen kisi bulunamadi.',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+          if (!accountId) {
+            accountId = contact.accountId ?? undefined;
+          }
+          contactLastContactedAt = contact.lastContactedAt;
+        } else if (dto.contactName) {
+          const { firstName, lastName } = splitFreeTextName(dto.contactName);
+          const contact = await tx.contact.create({
+            data: { accountId, firstName, lastName, createdById } as never,
+          });
+          contactId = contact.id;
+          contactAutoCreated = true;
+        }
+
+        if (!accountId && dto.opportunity) {
           throw new AppException(
-            'ACCOUNT_NOT_FOUND',
-            'Secilen firma bulunamadi.',
+            'VALIDATION_ERROR',
+            'Firsat olusturmak icin firma gereklidir.',
             HttpStatus.BAD_REQUEST,
           );
         }
-      } else if (dto.accountName) {
-        const account = await tx.account.create({
-          data: {
-            name: normalizeAccountName(dto.accountName),
-            createdById,
-          } as never,
-        });
-        accountId = account.id;
-        accountAutoCreated = true;
-        accountWasCreated = true;
-      }
 
-      let contactId = dto.contactId;
-      let contactAutoCreated = false;
-      let contactLastContactedAt: Date | null = null;
-      if (contactId) {
-        // findUnique tenant-scoped extension'in kapsami disindadir (bkz.
-        // tenant-scoped.extension.ts) - burada bilerek findFirst kullaniliyor.
-        const contact = await tx.contact.findFirst({
-          where: { id: contactId },
-        });
-        if (!contact) {
-          throw new AppException(
-            'CONTACT_NOT_FOUND',
-            'Secilen kisi bulunamadi.',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-        if (!accountId) {
-          accountId = contact.accountId ?? undefined;
-        }
-        contactLastContactedAt = contact.lastContactedAt;
-      } else if (dto.contactName) {
-        const { firstName, lastName } = splitFreeTextName(dto.contactName);
-        const contact = await tx.contact.create({
-          data: { accountId, firstName, lastName, createdById } as never,
-        });
-        contactId = contact.id;
-        contactAutoCreated = true;
-      }
-
-      if (!accountId && dto.opportunity) {
-        throw new AppException(
-          'VALIDATION_ERROR',
-          'Firsat olusturmak icin firma gereklidir.',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      const created = await tx.interaction.create({
-        data: {
-          tenantId,
-          createdById,
-          accountId,
-          contactId,
-          type: dto.type,
-          subject: dto.subject,
-          notes: dto.notes,
-          occurredAt: dto.occurredAt,
-          accountAutoCreated,
-          contactAutoCreated,
-          ...(dto.participants?.length
-            ? { participants: { create: dto.participants } }
-            : {}),
-        },
-      });
-
-      if (dto.opportunity && accountId) {
-        await tx.opportunity.create({
+        const created = await tx.interaction.create({
           data: {
             tenantId,
             createdById,
             accountId,
-            interactionId: created.id,
-            name: dto.opportunity.name,
-            stage: dto.opportunity.stage,
-            estimatedValue: dto.opportunity.estimatedValue,
-            estimatedValueCurrency: dto.opportunity.estimatedValueCurrency,
-          } as never,
-        });
-      }
-
-      // K2: gorusme kaydi, kisinin "en son iletisim" tarihini otomatik ileri
-      // tasir - kullanicinin /kisiler/:id'den elle guncellemesine ek olarak
-      // (bkz. ContactsService.update). Gecmis tarihli bir gorusme, o kisinin
-      // hali hazirda daha yeni bir lastContactedAt'ini geriye almaz.
-      if (
-        contactId &&
-        (!contactLastContactedAt || contactLastContactedAt < dto.occurredAt)
-      ) {
-        await tx.contact.update({
-          where: { id: contactId },
-          data: { lastContactedAt: dto.occurredAt, inactivityNotifiedAt: null },
-        });
-      }
-
-      if (dto.reminder) {
-        await tx.calendarEvent.create({
-          data: {
-            tenantId,
-            createdById,
-            title: dto.reminder.title,
-            description: dto.reminder.description,
-            startAt: dto.reminder.startAt,
-            endAt: dto.reminder.startAt,
-            relatedEntityType: 'Interaction',
-            relatedEntityId: created.id,
-            attendees: { create: dto.reminder.assignees },
+            contactId,
+            type: dto.type,
+            subject: dto.subject,
+            notes: dto.notes,
+            occurredAt: dto.occurredAt,
+            accountAutoCreated,
+            contactAutoCreated,
+            ...(dto.participants?.length
+              ? { participants: { create: dto.participants } }
+              : {}),
           },
         });
-      }
 
-      return created.id;
-    });
+        if (dto.opportunity && accountId) {
+          await tx.opportunity.create({
+            data: {
+              tenantId,
+              createdById,
+              accountId,
+              interactionId: created.id,
+              name: dto.opportunity.name,
+              stage: dto.opportunity.stage,
+              estimatedValue: dto.opportunity.estimatedValue,
+              estimatedValueCurrency: dto.opportunity.estimatedValueCurrency,
+            } as never,
+          });
+        }
+
+        // K2: gorusme kaydi, kisinin "en son iletisim" tarihini otomatik ileri
+        // tasir - kullanicinin /kisiler/:id'den elle guncellemesine ek olarak
+        // (bkz. ContactsService.update). Gecmis tarihli bir gorusme, o kisinin
+        // hali hazirda daha yeni bir lastContactedAt'ini geriye almaz.
+        if (
+          contactId &&
+          (!contactLastContactedAt || contactLastContactedAt < dto.occurredAt)
+        ) {
+          await tx.contact.update({
+            where: { id: contactId },
+            data: {
+              lastContactedAt: dto.occurredAt,
+              inactivityNotifiedAt: null,
+            },
+          });
+        }
+
+        let reminderEvent: {
+          id: string;
+          title: string;
+          createdById: string;
+          attendees: { userId: string; status: string }[];
+        } | null = null;
+        if (dto.reminder) {
+          // Ad-hoc (2026-09-29): katilimci artik otomatik eklenmiyor (bkz.
+          // CalendarEventsService) - atanan kisi kendisi degilse PENDING olarak
+          // yaratilir, transaction sonrasi davet bildirimi gonderilir.
+          const attendeesData = dto.reminder.assignees.map((assignee) =>
+            assignee.userId === createdById
+              ? {
+                  ...assignee,
+                  status: 'ACCEPTED' as const,
+                  respondedAt: new Date(),
+                }
+              : { ...assignee, status: 'PENDING' as const },
+          );
+          reminderEvent = await tx.calendarEvent.create({
+            data: {
+              tenantId,
+              createdById,
+              title: dto.reminder.title,
+              description: dto.reminder.description,
+              startAt: dto.reminder.startAt,
+              endAt: dto.reminder.startAt,
+              relatedEntityType: 'Interaction',
+              relatedEntityId: created.id,
+              attendees: { create: attendeesData },
+            },
+            include: { attendees: true },
+          });
+        }
+
+        return { interactionId: created.id, reminderEvent };
+      },
+    );
 
     await this.audit.log({
       action: 'CREATE',
       entity: 'Interaction',
-      entityId: interaction,
+      entityId: interactionId,
     });
     if (accountWasCreated) {
       await this.accountsCache.invalidate();
@@ -442,8 +468,19 @@ export class InteractionsService {
     }
     await this.interactionsCache.invalidate();
 
+    if (reminderEvent) {
+      const pending = reminderEvent.attendees.filter(
+        (a) => a.status === 'PENDING',
+      );
+      await this.calendarEvents.notifyInvitedAttendees(
+        tenantId,
+        reminderEvent,
+        pending,
+      );
+    }
+
     return {
-      interaction: await this.getById(interaction),
+      interaction: await this.getById(interactionId),
       reminderConflicts,
     };
   }

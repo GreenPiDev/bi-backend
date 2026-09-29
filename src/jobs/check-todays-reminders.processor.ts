@@ -59,6 +59,11 @@ export class CheckTodaysRemindersProcessor extends WorkerHost {
     const groups = new Map<string, DailyReminderGroup>();
     for (const event of events) {
       for (const attendee of event.attendees) {
+        // Ad-hoc (2026-09-29): PENDING/DECLINED katilimciya "bugun icin hatirlaticiniz
+        // var" gitmemeli - henuz kabul etmedigi bir etkinlik onun takviminde degil.
+        if (attendee.status !== 'ACCEPTED') {
+          continue;
+        }
         const key = `${event.tenantId}:${attendee.userId}`;
         const existing = groups.get(key);
         if (existing) {

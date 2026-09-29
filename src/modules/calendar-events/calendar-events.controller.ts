@@ -19,13 +19,17 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CalendarEventsService,
   type CalendarEventWithAttendees,
+  type PendingCalendarInvite,
+  type SentCalendarInvite,
 } from './calendar-events.service';
 import {
   CalendarEventQuerySchema,
   CreateCalendarEventSchema,
+  RespondToCalendarEventSchema,
   UpdateCalendarEventSchema,
   type CalendarEventQueryDto,
   type CreateCalendarEventDto,
+  type RespondToCalendarEventDto,
   type UpdateCalendarEventDto,
 } from './dto/calendar-event.dto';
 
@@ -50,6 +54,22 @@ export class CalendarEventsController {
     { id: string; name: string; avatarUrl: string | null }[]
   > {
     return this.calendarEvents.listAssignableUsers();
+  }
+
+  @Get('pending-invites')
+  @RequiresPermission('calendar', 'VIEW')
+  listPendingInvites(
+    @CurrentUser() user: RequestUser,
+  ): Promise<PendingCalendarInvite[]> {
+    return this.calendarEvents.listPendingInvites(user.id);
+  }
+
+  @Get('sent-invites')
+  @RequiresPermission('calendar', 'VIEW')
+  listSentInvites(
+    @CurrentUser() user: RequestUser,
+  ): Promise<SentCalendarInvite[]> {
+    return this.calendarEvents.listSentInvites(user.id);
   }
 
   @Get(':id')
@@ -79,7 +99,18 @@ export class CalendarEventsController {
     dto: UpdateCalendarEventDto,
     @CurrentUser() user: RequestUser,
   ): Promise<CalendarEventWithAttendees> {
-    return this.calendarEvents.update(id, dto, user.tenantId);
+    return this.calendarEvents.update(id, dto, user.tenantId, user.id);
+  }
+
+  @Patch(':id/respond')
+  @RequiresPermission('calendar', 'VIEW')
+  respond(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(RespondToCalendarEventSchema))
+    dto: RespondToCalendarEventDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<CalendarEventWithAttendees> {
+    return this.calendarEvents.respond(id, user.tenantId, user.id, dto);
   }
 
   @Delete(':id')

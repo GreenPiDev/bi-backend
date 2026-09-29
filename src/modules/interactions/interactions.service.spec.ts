@@ -5,6 +5,7 @@ const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
 const fakeAccountsCache = { invalidate: vi.fn() } as never;
 const fakeCalendarEventsCache = { invalidate: vi.fn() } as never;
+const fakeCalendarEvents = { notifyInvitedAttendees: vi.fn() } as never;
 const fakeInteractionsCache = {
   get: vi.fn().mockResolvedValue(null),
   set: vi.fn(),
@@ -63,7 +64,20 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
       findMany: vi.fn().mockResolvedValue([]),
     },
     calendarEvent: {
-      create: vi.fn().mockResolvedValue({ id: 'event-1' }),
+      create: vi.fn().mockImplementation(
+        async (args: {
+          data: {
+            title: string;
+            createdById: string;
+            attendees?: { create: { userId: string; status: string }[] };
+          };
+        }) => ({
+          id: 'event-1',
+          title: args.data.title,
+          createdById: args.data.createdById,
+          attendees: args.data.attendees?.create ?? [],
+        }),
+      ),
     },
     calendarEventAttendee: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -89,6 +103,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -104,6 +119,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -131,6 +147,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -157,6 +174,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -184,6 +202,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -213,6 +232,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -244,6 +264,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -266,6 +287,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -293,6 +315,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -318,6 +341,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -334,11 +358,63 @@ describe('InteractionsService', () => {
         data: expect.objectContaining({
           relatedEntityType: 'Interaction',
           relatedEntityId: 'interaction-1',
-          attendees: { create: [{ userId: USER_ID, note: 'hazirlan' }] },
+          attendees: {
+            create: [
+              expect.objectContaining({
+                userId: USER_ID,
+                note: 'hazirlan',
+                status: 'ACCEPTED',
+                respondedAt: expect.any(Date),
+              }),
+            ],
+          },
         }),
       }),
     );
     expect(result.reminderConflicts).toEqual([]);
+  });
+
+  it('create: M6 - kendisi disindaki atanan PENDING olarak eklenir ve davet bildirimi gonderilir', async () => {
+    const prisma = createPrisma();
+    const notifyInvitedAttendees = vi.fn();
+    const calendarEvents = { notifyInvitedAttendees } as never;
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      calendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    const OTHER_USER_ID = '44444444-4444-4444-4444-444444444444';
+    const startAt = new Date(Date.now() + 60 * 60_000);
+    await service.create(TENANT_ID, USER_ID, {
+      accountId: ACCOUNT_ID,
+      type: 'CALL',
+      notes: 'notlar',
+      occurredAt: new Date('2026-01-01'),
+      reminder: { startAt, assignees: [{ userId: OTHER_USER_ID }] },
+    } as never);
+    expect(prisma.calendarEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          attendees: {
+            create: [
+              expect.objectContaining({
+                userId: OTHER_USER_ID,
+                status: 'PENDING',
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(notifyInvitedAttendees).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ id: 'event-1' }),
+      [expect.objectContaining({ userId: OTHER_USER_ID, status: 'PENDING' })],
+    );
   });
 
   it('create: M7 - cakisan kullanici icin reminderConflicts doner', async () => {
@@ -352,6 +428,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );
@@ -375,6 +452,7 @@ describe('InteractionsService', () => {
       fakeAudit,
       fakeAccountsCache,
       fakeCalendarEventsCache,
+      fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
     );

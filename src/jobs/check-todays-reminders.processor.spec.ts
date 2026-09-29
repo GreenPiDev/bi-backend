@@ -4,7 +4,7 @@ function createEvent(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'event-1',
     tenantId: 'tenant-1',
-    attendees: [{ userId: 'user-1' }],
+    attendees: [{ userId: 'user-1', status: 'ACCEPTED' }],
     ...overrides,
   };
 }
@@ -56,11 +56,11 @@ describe('CheckTodaysRemindersProcessor', () => {
   it('kullaniciya bugun icin ozel/tek basina bir hatirlatici bile olsa bildirir', async () => {
     const prisma = createPrisma({
       calendarEvent: {
-        findMany: vi
-          .fn()
-          .mockResolvedValue([
-            createEvent({ attendees: [{ userId: 'creator-1' }] }),
-          ]),
+        findMany: vi.fn().mockResolvedValue([
+          createEvent({
+            attendees: [{ userId: 'creator-1', status: 'ACCEPTED' }],
+          }),
+        ]),
       },
     });
     const processor = new CheckTodaysRemindersProcessor(
@@ -124,6 +124,37 @@ describe('CheckTodaysRemindersProcessor', () => {
     await processor.process();
 
     expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('PENDING/DECLINED katilimciya bugunku hatirlatici bildirimi gitmez', async () => {
+    const prisma = createPrisma({
+      calendarEvent: {
+        findMany: vi.fn().mockResolvedValue([
+          createEvent({
+            attendees: [
+              { userId: 'user-1', status: 'ACCEPTED' },
+              { userId: 'pending-user', status: 'PENDING' },
+              { userId: 'declined-user', status: 'DECLINED' },
+            ],
+          }),
+        ]),
+      },
+    });
+    const processor = new CheckTodaysRemindersProcessor(
+      prisma as never,
+      {
+        emitToTenant: vi.fn(),
+      } as never,
+    );
+
+    await processor.process();
+
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ recipientUserId: 'user-1' }),
+      }),
+    );
   });
 
   it('bir kullanici hata verirse digerlerini etkilemez', async () => {

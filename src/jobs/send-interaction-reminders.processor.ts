@@ -37,6 +37,9 @@ export class SendInteractionRemindersProcessor extends WorkerHost {
     const attendees = await this.prisma.calendarEventAttendee.findMany({
       where: {
         notifiedAt: null,
+        // Ad-hoc (2026-09-29): henuz kabul etmemis (PENDING) veya reddetmis
+        // (DECLINED) bir katilimciya hatirlatma e-postasi gitmemeli.
+        status: 'ACCEPTED',
         event: {
           relatedEntityType: 'Interaction',
           deletedAt: null,
@@ -65,7 +68,7 @@ export class SendInteractionRemindersProcessor extends WorkerHost {
       title: string;
       description: string | null;
       relatedEntityId: string | null;
-      attendees: { userId: string }[];
+      attendees: { userId: string; status: string }[];
     };
   }): Promise<void> {
     const interaction = attendee.event.relatedEntityId
@@ -89,8 +92,10 @@ export class SendInteractionRemindersProcessor extends WorkerHost {
         where: {
           id: {
             in: attendee.event.attendees
-              .map((a) => a.userId)
-              .filter((id) => id !== attendee.userId),
+              .filter(
+                (a) => a.status === 'ACCEPTED' && a.userId !== attendee.userId,
+              )
+              .map((a) => a.userId),
           },
         },
         select: { email: true },

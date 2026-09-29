@@ -52,6 +52,9 @@ enum MessageRecipientKind {
  * katilimci olarak atanan bir hatirlatici (bkz. calendar-events.service.ts).
  */
 enum NotificationType {
+  /** @deprecated Katilimci davet/kabul/red akisina gecilince CALENDAR_EVENT_INVITE'a
+   * ayrildi (bkz. docs/VARSAYIMLAR.md) - eski Notification kayitlari icin degeri
+   * korunuyor, yeni kod bunu artik uretmiyor. */
   CALENDAR_REMINDER_ASSIGNED
   /**
    * Gunluk zamanlayici (check-todays-reminders.processor.ts): bugun baslayan,
@@ -66,6 +69,13 @@ enum NotificationType {
    * kullanicilara tek bir bildirim uretilir (K2, bkz. CLAUDE.md SS2.3.3).
    */
   CONTACT_INACTIVITY_ALERT
+  /** Katilimci daveti gonderildiginde davet edilene gider - kabul/red bekler. */
+  CALENDAR_EVENT_INVITE
+  /** Davet edilen kabul/red verince olusturana gider (red notu body'de tasinir). */
+  CALENDAR_EVENT_RESPONSE
+  /** Olusturan, zaten kabul etmis bir katilimcinin etkinliginin saat/gun/basligini
+   * degistirdiginde o katilimciya gider. */
+  CALENDAR_EVENT_UPDATED
 }
 
 enum ContactStatus {
@@ -751,10 +761,30 @@ model CalendarEventAttendee {
   notifiedAt DateTime?
   createdAt  DateTime  @default(now())
 
+  /**
+   * Ad-hoc (2026-09-29): katilimci artik otomatik eklenmiyor, davet edilip kabul/red
+   * bekliyor (bkz. docs/VARSAYIMLAR.md). Olusturanin kendi satiri CalendarEventsService
+   * tarafindan dogrudan ACCEPTED olarak yaratilir - varsayilan PENDING sadece BASKA
+   * kullanicilar icin gecerlidir. list()/getById() PENDING/DECLINED bir katilimcinin
+   * kendi takvim izgarasinda etkinligi gostermez (respond() ile ACCEPTED olana kadar).
+   */
+  status      CalendarAttendeeStatus @default(PENDING)
+  /** Yanitlarken girilen not - DECLINED'ta zorunlu, ACCEPTED'ta opsiyonel. Olusturanin
+   * /ajanda altindaki "gonderdigim davetler" tablosunda kalici olarak gorunur. */
+  responseNote String?
+  /** Kullanici respond() cagirdiginda damgalanir; creator icin create() aninda set edilir. */
+  respondedAt DateTime?
+
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@map("crm_calendar_event_attendees")
+}
+
+enum CalendarAttendeeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
 }
 
 /**

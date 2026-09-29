@@ -27,6 +27,7 @@ export interface SafeUser {
   name: string;
   roles: SafeUserRole[];
   isPlatformAdmin: boolean;
+  isActive: boolean;
   avatarUrl: string | null;
   defaultPageSize: number;
   columnPreferences: Record<string, string[]> | null;
@@ -237,6 +238,7 @@ export function toSafeUser(
     name: user.name,
     roles: user.roles.map((r) => r.role),
     isPlatformAdmin: user.isPlatformAdmin,
+    isActive: user.isActive,
     avatarUrl: fileUrl.build(user.avatarKey, user.updatedAt),
     defaultPageSize: user.defaultPageSize,
     columnPreferences:

@@ -1,5 +1,9 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { CalendarEvent, CalendarEventAttendee } from '@prisma/client';
+import type {
+  CalendarAttendeeStatus,
+  CalendarEvent,
+  CalendarEventAttendee,
+} from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import {
   TENANT_PRISMA,
@@ -14,12 +18,37 @@ import { CalendarEventsCacheService } from './calendar-events-cache.service';
 import type {
   CalendarEventQueryDto,
   CreateCalendarEventDto,
+  RespondToCalendarEventDto,
   UpdateCalendarEventDto,
 } from './dto/calendar-event.dto';
 
 export type CalendarEventWithAttendees = CalendarEvent & {
   attendees: CalendarEventAttendee[];
 };
+
+export interface PendingCalendarInvite {
+  attendeeId: string;
+  eventId: string;
+  eventTitle: string;
+  eventDescription: string | null;
+  startAt: Date;
+  endAt: Date;
+  allDay: boolean;
+  creatorId: string;
+  creatorName: string;
+}
+
+export interface SentCalendarInvite {
+  attendeeId: string;
+  eventId: string;
+  eventTitle: string;
+  startAt: Date;
+  attendeeUserId: string;
+  attendeeName: string;
+  status: CalendarAttendeeStatus;
+  responseNote: string | null;
+  respondedAt: Date | null;
+}
 
 /**
  * Katilimci secilmeden olusturulan (create() sirasinda tek katilimci olarak
@@ -61,6 +90,17 @@ function isStartingToday(startAt: Date): boolean {
   );
 }
 
+/** check-todays-reminders.processor.ts'teki formatDateTr ile ayni desen - sunucu yerel
+ * saatini oldugu gibi kullanir, ayri bir Europe/Istanbul donusumu yapilmaz (kod tabaninda
+ * bildirim baslıklarinda tutarli olarak izlenen yaklasim). */
+function formatDateTimeTr(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}.${month}.${date.getFullYear()} ${hours}:${minutes}`;
+}
+
 @Injectable()
 export class CalendarEventsService {
   constructor(
@@ -74,9 +114,7 @@ export class CalendarEventsService {
   ) {}
 
   /** create() sonrasi cagrilir, iki ayri bildirim yolu vardir:
-   * 1) Olusturan disindaki her katilimciya "size bir hatirlatici olusturuldu"
-   *    (tarihten bagimsiz - kullanicinin kendi olusturdugu hatirlaticidan
-   *    kendisine bu bildirim gitmemesi istendigi icin createdById elenir).
+   * 1) PENDING durumundaki her katilimciya davet bildirimi (bkz. notifyInvitedAttendees).
    * 2) Olusturan da katilimcilar arasindaysa VE etkinlik BUGUN icin kurulduysa,
    *    olusturana da aninda "bugun icin bir hatirlaticiniz var" bildirimi gider
    *    (bkz. isStartingToday). Ayni Notification turunu (CALENDAR_REMINDERS_DUE_TODAY)
@@ -86,8 +124,8 @@ export class CalendarEventsService {
     tenantId: string,
     event: CalendarEventWithAttendees,
   ): Promise<void> {
-    const others = event.attendees.filter(
-      (attendee) => attendee.userId !== event.createdById,
+    const pending = event.attendees.filter(
+      (attendee) => attendee.status === 'PENDING',
     );
     const creatorIsAttendee = event.attendees.some(
       (attendee) => attendee.userId === event.createdById,
@@ -95,8 +133,8 @@ export class CalendarEventsService {
 
     const tasks: Promise<unknown>[] = [];
 
-    if (others.length > 0) {
-      tasks.push(this.notifyOtherAttendees(tenantId, event, others));
+    if (pending.length > 0) {
+      tasks.push(this.notifyInvitedAttendees(tenantId, event, pending));
     }
 
     if (creatorIsAttendee && isStartingToday(event.startAt)) {
@@ -115,11 +153,18 @@ export class CalendarEventsService {
     await Promise.all(tasks);
   }
 
-  private async notifyOtherAttendees(
+  /** PENDING durumundaki katilimcilara davet bildirimi gonderir - create()/update()
+   * disinda InteractionsService (M6, gorusme formundan "takvimde kisilere gorev atama")
+   * tarafindan da cagrilir, cunku o da ayni CalendarEventAttendee satirlarini yaratiyor
+   * ve baska bir bildirim yolu yok (bkz. docs/VARSAYIMLAR.md). */
+  async notifyInvitedAttendees(
     tenantId: string,
-    event: CalendarEventWithAttendees,
-    others: CalendarEventAttendee[],
+    event: { id: string; title: string; createdById: string },
+    pendingAttendees: { userId: string }[],
   ): Promise<void> {
+    if (pendingAttendees.length === 0) {
+      return;
+    }
     const creator = await this.prisma.user.findFirst({
       where: { id: event.createdById },
       select: { name: true },
@@ -127,14 +172,48 @@ export class CalendarEventsService {
     const creatorName = creator?.name ?? 'Bir kullanici';
 
     await Promise.all(
-      others.map((attendee) =>
+      pendingAttendees.map((attendee) =>
         this.notifications.create(tenantId, {
           recipientUserId: attendee.userId,
-          type: 'CALENDAR_REMINDER_ASSIGNED',
-          title: `${creatorName} size bir hatirlatici olusturdu: ${event.title}`,
+          type: 'CALENDAR_EVENT_INVITE',
+          title: `${creatorName} sizi bir etkinliğe davet etti: ${event.title}`,
           relatedEntityType: 'CalendarEvent',
           relatedEntityId: event.id,
           createdById: event.createdById,
+        }),
+      ),
+    );
+  }
+
+  /** Zaten ACCEPTED durumundaki katilimcilara (editoru haric), etkinligin cekirdek
+   * alanlari (baslik/tarih/tum gun) degistiginde bilgilendirme gonderir. */
+  private async notifyEventUpdated(
+    tenantId: string,
+    event: CalendarEventWithAttendees,
+    editorId: string,
+  ): Promise<void> {
+    const recipients = event.attendees.filter(
+      (attendee) =>
+        attendee.status === 'ACCEPTED' && attendee.userId !== editorId,
+    );
+    if (recipients.length === 0) {
+      return;
+    }
+    const editor = await this.prisma.user.findFirst({
+      where: { id: editorId },
+      select: { name: true },
+    });
+    const editorName = editor?.name ?? 'Bir kullanici';
+
+    await Promise.all(
+      recipients.map((attendee) =>
+        this.notifications.create(tenantId, {
+          recipientUserId: attendee.userId,
+          type: 'CALENDAR_EVENT_UPDATED',
+          title: `${editorName} bir etkinliği güncelledi: ${event.title} (${formatDateTimeTr(event.startAt)})`,
+          relatedEntityType: 'CalendarEvent',
+          relatedEntityId: event.id,
+          createdById: editorId,
         }),
       ),
     );
@@ -173,11 +252,19 @@ export class CalendarEventsService {
    * filtre her istekte kullaniciya gore uygulanir - boylece ayni cache anahtari
    * farkli kullanicilar arasinda guvenle paylasilabilir.
    *
+   * Ad-hoc (2026-09-29): katilimci daveti kabul/red akisi - bir kullanici, KENDISI
+   * DAVETLI oldugu (attendee satiri olan) bir etkinligi PENDING/DECLINED oldugu
+   * surece kendi takvim izgarasinda GORMEZ; sadece ACCEPTED oldugunda gorunur (bkz.
+   * docs/VARSAYIMLAR.md). Davetli olmadigi (attendee satiri hic olmayan) paylasimli
+   * etkinlikler icin yukaridaki "genel gorunurluk kisiti yok" kurali aynen gecerli.
+   * Olusturan icin bu kisit hic uygulanmaz - kendi olusturdugu her etkinligi her
+   * zaman gorur.
+   *
    * `query.userId` verilirse (Ajanda paylasimi ozelligi): kendim disinda biri
    * istenmisse once CalendarShare uzerinden izin kontrol edilir, sonra sonuc
    * TAMAMEN farkli bir kurala gore filtrelenir - "kendim" gorunumundeki tenant
    * genelindeki paylasimli-etkinlik birlestirmesi degil, sadece o kullanicinin
-   * katilimci oldugu etkinlikler (onun kendi ajandasina bakiyormus gibi).
+   * ACCEPTED katilimci oldugu etkinlikler (onun kendi ajandasina bakiyormus gibi).
    * `query` (userId dahil) cache anahtarina girdigi icin farkli goruntulenen
    * kullanicilar ayri cache anahtarlarina duser (bkz. calendar-events-cache.service.ts).
    */
@@ -218,14 +305,21 @@ export class CalendarEventsService {
       })());
 
     if (targetUserId === currentUserId) {
-      return result.filter(
-        (event) =>
-          !isPrivateToCreator(event) || event.createdById === currentUserId,
-      );
+      return result.filter((event) => {
+        if (event.createdById === currentUserId) {
+          return true;
+        }
+        const own = event.attendees.find((a) => a.userId === currentUserId);
+        // Kendisi davetli DEGILSE (tenant genelindeki paylasimli etkinlik
+        // birlestirmesi, bkz. yukaridaki docstring) eski davranis korunur - genel
+        // gorunurluk kisiti yok. Kendisi davetliyse ACCEPTED olana kadar gizlenir.
+        return own ? own.status === 'ACCEPTED' : !isPrivateToCreator(event);
+      });
     }
-    return result.filter((event) =>
-      event.attendees.some((attendee) => attendee.userId === targetUserId),
-    );
+    return result.filter((event) => {
+      const attendee = event.attendees.find((a) => a.userId === targetUserId);
+      return attendee?.status === 'ACCEPTED';
+    });
   }
 
   async getById(
@@ -302,13 +396,18 @@ export class CalendarEventsService {
     createdById: string,
     dto: CreateCalendarEventDto,
   ): Promise<CalendarEventWithAttendees> {
-    const attendees = dto.attendees?.length
+    const rawAttendees = dto.attendees?.length
       ? dto.attendees
       : [{ userId: createdById }];
-    await this.assertUsersExist(attendees.map((a) => a.userId));
+    await this.assertUsersExist(rawAttendees.map((a) => a.userId));
     if (dto.reminderType) {
       await this.assertValidReminderType(dto.reminderType);
     }
+    const attendeesData = rawAttendees.map((attendee) =>
+      attendee.userId === createdById
+        ? { ...attendee, status: 'ACCEPTED' as const, respondedAt: new Date() }
+        : { ...attendee, status: 'PENDING' as const },
+    );
     const event = await this.prisma.calendarEvent.create({
       data: {
         tenantId,
@@ -319,7 +418,7 @@ export class CalendarEventsService {
         startAt: dto.startAt,
         endAt: dto.endAt,
         allDay: dto.allDay ?? false,
-        attendees: { create: attendees },
+        attendees: { create: attendeesData },
       },
       include: { attendees: true },
     });
@@ -337,10 +436,20 @@ export class CalendarEventsService {
     return event;
   }
 
+  /**
+   * Ad-hoc (2026-09-29): eskiden dto.attendees verildiginde TUM katilimcilar silinip
+   * yeniden olusturuluyordu - bu, zaten kabul/red etmis kisilerin durumunu her
+   * duzenlemede sifirliyordu. Artik fark alinir: sadece listeden cikan satirlar
+   * silinir, sadece yeni eklenenler PENDING olarak yaratilir (davet gonderilir),
+   * var olanlarin status/respondedAt/responseNote'una dokunulmaz (bkz. kullanici
+   * onayi, docs/VARSAYIMLAR.md). `editedById` bilinmiyorsa (eski cagiranlar icin
+   * geriye donuk uyumluluk) olusturanin kendisi varsayilir.
+   */
   async update(
     id: string,
     dto: UpdateCalendarEventDto,
     tenantId: string,
+    editedById?: string,
   ): Promise<CalendarEventWithAttendees> {
     const before = await this.findExisting(id);
     if (dto.attendees) {
@@ -349,10 +458,51 @@ export class CalendarEventsService {
     if (dto.reminderType) {
       await this.assertValidReminderType(dto.reminderType);
     }
+
+    const newlyInvited: { userId: string }[] = [];
+
     const event = await this.prisma.$transaction(async (tx) => {
       if (dto.attendees) {
-        await tx.calendarEventAttendee.deleteMany({ where: { eventId: id } });
+        const newIds = new Set(dto.attendees.map((a) => a.userId));
+        const oldByUserId = new Map(before.attendees.map((a) => [a.userId, a]));
+
+        const toRemove = before.attendees.filter((a) => !newIds.has(a.userId));
+        if (toRemove.length > 0) {
+          await tx.calendarEventAttendee.deleteMany({
+            where: { id: { in: toRemove.map((a) => a.id) } },
+          });
+        }
+
+        for (const attendeeInput of dto.attendees) {
+          const existing = oldByUserId.get(attendeeInput.userId);
+          if (existing) {
+            if (
+              attendeeInput.note !== undefined &&
+              attendeeInput.note !== existing.note
+            ) {
+              await tx.calendarEventAttendee.update({
+                where: { id: existing.id },
+                data: { note: attendeeInput.note },
+              });
+            }
+          } else {
+            const isCreator = attendeeInput.userId === before.createdById;
+            await tx.calendarEventAttendee.create({
+              data: {
+                eventId: id,
+                userId: attendeeInput.userId,
+                note: attendeeInput.note,
+                status: isCreator ? 'ACCEPTED' : 'PENDING',
+                respondedAt: isCreator ? new Date() : undefined,
+              },
+            });
+            if (!isCreator) {
+              newlyInvited.push({ userId: attendeeInput.userId });
+            }
+          }
+        }
       }
+
       return tx.calendarEvent.update({
         where: { id },
         data: {
@@ -362,11 +512,11 @@ export class CalendarEventsService {
           startAt: dto.startAt,
           endAt: dto.endAt,
           allDay: dto.allDay,
-          ...(dto.attendees ? { attendees: { create: dto.attendees } } : {}),
         },
         include: { attendees: true },
       });
     });
+
     await this.audit.log({
       action: 'UPDATE',
       entity: 'CalendarEvent',
@@ -376,7 +526,159 @@ export class CalendarEventsService {
     if (!isPrivateToCreator(before) || !isPrivateToCreator(event)) {
       emitCalendarEventChange(this.realtime, tenantId);
     }
+
+    await this.notifyInvitedAttendees(tenantId, event, newlyInvited);
+
+    const coreChanged =
+      (dto.title !== undefined && dto.title !== before.title) ||
+      (dto.startAt !== undefined &&
+        dto.startAt.getTime() !== before.startAt.getTime()) ||
+      (dto.endAt !== undefined &&
+        dto.endAt.getTime() !== before.endAt.getTime()) ||
+      (dto.allDay !== undefined && dto.allDay !== before.allDay);
+    if (coreChanged) {
+      await this.notifyEventUpdated(
+        tenantId,
+        event,
+        editedById ?? before.createdById,
+      );
+    }
+
     return event;
+  }
+
+  /** Davet edilen kullanicinin kendi katilimci satirina kabul/red yaniti - sadece
+   * kendi satirini degistirebilir (baskasi adina yanit veremez), olusturan kendi
+   * etkinligine yanit veremez (satiri zaten create()'te ACCEPTED yaratilir). */
+  async respond(
+    eventId: string,
+    tenantId: string,
+    currentUserId: string,
+    dto: RespondToCalendarEventDto,
+  ): Promise<CalendarEventWithAttendees> {
+    const event = await this.findExisting(eventId);
+    const attendee = event.attendees.find((a) => a.userId === currentUserId);
+    if (!attendee) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Etkinlik bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (attendee.userId === event.createdById) {
+      throw new AppException(
+        'CANNOT_RESPOND_TO_OWN_EVENT',
+        'Kendi olusturdugunuz etkinlige yanit veremezsiniz.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const responseNote = dto.responseNote ?? null;
+    await this.prisma.calendarEventAttendee.update({
+      where: { id: attendee.id },
+      data: {
+        status: dto.status,
+        respondedAt: new Date(),
+        responseNote,
+      },
+    });
+    await this.cache.invalidate();
+    emitCalendarEventChange(this.realtime, tenantId);
+
+    const responder = await this.prisma.user.findFirst({
+      where: { id: currentUserId },
+      select: { name: true },
+    });
+    const responderName = responder?.name ?? 'Bir kullanici';
+    await this.notifications.create(tenantId, {
+      recipientUserId: event.createdById,
+      type: 'CALENDAR_EVENT_RESPONSE',
+      title:
+        dto.status === 'ACCEPTED'
+          ? `${responderName} davetinizi kabul etti: ${event.title}`
+          : `${responderName} davetinizi reddetti: ${event.title}`,
+      body: responseNote ?? undefined,
+      relatedEntityType: 'CalendarEvent',
+      relatedEntityId: event.id,
+      createdById: currentUserId,
+    });
+
+    return this.findExisting(eventId);
+  }
+
+  /** Kullanicinin PENDING oldugu (henuz yanit vermedigi) davetler - /ajanda ustundeki
+   * "kabul et/reddet" paneli icin. */
+  async listPendingInvites(
+    currentUserId: string,
+  ): Promise<PendingCalendarInvite[]> {
+    const rows = await this.prisma.calendarEventAttendee.findMany({
+      where: {
+        userId: currentUserId,
+        status: 'PENDING',
+        event: { deletedAt: null },
+      },
+      include: { event: true },
+    });
+    rows.sort((a, b) => a.event.startAt.getTime() - b.event.startAt.getTime());
+
+    const creatorIds = [...new Set(rows.map((row) => row.event.createdById))];
+    const creators = creatorIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: creatorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const creatorNameById = new Map(creators.map((u) => [u.id, u.name]));
+
+    return rows.map((row) => ({
+      attendeeId: row.id,
+      eventId: row.event.id,
+      eventTitle: row.event.title,
+      eventDescription: row.event.description,
+      startAt: row.event.startAt,
+      endAt: row.event.endAt,
+      allDay: row.event.allDay,
+      creatorId: row.event.createdById,
+      creatorName:
+        creatorNameById.get(row.event.createdById) ?? 'Bir kullanici',
+    }));
+  }
+
+  /** Kullanicinin olusturdugu etkinliklerde, kendisi disindaki tum katilimci
+   * satirlari (bekleyen + sonuclanmis, yanit notu dahil - kabulde opsiyonel, redde
+   * zorunlu) - /ajanda altindaki "gonderdigim davetler" tablosu icin. Durumdan
+   * bagimsiz olarak etkinligin tarihine gore siralanir, en yeni en ustte (kullanici
+   * istegi - eskiden PENDING once geliyordu, artik sadece tarih onemli). */
+  async listSentInvites(currentUserId: string): Promise<SentCalendarInvite[]> {
+    const rows = await this.prisma.calendarEventAttendee.findMany({
+      where: {
+        userId: { not: currentUserId },
+        event: { createdById: currentUserId, deletedAt: null },
+      },
+      include: { event: true },
+      orderBy: { event: { startAt: 'desc' } },
+    });
+
+    const attendeeUserIds = [...new Set(rows.map((row) => row.userId))];
+    const users = attendeeUserIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: attendeeUserIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nameById = new Map(users.map((u) => [u.id, u.name]));
+
+    return rows.map((row) => ({
+      attendeeId: row.id,
+      eventId: row.event.id,
+      eventTitle: row.event.title,
+      startAt: row.event.startAt,
+      attendeeUserId: row.userId,
+      attendeeName: nameById.get(row.userId) ?? 'Bir kullanici',
+      status: row.status,
+      responseNote: row.responseNote,
+      respondedAt: row.respondedAt,
+    }));
   }
 
   async remove(id: string, tenantId: string): Promise<void> {
