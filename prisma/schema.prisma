@@ -76,6 +76,9 @@ enum NotificationType {
   /** Olusturan, zaten kabul etmis bir katilimcinin etkinliginin saat/gun/basligini
    * degistirdiginde o katilimciya gider. */
   CALENDAR_EVENT_UPDATED
+  /** isMeeting=true bir hatirlaticinin detayindaki "Toplanti Raporu Olustur" akisindan
+   * mesaj gonderilince, mesajin alicilarina gider (bkz. MessagesService.create). */
+  MEETING_REPORT_SENT
 }
 
 enum ContactStatus {
@@ -710,6 +713,8 @@ model CalendarEvent {
   startAt           DateTime
   endAt             DateTime
   allDay            Boolean   @default(false)
+  /** "Bu bir toplantıdır" onay kutusu - hatırlatıcı türünün altında, toplantı olarak isaretlenen etkinlikleri ayirt eder. */
+  isMeeting         Boolean   @default(false)
   relatedEntityType String?
   relatedEntityId   String?
   createdById       String
@@ -1291,6 +1296,10 @@ model Message {
   sentAt          DateTime              @default(now())
   relatedEntity   MessageRelatedEntity?
   relatedEntityId String?
+  /** "Ajanda > Toplanti Raporu Olustur" akisindan (isMeeting=true bir CalendarEvent'e
+   * bagli) gonderilen mesajlarda true - meetingEventId verildiginde MessagesService.create()
+   * tarafindan setlenir, /mesajlar filtresinde ayirt etmek icin (bkz. MessageQuerySchema). */
+  isMeetingReport Boolean               @default(false)
   createdById     String
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -1302,6 +1311,7 @@ model Message {
   @@index([tenantId, relatedEntity, relatedEntityId])
   @@index([tenantId, sentAt])
   @@index([tenantId, conversationId])
+  @@index([tenantId, isMeetingReport])
   @@map("crm_messages")
 }
 

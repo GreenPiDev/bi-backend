@@ -418,6 +418,7 @@ export class CalendarEventsService {
         startAt: dto.startAt,
         endAt: dto.endAt,
         allDay: dto.allDay ?? false,
+        isMeeting: dto.isMeeting ?? false,
         attendees: { create: attendeesData },
       },
       include: { attendees: true },
@@ -512,6 +513,7 @@ export class CalendarEventsService {
           startAt: dto.startAt,
           endAt: dto.endAt,
           allDay: dto.allDay,
+          isMeeting: dto.isMeeting,
         },
         include: { attendees: true },
       });

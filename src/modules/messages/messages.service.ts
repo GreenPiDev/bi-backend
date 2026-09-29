@@ -19,6 +19,7 @@ import { FileUrlService } from '../../core/storage/file-url.service';
 import { R2StorageService } from '../../core/storage/r2-storage.service';
 import { assertKeyBelongsToTenant } from '../../core/storage/tenant-scoped-key';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { MessagesCacheService } from './messages-cache.service';
 import type { CreateMessageDto, MessageQueryDto } from './dto/message.dto';
 
@@ -86,6 +87,7 @@ export class MessagesService {
     private readonly fileUrl: FileUrlService,
     private readonly storage: R2StorageService,
     private readonly messagesCache: MessagesCacheService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Mesaj olusturulmadan once dosyayi R2'ye yukler, mesaj create body'sinde
@@ -158,6 +160,7 @@ export class MessagesService {
       interactionIds,
       q,
       recipientUserId,
+      isMeetingReport,
     } = query;
     const { direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'sentAt',
@@ -227,6 +230,7 @@ export class MessagesService {
         ...(recipientUserId
           ? [{ recipients: { some: { userId: recipientUserId } } }]
           : []),
+        ...(isMeetingReport ? [{ isMeetingReport: true }] : []),
         ...(q
           ? [
               {
@@ -480,6 +484,21 @@ export class MessagesService {
       }
     }
 
+    let meetingEvent: { id: string; title: string } | null = null;
+    if (dto.meetingEventId) {
+      meetingEvent = await this.prisma.calendarEvent.findFirst({
+        where: { id: dto.meetingEventId, deletedAt: null },
+        select: { id: true, title: true },
+      });
+      if (!meetingEvent) {
+        throw new AppException(
+          'NOT_FOUND',
+          'Hatirlatici bulunamadi.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
       return tx.message.create({
         data: {
@@ -491,6 +510,7 @@ export class MessagesService {
           relatedEntity,
           relatedEntityId,
           conversationId: dto.conversationId,
+          isMeetingReport: Boolean(dto.meetingEventId),
           recipients: {
             create: [
               ...dto.toUserIds.map((userId) => ({
@@ -537,6 +557,30 @@ export class MessagesService {
     });
 
     await this.messagesCache.invalidate();
+
+    if (meetingEvent) {
+      const sender = await this.prisma.user.findFirst({
+        where: { id: senderId },
+        select: { name: true },
+      });
+      const senderName = sender?.name ?? 'Bir kullanici';
+      const notifiedUserIds = [...new Set(dto.toUserIds)].filter(
+        (userId) => userId !== senderId,
+      );
+      await Promise.all(
+        notifiedUserIds.map((recipientUserId) =>
+          this.notifications.create(tenantId, {
+            recipientUserId,
+            type: 'MEETING_REPORT_SENT',
+            title: `${senderName}, "${meetingEvent!.title}" toplantısı ile ilgili raporunu mesaj olarak gönderdi.`,
+            relatedEntityType: 'Message',
+            relatedEntityId: created.conversationId,
+            createdById: senderId,
+          }),
+        ),
+      );
+    }
+
     return mappedCreated;
   }
 

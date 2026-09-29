@@ -33,6 +33,9 @@ export const CreateMessageSchema = z
     relatedEntity: MessageRelatedEntitySchema.optional(),
     relatedEntityId: z.string().uuid().optional(),
     conversationId: z.string().uuid().optional(),
+    /** Ajanda'daki "Toplanti Raporu Olustur" akisi: verilirse, mesaj olusturulduktan
+     * sonra alicilara MEETING_REPORT_SENT bildirimi gonderilir (bkz. MessagesService.create). */
+    meetingEventId: z.string().uuid().optional(),
     attachments: z
       .array(MessageAttachmentRefSchema)
       .max(5, 'En fazla 5 dosya eklenebilir.')
@@ -74,5 +77,7 @@ export const MessageQuerySchema = ListQuerySchema.extend({
   projectIds: arrayQueryParam(z.string().uuid()),
   interactionIds: arrayQueryParam(z.string().uuid()),
   recipientUserId: z.string().uuid().optional(),
+  /** Sadece "Toplanti Raporu Olustur" akisindan gonderilen mesajlari gosterir. */
+  isMeetingReport: z.coerce.boolean().optional(),
 });
 export type MessageQueryDto = z.infer<typeof MessageQuerySchema>;

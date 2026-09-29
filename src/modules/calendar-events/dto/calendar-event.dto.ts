@@ -13,6 +13,7 @@ export const CreateCalendarEventSchema = z
     startAt: z.coerce.date(),
     endAt: z.coerce.date(),
     allDay: z.boolean().optional(),
+    isMeeting: z.boolean().optional(),
     /** T2: bos birakilirsa olusturan kullanici tek katilimci olarak eklenir. */
     attendees: z.array(AttendeeSchema).max(50).optional(),
   })
@@ -34,6 +35,7 @@ export const UpdateCalendarEventSchema = z
     startAt: z.coerce.date().optional(),
     endAt: z.coerce.date().optional(),
     allDay: z.boolean().optional(),
+    isMeeting: z.boolean().optional(),
     attendees: z.array(AttendeeSchema).max(50).optional(),
   })
   .refine((dto) => !dto.startAt || !dto.endAt || dto.endAt >= dto.startAt, {

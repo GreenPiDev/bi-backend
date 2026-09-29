@@ -17,6 +17,7 @@ const fakeMessagesCache = {
   set: vi.fn(),
   invalidate: vi.fn(),
 } as never;
+const fakeNotifications = { create: vi.fn() } as never;
 
 const TENANT_ID = 'tenant-1';
 const SENDER_ID = '11111111-1111-1111-1111-111111111111';
@@ -90,6 +91,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.getById(CONVERSATION_ID, SENDER_ID),
@@ -108,6 +110,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.getById(CONVERSATION_ID, RECIPIENT_ID),
@@ -131,6 +134,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.getById(CONVERSATION_ID, SENDER_ID),
@@ -148,6 +152,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.getById(CONVERSATION_ID, BYSTANDER_ID),
@@ -165,6 +170,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(service.getById('yok', SENDER_ID)).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -180,6 +186,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -208,6 +215,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -245,6 +253,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -282,6 +291,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -314,6 +324,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -343,6 +354,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -362,6 +374,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
 
     const result = await service.list(SENDER_ID, {
@@ -384,6 +397,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -411,6 +425,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -451,6 +466,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.list(SENDER_ID, {
       page: 1,
@@ -485,6 +501,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.create(TENANT_ID, SENDER_ID, {
       subject: 'Konu',
@@ -542,6 +559,7 @@ describe('MessagesService', () => {
       { build: buildFileUrl } as never,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     const result = await service.create(TENANT_ID, SENDER_ID, {
       subject: 'Ekli',
@@ -592,6 +610,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       { upload, delete: vi.fn(), download: vi.fn() } as never,
       fakeMessagesCache,
+      fakeNotifications,
     );
     const result = await service.uploadAttachment(TENANT_ID, {
       mimetype: 'application/pdf',
@@ -616,6 +635,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       { upload: vi.fn(), delete: del, download: vi.fn() } as never,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.deleteUnattachedFile(
@@ -637,6 +657,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.create(TENANT_ID, RECIPIENT_ID, {
       body: 'Cevap',
@@ -664,6 +685,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.create(TENANT_ID, BYSTANDER_ID, {
@@ -686,6 +708,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.setConversationRead(CONVERSATION_ID, BYSTANDER_ID),
@@ -703,6 +726,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
@@ -724,6 +748,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.setConversationRead(CONVERSATION_ID, RECIPIENT_ID, false);
     expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
@@ -745,6 +770,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await expect(
       service.setConversationStar(
@@ -767,6 +793,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -793,6 +820,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -812,6 +840,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     await service.setConversationStar(
       CONVERSATION_ID,
@@ -836,6 +865,7 @@ describe('MessagesService', () => {
       fakeFileUrl,
       fakeStorage,
       fakeMessagesCache,
+      fakeNotifications,
     );
     const result = await service.list(SENDER_ID, {
       page: 1,
