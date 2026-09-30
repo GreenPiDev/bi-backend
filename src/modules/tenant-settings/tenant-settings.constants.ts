@@ -10,6 +10,10 @@ export const DEFAULT_CONTACT_INACTIVITY_THRESHOLD_DAYS = 180;
 export const POST_SALE_FOLLOW_UP_DAYS_KEY = 'crm.postSaleFollowUpDays';
 export const DEFAULT_POST_SALE_FOLLOW_UP_DAYS = 14;
 
+/** Q4: yeni teklif kalemi eklenirken KDV alanina varsayilan olarak gelecek oran (%). */
+export const DEFAULT_QUOTE_VAT_PCT_KEY = 'crm.defaultQuoteVatPct';
+export const DEFAULT_QUOTE_VAT_PCT = 20;
+
 /**
  * Tenant'in ayarlayabilecegi bilinen anahtarlarin tek kaynagi. Yeni bir ayar
  * eklerken buraya bir satir eklemek yeterli; bilinmeyen anahtara PATCH 400 doner.
@@ -22,6 +26,10 @@ export const KNOWN_TENANT_SETTINGS = {
   [POST_SALE_FOLLOW_UP_DAYS_KEY]: {
     schema: z.number().int().min(1).max(3650),
     default: DEFAULT_POST_SALE_FOLLOW_UP_DAYS,
+  },
+  [DEFAULT_QUOTE_VAT_PCT_KEY]: {
+    schema: z.number().min(0).max(100),
+    default: DEFAULT_QUOTE_VAT_PCT,
   },
 } as const;
 
