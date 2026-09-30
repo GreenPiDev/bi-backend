@@ -1050,6 +1050,19 @@ model Quote {
   approvedAt            DateTime?
   approvedById          String?
   /**
+   * Kalemler farkli para birimlerinde olabilir (Product.currency) - teklifin TEK bir
+   * genel toplamini gosterebilmek icin kullanicinin sectigi hedef para birimi. Item
+   * para birimlerinden biriyle ayni olmak zorunda degil.
+   */
+  quoteCurrency         String      @default("TRY")
+  /**
+   * quoteCurrency disindaki her item para biriminin quoteCurrency'ye cevrim kuru
+   * snapshot'i - `{ asOf: string, rates: { [currency]: number } }`. Kullanici FxService'ten
+   * gelen guncel kuru duzenleyebilir; olusturma/guncelleme aninda buraya donmuslenir,
+   * gecmis teklifler farkli gunun kurunu korur (unitPrice ile ayni "snapshot" deseni).
+   */
+  exchangeRates         Json?
+  /**
    * Bir proje birden fazla teklifle iliskilendirilebilir (1 Project : N Quote), ama bir
    * teklif en fazla bir projeye baglidir - bu yuzden FK burada, Quote tarafinda (eskiden
    * Project.quoteId @unique idi, tersiydi - bkz. docs/VARSAYIMLAR.md). Proje

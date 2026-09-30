@@ -23,13 +23,16 @@ import {
 } from '../purchase-orders/purchase-orders.service';
 import {
   CreateQuoteSchema,
+  FxRatesQuerySchema,
   QuoteQuerySchema,
   UpdateQuoteSchema,
   type CreateQuoteDto,
+  type FxRatesQueryDto,
   type QuoteQueryDto,
   type UpdateQuoteDto,
 } from './dto/quote.dto';
 import { QuotesService, type QuoteWithDetails } from './quotes.service';
+import type { FxRatesResult } from '../../core/fx/fx.service';
 
 @ModulePage('quotes')
 @Controller('quotes')
@@ -45,6 +48,17 @@ export class QuotesController {
     @Query(new ZodValidationPipe(QuoteQuerySchema)) query: QuoteQueryDto,
   ): Promise<PagedResult<QuoteWithDetails>> {
     return this.quotes.list(query);
+  }
+
+  /** Teklif para birimi secimi icin guncel kur (otomatik on-doldurma, kullanici elle
+   * duzenleyebilir - bkz. Quote.exchangeRates doc comment'i). `:id` route'undan once
+   * tanimlanmali, aksi halde "fx-rates" bir teklif id'si gibi yakalanir. */
+  @Get('fx-rates')
+  @RequiresPermission('quotes', 'VIEW')
+  getFxRates(
+    @Query(new ZodValidationPipe(FxRatesQuerySchema)) query: FxRatesQueryDto,
+  ): Promise<FxRatesResult> {
+    return this.quotes.getFxRates(query.base, query.targets);
   }
 
   @Get(':id')

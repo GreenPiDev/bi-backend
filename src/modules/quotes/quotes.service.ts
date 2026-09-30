@@ -13,6 +13,7 @@ import type {
 import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
+import { FxService, type FxRatesResult } from '../../core/fx/fx.service';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
@@ -32,6 +33,7 @@ import {
 import { QuotesCacheService } from './quotes-cache.service';
 import type {
   CreateQuoteDto,
+  QuoteExchangeRatesDto,
   QuoteItemInputDto,
   QuoteQueryDto,
   UpdateQuoteDto,
@@ -101,7 +103,46 @@ export class QuotesService {
     private readonly quotesCache: QuotesCacheService,
     private readonly opportunitiesCache: OpportunitiesCacheService,
     private readonly postSaleCasesCache: PostSaleCasesCacheService,
+    private readonly fx: FxService,
   ) {}
+
+  /** Teklif para birimi secim formu icin guncel kur (otomatik on-doldurma, kullanici
+   * elle duzenleyebilir - bkz. Quote.exchangeRates doc comment'i). */
+  async getFxRates(base: string, targetsCsv: string): Promise<FxRatesResult> {
+    const targets = targetsCsv
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    return this.fx.getRatesToBase(base, targets);
+  }
+
+  /** quoteCurrency disindaki her item para biriminin exchangeRates.rates icinde
+   * karsiligi olmali - aksi halde tek bir genel toplam hesaplanamaz. */
+  private assertExchangeRatesCoverItems(
+    quoteCurrency: string,
+    items: { currency: string }[],
+    exchangeRates: QuoteExchangeRatesDto | undefined,
+  ): void {
+    const foreignCurrencies = [
+      ...new Set(
+        items.map((item) => item.currency).filter((c) => c !== quoteCurrency),
+      ),
+    ];
+    if (foreignCurrencies.length === 0) {
+      return;
+    }
+    const rates = exchangeRates?.rates as Record<string, number> | undefined;
+    const missing = foreignCurrencies.filter(
+      (currency) => rates?.[currency] === undefined,
+    );
+    if (missing.length > 0) {
+      throw new AppException(
+        'MISSING_EXCHANGE_RATE',
+        `Su para birimleri icin kur bilgisi eksik: ${missing.join(', ')}.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
 
   /**
    * S1 (bkz. docs/VARSAYIMLAR.md V28): Quote.status APPROVED'a ulastigi HER an
@@ -404,6 +445,11 @@ export class QuotesService {
           }
 
           const { items } = await this.resolveItems(tx, dto.items);
+          this.assertExchangeRatesCoverItems(
+            dto.quoteCurrency,
+            items,
+            dto.exchangeRates,
+          );
 
           const prefix = quoteNumberPrefix(new Date());
           const countToday = await this.countQuoteNumbersForPrefix(tx, prefix);
@@ -423,6 +469,8 @@ export class QuotesService {
               ...ibanSnapshot,
               status: 'DRAFT',
               createdById,
+              quoteCurrency: dto.quoteCurrency,
+              exchangeRates: dto.exchangeRates ?? undefined,
               items: { create: items },
             } as never,
           });
@@ -512,6 +560,12 @@ export class QuotesService {
         ? { deliveryTerms: dto.deliveryTerms ?? null }
         : {}),
       ...(ibanSnapshot ?? {}),
+      ...(dto.quoteCurrency !== undefined
+        ? { quoteCurrency: dto.quoteCurrency }
+        : {}),
+      ...(dto.exchangeRates !== undefined
+        ? { exchangeRates: dto.exchangeRates }
+        : {}),
     };
     const hasFieldUpdates = Object.keys(contactUpdateData).length > 0;
 
@@ -529,12 +583,26 @@ export class QuotesService {
         }
       }
 
+      const finalQuoteCurrency = dto.quoteCurrency ?? existing.quoteCurrency;
       if (dto.items) {
         const { items } = await this.resolveItems(tx, dto.items);
+        this.assertExchangeRatesCoverItems(
+          finalQuoteCurrency,
+          items,
+          dto.exchangeRates,
+        );
         await tx.quoteItem.deleteMany({ where: { quoteId: id } });
         await tx.quoteItem.createMany({
           data: items.map((item) => ({ ...item, quoteId: id })),
         });
+      } else if (dto.quoteCurrency !== undefined) {
+        this.assertExchangeRatesCoverItems(
+          finalQuoteCurrency,
+          existing.items,
+          dto.exchangeRates ??
+            (existing.exchangeRates as unknown as QuoteExchangeRatesDto | null) ??
+            undefined,
+        );
       }
 
       const nextStatus = dto.status ?? existing.status;

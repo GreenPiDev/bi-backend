@@ -1,6 +1,25 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
-import { OpportunityStageSchema } from '../../opportunities/dto/opportunity.dto';
+import {
+  CurrencyCodeSchema,
+  OpportunityStageSchema,
+} from '../../opportunities/dto/opportunity.dto';
+
+/** Q3/A1-genislemesi: teklifin tek bir genel toplamini gosterebilmek icin secilen
+ * hedef para birimi ve kalem para birimlerinden bu hedefe cevrim kuru snapshot'i
+ * (bkz. Quote.exchangeRates doc comment'i). */
+export const QuoteExchangeRatesSchema = z.object({
+  asOf: z.string().max(20).optional(),
+  rates: z.partialRecord(CurrencyCodeSchema, z.number().positive()),
+});
+export type QuoteExchangeRatesDto = z.infer<typeof QuoteExchangeRatesSchema>;
+
+export const FxRatesQuerySchema = z.object({
+  base: CurrencyCodeSchema,
+  /** Virgulle ayrilmis para birimi listesi, orn. "USD,EUR". */
+  targets: z.string().max(100),
+});
+export type FxRatesQueryDto = z.infer<typeof FxRatesQuerySchema>;
 
 export const QuoteStatusSchema = z.enum([
   'DRAFT',
@@ -59,6 +78,10 @@ export const CreateQuoteSchema = z.object({
   /** Tenant'in crm_iban_options listesinden secilir, 4 alani teklife kopyalanir
    * (bkz. QuotesService.resolveIbanSnapshot). */
   ibanOptionId: z.string().uuid().optional(),
+  /** Kalemler quoteCurrency disinda bir para biriminde iceriyorsa zorunlu -
+   * QuotesService.assertExchangeRatesCoverItems dogrular. */
+  quoteCurrency: CurrencyCodeSchema.default('TRY'),
+  exchangeRates: QuoteExchangeRatesSchema.optional(),
 });
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
@@ -78,6 +101,8 @@ export const UpdateQuoteSchema = z.object({
   deliveryTerms: z.string().trim().max(4000).nullable().optional(),
   /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger korunur. */
   ibanOptionId: z.string().uuid().nullable().optional(),
+  quoteCurrency: CurrencyCodeSchema.optional(),
+  exchangeRates: QuoteExchangeRatesSchema.optional(),
 });
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
 
