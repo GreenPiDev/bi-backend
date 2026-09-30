@@ -290,7 +290,7 @@ export class QuotesService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status } = query;
+    const { page, pageSize, accountId, status, createdById } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -299,6 +299,7 @@ export class QuotesService {
     const where = {
       ...(accountId ? { accountId } : {}),
       ...(status ? { status } : {}),
+      ...(createdById ? { createdById } : {}),
     };
 
     const [data, total] = await Promise.all([

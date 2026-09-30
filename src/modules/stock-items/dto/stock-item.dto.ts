@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 
-export const StockItemQuerySchema = ListQuerySchema.extend({});
+export const StockItemQuerySchema = ListQuerySchema.extend({
+  /** /envanter?tab=products'taki filtre paneliyle ayni desen (bkz. ProductQuerySchema). */
+  productListId: z.string().uuid().optional(),
+  brand: z.string().trim().min(1).optional(),
+  category: z.string().trim().min(1).optional(),
+});
 export type StockItemQueryDto = z.infer<typeof StockItemQuerySchema>;
 
 /** Stok Gecmisi filtre penceresi: urune ve guncellemeyi yapan kullaniciya gore. */

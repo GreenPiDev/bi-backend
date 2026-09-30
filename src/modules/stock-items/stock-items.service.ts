@@ -56,16 +56,27 @@ export class StockItemsService {
    * doner). Aksi halde kullanici yeni bir urune stok girecek bir satir/buton
    * hic goremiyordu (bkz. bug raporu).
    */
-  private async resolveRows(q?: string): Promise<StockItemWithProduct[]> {
+  private async resolveRows(filters?: {
+    q?: string;
+    productListId?: string;
+    brand?: string;
+    category?: string;
+  }): Promise<StockItemWithProduct[]> {
+    const { q, productListId, brand, category } = filters ?? {};
     const products = await this.prisma.product.findMany({
-      where: q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' as const } },
-              { sku: { contains: q, mode: 'insensitive' as const } },
-            ],
-          }
-        : undefined,
+      where: {
+        ...(productListId ? { productListId } : {}),
+        ...(brand ? { brand } : {}),
+        ...(category ? { category } : {}),
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: 'insensitive' as const } },
+                { sku: { contains: q, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { name: 'asc' },
       include: { stockItems: true },
     });
@@ -90,8 +101,8 @@ export class StockItemsService {
   async list(
     query: StockItemQueryDto,
   ): Promise<PagedResult<StockItemWithProduct>> {
-    const { page, pageSize, q } = query;
-    const rows = await this.resolveRows(q);
+    const { page, pageSize, q, productListId, brand, category } = query;
+    const rows = await this.resolveRows({ q, productListId, brand, category });
     const total = rows.length;
     const data = rows.slice((page - 1) * pageSize, page * pageSize);
 

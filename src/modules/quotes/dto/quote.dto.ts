@@ -84,5 +84,7 @@ export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
 export const QuoteQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: QuoteStatusSchema.optional(),
+  /** Kaydi olusturan kullaniciya gore filtre (liste sayfasi filtre penceresi). */
+  createdById: z.string().optional(),
 });
 export type QuoteQueryDto = z.infer<typeof QuoteQuerySchema>;
