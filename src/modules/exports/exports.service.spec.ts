@@ -48,8 +48,13 @@ function createQuotePdf() {
   return { render: vi.fn().mockResolvedValue(Buffer.from('quote-pdf-bytes')) };
 }
 
-function createQuotes(status: string = 'APPROVED') {
-  return { getById: vi.fn().mockResolvedValue({ id: QUOTE_ID, status }) };
+function createQuotes(
+  status: string = 'APPROVED',
+  templateId: string | null = null,
+) {
+  return {
+    getById: vi.fn().mockResolvedValue({ id: QUOTE_ID, status, templateId }),
+  };
 }
 
 const QUOTE_ID = '44444444-4444-4444-4444-444444444444';
@@ -117,8 +122,26 @@ describe('ExportsService', () => {
       isPlatformAdmin: false,
     };
     const pdf = await service.exportQuotePdf(QUOTE_ID, user);
-    expect(quotePdf.render).toHaveBeenCalledWith(QUOTE_ID, 'signed-token');
+    expect(quotePdf.render).toHaveBeenCalledWith(QUOTE_ID, 'signed-token', {
+      branded: false,
+    });
     expect(pdf.toString()).toBe('quote-pdf-bytes');
+  });
+
+  it('exportQuotePdf: sablonlu teklif icin markali PDF uretir', async () => {
+    const quotes = createQuotes('APPROVED', 'template-1');
+    const quotePdf = createQuotePdf();
+    const service = buildService({ quotes, quotePdf });
+    const user = {
+      id: 'u1',
+      tenantId: TENANT_ID,
+      roleIds: ['role-1'],
+      isPlatformAdmin: false,
+    };
+    await service.exportQuotePdf(QUOTE_ID, user);
+    expect(quotePdf.render).toHaveBeenCalledWith(QUOTE_ID, 'signed-token', {
+      branded: true,
+    });
   });
 
   it('exportQuotePdf: PENDING_APPROVAL teklif icin QUOTE_NOT_READY firlatir', async () => {
