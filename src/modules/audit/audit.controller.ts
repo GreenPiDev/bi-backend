@@ -1,6 +1,12 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
+import type { PagedResult } from '../../core/dto/list-query.dto';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
+import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { AuditService, type AuditLogView } from './audit.service';
+import {
+  AuditLogQuerySchema,
+  type AuditLogQueryDto,
+} from './dto/audit-log.dto';
 
 @Controller('audit-logs')
 export class AuditController {
@@ -8,7 +14,9 @@ export class AuditController {
 
   @Get()
   @RequiresPermission('settings', 'VIEW')
-  list(): Promise<AuditLogView[]> {
-    return this.audit.list();
+  list(
+    @Query(new ZodValidationPipe(AuditLogQuerySchema)) query: AuditLogQueryDto,
+  ): Promise<PagedResult<AuditLogView>> {
+    return this.audit.listPaged(query);
   }
 }

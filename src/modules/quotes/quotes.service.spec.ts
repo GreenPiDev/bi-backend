@@ -22,6 +22,8 @@ const fakeOpportunitiesCache = { invalidate: vi.fn() } as never;
 const fakePostSaleCasesCache = { invalidate: vi.fn() } as never;
 const fakeFx = { getRatesToBase: vi.fn() } as never;
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
+const notificationsCreate = vi.fn();
+const fakeNotifications = { create: notificationsCreate } as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -53,9 +55,18 @@ interface Setup {
   products: unknown[];
   contact?: unknown;
   postSaleCase?: unknown;
+  actingUser?: unknown;
+  activeUsers?: unknown[];
 }
 
-function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
+function createPrisma({
+  quoteRow,
+  products,
+  contact,
+  postSaleCase,
+  actingUser,
+  activeUsers,
+}: Setup) {
   const tx = {
     account: {
       findFirst: vi.fn().mockResolvedValue({ id: 'account-1' }),
@@ -95,7 +106,8 @@ function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
       delete: vi.fn().mockResolvedValue(quoteRow),
     },
     user: {
-      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(actingUser ?? null),
+      findMany: vi.fn().mockResolvedValue(activeUsers ?? []),
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx)),
     __tx: tx,
@@ -119,6 +131,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -139,6 +152,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -176,6 +190,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -209,6 +224,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(
       service.create('user-1', {
@@ -231,6 +247,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(
       service.create('user-1', {
@@ -262,6 +279,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -304,6 +322,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(
       service.create('user-1', {
@@ -336,6 +355,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -371,6 +391,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(
       service.update('quote-1', { items: [] } as never, 'user-1'),
@@ -395,6 +416,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.update(
       'quote-1',
@@ -434,6 +456,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.update(
       'quote-1',
@@ -452,6 +475,80 @@ describe('QuotesService', () => {
     expect(prisma.__tx.postSaleCase.create).not.toHaveBeenCalled();
   });
 
+  it('update: dropdown status: REVIZE gonderince tum aktif kullanicilara bildirim gider', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'DRAFT',
+        quoteNumber: 'TEK-2026-09-30-001',
+        account: { name: 'Acme A.S.' },
+      }),
+      products: [],
+      actingUser: { id: 'user-1', name: 'Ayse Yilmaz' },
+      activeUsers: [{ id: 'user-1' }, { id: 'user-2' }],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+    );
+    notificationsCreate.mockClear();
+    await runInTenant(() =>
+      service.update('quote-1', { status: 'REVIZE' } as never, 'user-1'),
+    );
+
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'REVIZE' }),
+      }),
+    );
+    expect(notificationsCreate).toHaveBeenCalledTimes(2);
+    expect(notificationsCreate).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({
+        recipientUserId: 'user-1',
+        type: 'QUOTE_REVISION_REQUESTED',
+        relatedEntityType: 'Quote',
+        relatedEntityId: 'quote-1',
+        title: expect.stringContaining('TEK-2026-09-30-001'),
+      }),
+    );
+    expect(notificationsCreate).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({ recipientUserId: 'user-2' }),
+    );
+  });
+
+  it('update: teklif zaten REVIZE durumundayken tekrar REVIZE gonderilirse bildirim tekrar gitmez', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'REVIZE' }),
+      products: [],
+      activeUsers: [{ id: 'user-1' }],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+    );
+    notificationsCreate.mockClear();
+    await runInTenant(() =>
+      service.update('quote-1', { status: 'REVIZE' } as never, 'user-1'),
+    );
+
+    expect(notificationsCreate).not.toHaveBeenCalled();
+  });
+
   it('update: durum degismeden contactId gonderilirse yine de yazilir', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'DRAFT' }),
@@ -467,6 +564,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.update(
       'quote-1',
@@ -495,6 +593,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.update('quote-1', { contactId: null } as never, 'user-1');
 
@@ -520,6 +619,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(
       service.update('quote-1', { contactId: 'contact-2' } as never, 'user-1'),
@@ -555,6 +655,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(
       service.update(
@@ -596,6 +697,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.update(
       'quote-1',
@@ -641,6 +743,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.approve('quote-1', 'manager-1');
     expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
@@ -671,6 +774,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.approve('quote-1', 'manager-1');
 
@@ -703,6 +807,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.approve('quote-1', 'manager-1');
 
@@ -723,6 +828,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await expect(service.approve('quote-1', 'manager-1')).rejects.toMatchObject(
       {
@@ -745,6 +851,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.reject('quote-1', 'manager-1');
     expect(prisma.quote.update).toHaveBeenCalledWith(
@@ -765,6 +872,7 @@ describe('QuotesService', () => {
       fakePostSaleCasesCache,
       fakeFx,
       fakeFileUrl,
+      fakeNotifications,
     );
     await service.remove('quote-1');
     expect(prisma.quote.delete).toHaveBeenCalledWith({

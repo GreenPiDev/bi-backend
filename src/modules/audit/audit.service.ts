@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
+import type { AuditLogQueryDto } from './dto/audit-log.dto';
 
 export interface AuditLogEntry {
   action: string;
@@ -76,6 +78,59 @@ export class AuditService {
       orderBy: { createdAt: 'desc' },
       take: LIST_LIMIT,
     });
+    return this.hydrateUsers(logs);
+  }
+
+  /** `/settings?tab=audit` icin 25'li sayfalama - LIST_LIMIT'e tabi diger dahili
+   * cagiranlardan (stok/urun gecmisi) ayri tutuldu, onlar tum listeyi tek seferde ister. */
+  async listPaged(query: AuditLogQueryDto): Promise<PagedResult<AuditLogView>> {
+    const { page, pageSize, userId, entity, action, from, to } = query;
+    const where = {
+      ...(userId ? { userId } : {}),
+      ...(entity ? { entity } : {}),
+      ...(action ? { action } : {}),
+      ...(from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, logs] = await Promise.all([
+      this.prisma.auditLog.count({ where }),
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      data: await this.hydrateUsers(logs),
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    };
+  }
+
+  private async hydrateUsers(
+    logs: {
+      id: string;
+      userId: string;
+      action: string;
+      entity: string;
+      entityId: string;
+      meta: unknown;
+      createdAt: Date;
+    }[],
+  ): Promise<AuditLogView[]> {
     const userIds = [...new Set(logs.map((l) => l.userId))];
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },

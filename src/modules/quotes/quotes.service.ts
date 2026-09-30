@@ -26,6 +26,7 @@ import {
   SEND_POST_SALE_SURVEY_JOB,
 } from '../../jobs/post-sale-survey-queue.constants';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
 import { PostSaleCasesCacheService } from '../post-sale-cases/post-sale-cases-cache.service';
 import {
@@ -147,6 +148,7 @@ export class QuotesService {
     private readonly postSaleCasesCache: PostSaleCasesCacheService,
     private readonly fx: FxService,
     private readonly fileUrl: FileUrlService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Teklif para birimi secim formu icin guncel kur (otomatik on-doldurma, kullanici
@@ -671,6 +673,41 @@ export class QuotesService {
   }
 
   /**
+   * Bir teklif REVIZE durumuna cekildiginde (durum dropdown'u /teklifler'de veya
+   * /teklifler/:id detayinda) tenant'taki TUM aktif kullanicilara bildirim gider -
+   * CheckContactInactivityProcessor.notify ile ayni "tenant genelinde yayin"
+   * deseni (bkz. NotificationType.QUOTE_REVISION_REQUESTED doc comment'i).
+   */
+  private async notifyQuoteRevision(
+    quote: QuoteWithDetails,
+    actingUserId: string,
+  ): Promise<void> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const [actingUser, recipients] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: actingUserId } }),
+      this.prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      }),
+    ]);
+    const actorName = actingUser?.name ?? 'Bir kullanici';
+    const title = `${actorName}, "${quote.quoteNumber}" numarali teklifi (${quote.account.name}) revize moduna aldi.`;
+
+    await Promise.all(
+      recipients.map((recipient) =>
+        this.notifications.create(tenantId, {
+          recipientUserId: recipient.id,
+          type: 'QUOTE_REVISION_REQUESTED',
+          title,
+          relatedEntityType: 'Quote',
+          relatedEntityId: quote.id,
+          createdById: actingUserId,
+        }),
+      ),
+    );
+  }
+
+  /**
    * `dto.status` verilirse /teklifler listesindeki durum dropdown'undan gelen
    * dogrudan durum degisikligi uygulanir (APPROVED'a gecis S1/ensurePostSaleCase'i
    * tetikler, dedicated approve() ucuyla ayni davranis).
@@ -695,6 +732,11 @@ export class QuotesService {
      */
     const isRevisionSave =
       existing.status === 'REVIZE' && dto.items !== undefined;
+    /** Teklif bu update ile ilk kez REVIZE durumuna cekiliyorsa (durum
+     * dropdown'undan, isRevisionSave'den ayri - o zaten REVIZE'deyken kalem
+     * kaydini konu alir), tum aktif kullanicilara bildirim gider. */
+    const enteredRevision =
+      dto.status === 'REVIZE' && existing.status !== 'REVIZE';
     if (isRevisionSave && !dto.revisionNote) {
       throw new AppException(
         'REVISION_NOTE_REQUIRED',
@@ -844,6 +886,9 @@ export class QuotesService {
       await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
         postSaleCaseId: postSaleCase.id,
       });
+    }
+    if (enteredRevision) {
+      await this.notifyQuoteRevision(existing, actingUserId);
     }
     return this.getById(id);
   }

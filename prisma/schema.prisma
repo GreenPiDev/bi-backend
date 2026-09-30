@@ -89,6 +89,12 @@ enum NotificationType {
    * mesaj gonderilince, mesajin alicilarina gider (bkz. MessagesService.create).
    */
   MEETING_REPORT_SENT
+  /**
+   * Bir teklif REVIZE durumuna cekildiginde (durum dropdown'u /teklifler listesinde
+   * veya /teklifler/:id detayinda) tenant'taki TUM aktif kullanicilara gider -
+   * CONTACT_INACTIVITY_ALERT ile ayni "tenant genelinde yayin" deseni.
+   */
+  QUOTE_REVISION_REQUESTED
 }
 
 enum ContactStatus {
