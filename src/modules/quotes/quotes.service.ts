@@ -112,6 +112,22 @@ interface ResolvedQuoteItem {
 
 type ItemResolutionTx = Pick<TenantPrismaClient, 'product'>;
 
+/** Ad-hoc revizyon takibi (bkz. Quote.revisionSnapshot doc comment'i): kaydedilen
+ * onceki kalemlerin/kurun frontend'in mevcut quote-totals.ts hesaplayicilarina
+ * (groupQuoteItemTotals/convertTotalsToQuoteCurrency) dogrudan verilebilecek sekli. */
+export interface QuoteRevisionSnapshot {
+  items: {
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    currency: string;
+    discountPct: number;
+    vatPct: number;
+  }[];
+  quoteCurrency: string;
+  exchangeRates: { asOf?: string; rates: Record<string, number> } | null;
+}
+
 function quoteNumberPrefix(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -363,6 +379,41 @@ export class QuotesService {
     });
 
     return { items: resolved, requiresApproval };
+  }
+
+  /** Ad-hoc revizyon takibi: kaydedilmeden ONCE `existing`in kalemlerini/kurunu
+   * frontend'in mevcut quote-totals.ts hesaplayicilarina dogrudan verilebilecek
+   * sekilde donduruen snapshot (bkz. Quote.revisionSnapshot doc comment'i). */
+  private buildRevisionSnapshot(
+    quote: QuoteWithDetails,
+  ): QuoteRevisionSnapshot {
+    return {
+      items: quote.items.map((item) => ({
+        productName: item.product.name,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        currency: item.currency,
+        discountPct: Number(item.discountPct),
+        vatPct: Number(item.vatPct),
+      })),
+      quoteCurrency: quote.quoteCurrency,
+      exchangeRates: quote.exchangeRates as {
+        asOf?: string;
+        rates: Record<string, number>;
+      } | null,
+    };
+  }
+
+  /** /teklifler/yeni'deki firma bazli uyari icin ("Bu firma daha once N kere
+   * revize istedi") - bir firmanin tum tekliflerindeki revisionCount toplami. */
+  async getRevisionSummaryForAccount(
+    accountId: string,
+  ): Promise<{ count: number }> {
+    const result = await this.prisma.quote.aggregate({
+      where: { accountId },
+      _sum: { revisionCount: true },
+    });
+    return { count: result._sum.revisionCount ?? 0 };
   }
 
   /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
@@ -637,6 +688,20 @@ export class QuotesService {
         HttpStatus.CONFLICT,
       );
     }
+    /**
+     * Ad-hoc revizyon takibi: teklif REVIZE durumundayken kalemler kaydedilirse
+     * (fiyat revizyonu) revizyon notu zorunludur - eski kalemler/kur, kaydetmeden
+     * ONCE `existing`ten (henuz degismemis haliyle) snapshot'lanir.
+     */
+    const isRevisionSave =
+      existing.status === 'REVIZE' && dto.items !== undefined;
+    if (isRevisionSave && !dto.revisionNote) {
+      throw new AppException(
+        'REVISION_NOTE_REQUIRED',
+        'Revize notu zorunludur.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     await this.assertValidPaymentMethod(dto.paymentMethod ?? undefined);
     const ibanOptionIdProvided = dto.ibanOptionId !== undefined;
     const ibanSnapshot = ibanOptionIdProvided
@@ -664,6 +729,16 @@ export class QuotesService {
         : {}),
       ...(dto.exchangeRates !== undefined
         ? { exchangeRates: dto.exchangeRates }
+        : {}),
+      ...(isRevisionSave
+        ? {
+            revisionNote: dto.revisionNote,
+            revisionSnapshot: this.buildRevisionSnapshot(
+              existing,
+            ) as unknown as Prisma.InputJsonValue,
+            revisionCount: existing.revisionCount + 1,
+            lastRevisedAt: new Date(),
+          }
         : {}),
     };
     const templateIdProvided = dto.templateId !== undefined;

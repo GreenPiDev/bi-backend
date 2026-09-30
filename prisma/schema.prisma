@@ -1094,6 +1094,20 @@ model Quote {
    * sessizce sablonsuz export'a duser.
    */
   templateId            String?
+  /**
+   * Ad-hoc revizyon takibi (kullanici istegi, bkz. CLAUDE.md). Teklif REVIZE
+   * durumundayken kalemler kaydedilince: o ana kadarki kalemlerin/kurun JSON
+   * snapshot'i buraya yazilir, revisionNote ile birlikte - SADECE en son
+   * revizyonu tutar (tam gecmis degil, "sadece kendimiz icin" hatirlatma
+   * amacli). PDF export'ta hic gosterilmez (QuoteContentBody/print sayfalari
+   * bu alanlari okumaz). revisionCount hic sifirlanmaz, /teklifler/yeni'deki
+   * firma bazli "X kere revize istedi" uyarisi icin (bkz. QuotesService.
+   * getRevisionSummaryForAccount) tum tekliflerde toplanir.
+   */
+  revisionNote          String?
+  revisionSnapshot      Json?
+  revisionCount         Int         @default(0)
+  lastRevisedAt         DateTime?
   createdById           String
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt

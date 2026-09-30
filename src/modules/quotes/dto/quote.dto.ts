@@ -93,6 +93,9 @@ export const UpdateQuoteSchema = z.object({
   items: z.array(QuoteItemInputSchema).min(1).max(200).optional(),
   /** /teklifler listesindeki durum dropdown'undan gelen dogrudan durum degisikligi. */
   status: QuoteStatusSchema.optional(),
+  /** Ad-hoc revizyon takibi: teklif REVIZE durumundayken `items` ile birlikte
+   * gonderilirse zorunludur (bkz. QuotesService.update, revisionNote dogrulamasi). */
+  revisionNote: z.string().trim().min(1).max(2000).optional(),
   /** null verilirse muhatap kisi kaldirilir, alan hic verilmezse mevcut deger korunur. */
   contactId: z.string().uuid().nullable().optional(),
   quoteDate: z.coerce.date().optional(),

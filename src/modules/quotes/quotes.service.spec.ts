@@ -526,6 +526,107 @@ describe('QuotesService', () => {
     ).rejects.toMatchObject({ code: 'CONTACT_ACCOUNT_MISMATCH' });
   });
 
+  it('update: REVIZE durumunda items gonderilip revisionNote olmadan REVISION_NOTE_REQUIRED firlatir', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'REVIZE',
+        quoteCurrency: 'TRY',
+        exchangeRates: null,
+        revisionCount: 0,
+        items: [
+          {
+            product: { name: 'Eski Urun' },
+            quantity: '1',
+            unitPrice: '50',
+            currency: 'TRY',
+            discountPct: '0',
+            vatPct: '0',
+          },
+        ],
+      }),
+      products: [createProduct({ id: 'product-1', price: 100 })],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeFx,
+      fakeFileUrl,
+    );
+    await expect(
+      service.update(
+        'quote-1',
+        { items: [{ productId: 'product-1', quantity: 2 }] } as never,
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ code: 'REVISION_NOTE_REQUIRED' });
+  });
+
+  it('update: REVIZE durumunda items + revisionNote gonderilince eski kalemler snapshotlanir ve revisionCount artar', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'REVIZE',
+        quoteCurrency: 'TRY',
+        exchangeRates: null,
+        revisionCount: 2,
+        items: [
+          {
+            product: { name: 'Eski Urun' },
+            quantity: '1',
+            unitPrice: '50',
+            currency: 'TRY',
+            discountPct: '0',
+            vatPct: '0',
+          },
+        ],
+      }),
+      products: [
+        createProduct({ id: 'product-1', price: 100, currency: 'TRY' }),
+      ],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeFx,
+      fakeFileUrl,
+    );
+    await service.update(
+      'quote-1',
+      {
+        items: [{ productId: 'product-1', quantity: 2 }],
+        revisionNote: 'Musteri fiyat indirimi istedi',
+      } as never,
+      'user-1',
+    );
+
+    expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          revisionNote: 'Musteri fiyat indirimi istedi',
+          revisionCount: 3,
+          lastRevisedAt: expect.any(Date),
+          revisionSnapshot: expect.objectContaining({
+            quoteCurrency: 'TRY',
+            items: [
+              expect.objectContaining({
+                productName: 'Eski Urun',
+                quantity: 1,
+                unitPrice: 50,
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
   it('approve: onay bekleyen teklifi onaylar', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),

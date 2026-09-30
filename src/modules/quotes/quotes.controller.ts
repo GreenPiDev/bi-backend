@@ -65,6 +65,17 @@ export class QuotesController {
     return this.quotes.getFxRates(query.base, query.targets);
   }
 
+  /** Ad-hoc revizyon takibi: /teklifler/yeni'deki firma bazli uyari icin - `:id`
+   * route'undan once tanimlanmali, aksi halde "revision-summary" bir teklif id'si
+   * gibi yakalanir (bkz. fx-rates ile ayni desen). */
+  @Get('revision-summary')
+  @RequiresPermission('quotes', 'VIEW')
+  getRevisionSummary(
+    @Query('accountId') accountId: string,
+  ): Promise<{ count: number }> {
+    return this.quotes.getRevisionSummaryForAccount(accountId);
+  }
+
   @Get(':id')
   @RequiresPermission('quotes', 'VIEW')
   getById(@Param('id') id: string): Promise<QuoteWithDetails> {
