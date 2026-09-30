@@ -63,6 +63,8 @@ export class ExportsService {
       roleIds: user.roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
     });
-    return this.quotePdf.render(quoteId, accessToken);
+    return this.quotePdf.render(quoteId, accessToken, {
+      branded: quote.templateId !== null,
+    });
   }
 }

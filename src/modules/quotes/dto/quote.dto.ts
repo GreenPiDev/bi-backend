@@ -82,6 +82,9 @@ export const CreateQuoteSchema = z.object({
    * QuotesService.assertExchangeRatesCoverItems dogrular. */
   quoteCurrency: CurrencyCodeSchema.default('TRY'),
   exchangeRates: QuoteExchangeRatesSchema.optional(),
+  /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Verilmezse
+   * tenant'in varsayilan sablonu otomatik atanir (varsa) - bkz. QuotesService.create. */
+  templateId: z.string().uuid().nullable().optional(),
 });
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
@@ -103,6 +106,9 @@ export const UpdateQuoteSchema = z.object({
   ibanOptionId: z.string().uuid().nullable().optional(),
   quoteCurrency: CurrencyCodeSchema.optional(),
   exchangeRates: QuoteExchangeRatesSchema.optional(),
+  /** null verilirse sablon kaldirilir (sade export'a doner), hic verilmezse mevcut
+   * deger korunur. */
+  templateId: z.string().uuid().nullable().optional(),
 });
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
 

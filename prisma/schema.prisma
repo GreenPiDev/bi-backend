@@ -52,9 +52,11 @@ enum MessageRecipientKind {
  * katilimci olarak atanan bir hatirlatici (bkz. calendar-events.service.ts).
  */
 enum NotificationType {
-  /** @deprecated Katilimci davet/kabul/red akisina gecilince CALENDAR_EVENT_INVITE'a
+  /**
+   * @deprecated Katilimci davet/kabul/red akisina gecilince CALENDAR_EVENT_INVITE'a
    * ayrildi (bkz. docs/VARSAYIMLAR.md) - eski Notification kayitlari icin degeri
-   * korunuyor, yeni kod bunu artik uretmiyor. */
+   * korunuyor, yeni kod bunu artik uretmiyor.
+   */
   CALENDAR_REMINDER_ASSIGNED
   /**
    * Gunluk zamanlayici (check-todays-reminders.processor.ts): bugun baslayan,
@@ -69,15 +71,23 @@ enum NotificationType {
    * kullanicilara tek bir bildirim uretilir (K2, bkz. CLAUDE.md SS2.3.3).
    */
   CONTACT_INACTIVITY_ALERT
-  /** Katilimci daveti gonderildiginde davet edilene gider - kabul/red bekler. */
+  /**
+   * Katilimci daveti gonderildiginde davet edilene gider - kabul/red bekler.
+   */
   CALENDAR_EVENT_INVITE
-  /** Davet edilen kabul/red verince olusturana gider (red notu body'de tasinir). */
+  /**
+   * Davet edilen kabul/red verince olusturana gider (red notu body'de tasinir).
+   */
   CALENDAR_EVENT_RESPONSE
-  /** Olusturan, zaten kabul etmis bir katilimcinin etkinliginin saat/gun/basligini
-   * degistirdiginde o katilimciya gider. */
+  /**
+   * Olusturan, zaten kabul etmis bir katilimcinin etkinliginin saat/gun/basligini
+   * degistirdiginde o katilimciya gider.
+   */
   CALENDAR_EVENT_UPDATED
-  /** isMeeting=true bir hatirlaticinin detayindaki "Toplanti Raporu Olustur" akisindan
-   * mesaj gonderilince, mesajin alicilarina gider (bkz. MessagesService.create). */
+  /**
+   * isMeeting=true bir hatirlaticinin detayindaki "Toplanti Raporu Olustur" akisindan
+   * mesaj gonderilince, mesajin alicilarina gider (bkz. MessagesService.create).
+   */
   MEETING_REPORT_SENT
 }
 
@@ -199,6 +209,7 @@ model Tenant {
   products               Product[]
   productLists           ProductList[]
   quotes                 Quote[]
+  quoteTemplates         QuoteTemplate[]
   postSaleCases          PostSaleCase[]
   feedbackSurveys        FeedbackSurvey[]
   projects               Project[]
@@ -714,7 +725,9 @@ model CalendarEvent {
   startAt           DateTime
   endAt             DateTime
   allDay            Boolean   @default(false)
-  /** "Bu bir toplantıdır" onay kutusu - hatırlatıcı türünün altında, toplantı olarak isaretlenen etkinlikleri ayirt eder. */
+  /**
+   * "Bu bir toplantıdır" onay kutusu - hatırlatıcı türünün altında, toplantı olarak isaretlenen etkinlikleri ayirt eder.
+   */
   isMeeting         Boolean   @default(false)
   relatedEntityType String?
   relatedEntityId   String?
@@ -774,12 +787,16 @@ model CalendarEventAttendee {
    * kullanicilar icin gecerlidir. list()/getById() PENDING/DECLINED bir katilimcinin
    * kendi takvim izgarasinda etkinligi gostermez (respond() ile ACCEPTED olana kadar).
    */
-  status      CalendarAttendeeStatus @default(PENDING)
-  /** Yanitlarken girilen not - DECLINED'ta zorunlu, ACCEPTED'ta opsiyonel. Olusturanin
-   * /ajanda altindaki "gonderdigim davetler" tablosunda kalici olarak gorunur. */
+  status       CalendarAttendeeStatus @default(PENDING)
+  /**
+   * Yanitlarken girilen not - DECLINED'ta zorunlu, ACCEPTED'ta opsiyonel. Olusturanin
+   * /ajanda altindaki "gonderdigim davetler" tablosunda kalici olarak gorunur.
+   */
   responseNote String?
-  /** Kullanici respond() cagirdiginda damgalanir; creator icin create() aninda set edilir. */
-  respondedAt DateTime?
+  /**
+   * Kullanici respond() cagirdiginda damgalanir; creator icin create() aninda set edilir.
+   */
+  respondedAt  DateTime?
 
   event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
@@ -1070,6 +1087,13 @@ model Quote {
    * (tam degisim/replace semantigi) ayarlanir (bkz. ProjectsService.update).
    */
   projectId             String?
+  /**
+   * Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Nullable ve
+   * onDelete: SetNull - sablonsuz teklifler (null) mevcut sade export yolunu
+   * degismeden kullanmaya devam eder, bir sablon silinirse onu kullanan teklifler
+   * sessizce sablonsuz export'a duser.
+   */
+  templateId            String?
   createdById           String
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
@@ -1079,6 +1103,7 @@ model Quote {
   account        Account         @relation(fields: [accountId], references: [id])
   contact        Contact?        @relation(fields: [contactId], references: [id])
   project        Project?        @relation(fields: [projectId], references: [id])
+  template       QuoteTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
   items          QuoteItem[]
   opportunity    Opportunity?
   postSaleCase   PostSaleCase?
@@ -1089,8 +1114,49 @@ model Quote {
   @@index([tenantId, contactId])
   @@index([tenantId, status])
   @@index([tenantId, projectId])
+  @@index([tenantId, templateId])
   @@index([tenantId, deletedAt])
   @@map("crm_quotes")
+}
+
+/**
+ * Ad-hoc: markali teklif PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Ayarlar-formu
+ * tarzi: sabit 4 sayfalik tasarim (kapak + detay + kosullar + kapanis), tenant
+ * icerigi (logo/gorseller/sirket bilgisi) doldurur. Satis/teslimat kosullari VE
+ * banka hesabi bilgisi sablon duzeyinde SABIT degildir - her teklifte zaten ayri
+ * ayri girilen Quote.salesTerms/deliveryTerms ve Quote.iban* alanlari otomatik
+ * olarak PDF'e cekilir (kullanici karari: sablon olusturuken bunlari tekrar
+ * girmek istemiyor).
+ * Bir tenant'ta en fazla bir isDefault=true kaydi olur (QuoteTemplatesService
+ * transaction ile garanti eder).
+ */
+model QuoteTemplate {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  name                String
+  isDefault           Boolean  @default(false)
+  logoKey             String?
+  coverImageKey       String?
+  closingImageKey     String?
+  companyDisplayName  String
+  companyTagline      String?
+  companyPhone        String?
+  companyEmail        String?
+  companyAddressLines String[] @default([])
+  senderName          String?
+  senderTitle         String?
+  senderPhone         String?
+  senderEmail         String?
+  createdById         String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  quotes Quote[]
+
+  @@index([tenantId])
+  @@index([tenantId, isDefault])
+  @@map("crm_quote_templates")
 }
 
 /**
@@ -1310,9 +1376,11 @@ model Message {
   sentAt          DateTime              @default(now())
   relatedEntity   MessageRelatedEntity?
   relatedEntityId String?
-  /** "Ajanda > Toplanti Raporu Olustur" akisindan (isMeeting=true bir CalendarEvent'e
+  /**
+   * "Ajanda > Toplanti Raporu Olustur" akisindan (isMeeting=true bir CalendarEvent'e
    * bagli) gonderilen mesajlarda true - meetingEventId verildiginde MessagesService.create()
-   * tarafindan setlenir, /mesajlar filtresinde ayirt etmek icin (bkz. MessageQuerySchema). */
+   * tarafindan setlenir, /mesajlar filtresinde ayirt etmek icin (bkz. MessageQuerySchema).
+   */
   isMeetingReport Boolean               @default(false)
   createdById     String
   createdAt       DateTime              @default(now())

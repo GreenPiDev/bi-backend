@@ -34,6 +34,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Product',
   'ProductList',
   'Quote',
+  'QuoteTemplate',
   'PostSaleCase',
   'FeedbackSurvey',
   'Project',

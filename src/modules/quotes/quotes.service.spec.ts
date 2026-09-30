@@ -21,6 +21,7 @@ const fakeQuotesCache = {
 const fakeOpportunitiesCache = { invalidate: vi.fn() } as never;
 const fakePostSaleCasesCache = { invalidate: vi.fn() } as never;
 const fakeFx = { getRatesToBase: vi.fn() } as never;
+const fakeFileUrl = { build: vi.fn(() => null) } as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -85,6 +86,7 @@ function createPrisma({ quoteRow, products, contact, postSaleCase }: Setup) {
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     opportunity: { create: vi.fn().mockResolvedValue({ id: 'opp-1' }) },
+    quoteTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
   };
   return {
     quote: {
@@ -116,6 +118,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -135,6 +138,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -171,6 +175,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -203,6 +208,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(
       service.create('user-1', {
@@ -224,6 +230,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(
       service.create('user-1', {
@@ -254,6 +261,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -295,6 +303,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(
       service.create('user-1', {
@@ -326,6 +335,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -360,6 +370,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(
       service.update('quote-1', { items: [] } as never, 'user-1'),
@@ -383,6 +394,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.update(
       'quote-1',
@@ -421,6 +433,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.update(
       'quote-1',
@@ -453,6 +466,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.update(
       'quote-1',
@@ -480,6 +494,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.update('quote-1', { contactId: null } as never, 'user-1');
 
@@ -504,6 +519,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(
       service.update('quote-1', { contactId: 'contact-2' } as never, 'user-1'),
@@ -523,6 +539,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.approve('quote-1', 'manager-1');
     expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
@@ -552,6 +569,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.approve('quote-1', 'manager-1');
 
@@ -583,6 +601,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.approve('quote-1', 'manager-1');
 
@@ -602,6 +621,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await expect(service.approve('quote-1', 'manager-1')).rejects.toMatchObject(
       {
@@ -623,6 +643,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.reject('quote-1', 'manager-1');
     expect(prisma.quote.update).toHaveBeenCalledWith(
@@ -642,6 +663,7 @@ describe('QuotesService', () => {
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
       fakeFx,
+      fakeFileUrl,
     );
     await service.remove('quote-1');
     expect(prisma.quote.delete).toHaveBeenCalledWith({

@@ -49,6 +49,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { QueryModule } from './modules/query/query.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
+import { QuoteTemplatesModule } from './modules/quote-templates/quote-templates.module';
 import { ReminderTypeOptionsModule } from './modules/reminder-type-options/reminder-type-options.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -113,6 +114,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ProductsModule,
     ProductImportsModule,
     QuotesModule,
+    QuoteTemplatesModule,
     PostSaleCasesModule,
     ProjectsModule,
     PurchaseOrdersModule,

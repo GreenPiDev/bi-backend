@@ -9,6 +9,7 @@ import type {
   ProductList,
   Quote,
   QuoteItem,
+  QuoteTemplate,
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
@@ -18,6 +19,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { FileUrlService } from '../../core/storage/file-url.service';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import {
   POST_SALE_SURVEY_QUEUE,
@@ -46,6 +48,7 @@ const QUOTE_INCLUDE = {
   account: true,
   contact: true,
   opportunity: true,
+  template: true,
   items: { include: { product: { include: { productList: true } } } },
 } as const;
 
@@ -53,14 +56,37 @@ export type QuoteWithDetails = Quote & {
   account: Account;
   contact: Contact | null;
   opportunity: Opportunity | null;
+  template: QuoteTemplate | null;
   items: (QuoteItem & { product: Product & { productList: ProductList } })[];
   createdByName: string | null;
+};
+
+export interface QuotePrintTemplateData {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  coverImageUrl: string | null;
+  closingImageUrl: string | null;
+  companyDisplayName: string;
+  companyTagline: string | null;
+  companyPhone: string | null;
+  companyEmail: string | null;
+  companyAddressLines: string[];
+  senderName: string | null;
+  senderTitle: string | null;
+  senderPhone: string | null;
+  senderEmail: string | null;
+}
+
+export type QuotePrintData = Omit<QuoteWithDetails, 'template'> & {
+  template: QuotePrintTemplateData | null;
 };
 
 type QuoteRow = Quote & {
   account: Account;
   contact: Contact | null;
   opportunity: Opportunity | null;
+  template: QuoteTemplate | null;
   items: (QuoteItem & { product: Product & { productList: ProductList } })[];
 };
 
@@ -104,6 +130,7 @@ export class QuotesService {
     private readonly opportunitiesCache: OpportunitiesCacheService,
     private readonly postSaleCasesCache: PostSaleCasesCacheService,
     private readonly fx: FxService,
+    private readonly fileUrl: FileUrlService,
   ) {}
 
   /** Teklif para birimi secim formu icin guncel kur (otomatik on-doldurma, kullanici
@@ -250,6 +277,36 @@ export class QuotesService {
     };
   }
 
+  /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). `templateId`
+   * verilmezse (undefined) tenant'in varsayilan sablonu otomatik atanir (yoksa null);
+   * `null` verilirse sablon acikca kaldirilir; bir id verilirse tenant'a ait olmasi
+   * dogrulanir. */
+  private async resolveTemplateId(
+    tx: Pick<TenantPrismaClient, 'quoteTemplate'>,
+    templateId: string | null | undefined,
+  ): Promise<string | null> {
+    if (templateId === undefined) {
+      const defaultTemplate = await tx.quoteTemplate.findFirst({
+        where: { isDefault: true },
+      });
+      return defaultTemplate?.id ?? null;
+    }
+    if (templateId === null) {
+      return null;
+    }
+    const template = await tx.quoteTemplate.findFirst({
+      where: { id: templateId },
+    });
+    if (!template) {
+      throw new AppException(
+        'QUOTE_TEMPLATE_NOT_FOUND',
+        'Secilen teklif sablonu bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return template.id;
+  }
+
   /**
    * Q3/Q4/Q5/Q7: satir basina birim fiyati (Product.price ya da manuel ezme) ve
    * iskonto notunu belirler, ayrica ProductDiscountPolicy (Product.maxDiscountPct)
@@ -378,6 +435,46 @@ export class QuotesService {
     return withName;
   }
 
+  /** Ad-hoc: markali PDF yazdirma sayfasinin (quote-template-print-page.tsx) tek
+   * seferde ihtiyac duydugu tum veri - sablonun gorsel URL'leri dahil (bkz.
+   * docs/VARSAYIMLAR.md V41). Banka hesabi/kosul metni sablon duzeyinde
+   * TUTULMAZ - bunlar zaten teklifin kendi alanlaridir (Quote.ibanNumber vb.,
+   * Quote.salesTerms, Quote.deliveryTerms), QUOTE_INCLUDE ile gelen
+   * `quote.template` uzerinde ek sorguya gerek yok. templateId yoksa
+   * `template: null` doner. */
+  async getPrintData(id: string): Promise<QuotePrintData> {
+    const quote = await this.getById(id);
+    const template = quote.template;
+    if (!template) {
+      return { ...quote, template: null };
+    }
+    return {
+      ...quote,
+      template: {
+        id: template.id,
+        name: template.name,
+        logoUrl: this.fileUrl.build(template.logoKey, template.updatedAt),
+        coverImageUrl: this.fileUrl.build(
+          template.coverImageKey,
+          template.updatedAt,
+        ),
+        closingImageUrl: this.fileUrl.build(
+          template.closingImageKey,
+          template.updatedAt,
+        ),
+        companyDisplayName: template.companyDisplayName,
+        companyTagline: template.companyTagline,
+        companyPhone: template.companyPhone,
+        companyEmail: template.companyEmail,
+        companyAddressLines: template.companyAddressLines,
+        senderName: template.senderName,
+        senderTitle: template.senderTitle,
+        senderPhone: template.senderPhone,
+        senderEmail: template.senderEmail,
+      },
+    };
+  }
+
   /**
    * Gunluk sira sayacinin taban sorgusu. `tx.quote.count()` yerine ham SQL
    * kullaniyor: tenant-scoped extension SOFT_DELETE_MODELS icin okuma
@@ -450,6 +547,7 @@ export class QuotesService {
             items,
             dto.exchangeRates,
           );
+          const templateId = await this.resolveTemplateId(tx, dto.templateId);
 
           const prefix = quoteNumberPrefix(new Date());
           const countToday = await this.countQuoteNumbersForPrefix(tx, prefix);
@@ -467,6 +565,7 @@ export class QuotesService {
               salesTerms: dto.salesTerms ?? null,
               deliveryTerms: dto.deliveryTerms ?? null,
               ...ibanSnapshot,
+              templateId,
               status: 'DRAFT',
               createdById,
               quoteCurrency: dto.quoteCurrency,
@@ -567,7 +666,9 @@ export class QuotesService {
         ? { exchangeRates: dto.exchangeRates }
         : {}),
     };
-    const hasFieldUpdates = Object.keys(contactUpdateData).length > 0;
+    const templateIdProvided = dto.templateId !== undefined;
+    const hasFieldUpdates =
+      Object.keys(contactUpdateData).length > 0 || templateIdProvided;
 
     const postSaleCase = await this.prisma.$transaction(async (tx) => {
       if (contactIdProvided && dto.contactId) {
@@ -581,6 +682,11 @@ export class QuotesService {
             HttpStatus.BAD_REQUEST,
           );
         }
+      }
+
+      if (templateIdProvided) {
+        const templateId = await this.resolveTemplateId(tx, dto.templateId);
+        (contactUpdateData as Record<string, unknown>).templateId = templateId;
       }
 
       const finalQuoteCurrency = dto.quoteCurrency ?? existing.quoteCurrency;

@@ -31,7 +31,11 @@ import {
   type QuoteQueryDto,
   type UpdateQuoteDto,
 } from './dto/quote.dto';
-import { QuotesService, type QuoteWithDetails } from './quotes.service';
+import {
+  QuotesService,
+  type QuotePrintData,
+  type QuoteWithDetails,
+} from './quotes.service';
 import type { FxRatesResult } from '../../core/fx/fx.service';
 
 @ModulePage('quotes')
@@ -65,6 +69,14 @@ export class QuotesController {
   @RequiresPermission('quotes', 'VIEW')
   getById(@Param('id') id: string): Promise<QuoteWithDetails> {
     return this.quotes.getById(id);
+  }
+
+  /** Markali PDF yazdirma sayfasi (quote-template-print-page.tsx) icin tek seferlik
+   * veri ucu - bkz. docs/VARSAYIMLAR.md V41. */
+  @Get(':id/print-data')
+  @RequiresPermission('quotes', 'VIEW')
+  getPrintData(@Param('id') id: string): Promise<QuotePrintData> {
+    return this.quotes.getPrintData(id);
   }
 
   @Post()

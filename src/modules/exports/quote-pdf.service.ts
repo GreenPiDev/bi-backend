@@ -15,7 +15,11 @@ const PDF_VIEWPORT_HEIGHT_PX = 1200;
 export class QuotePdfService {
   constructor(private readonly config: ConfigService) {}
 
-  async render(quoteId: string, accessToken: string): Promise<Buffer> {
+  async render(
+    quoteId: string,
+    accessToken: string,
+    options?: { branded?: boolean },
+  ): Promise<Buffer> {
     const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
     const browser = await chromium.launch();
     try {
@@ -33,9 +37,16 @@ export class QuotePdfService {
         },
       ]);
       const page = await context.newPage();
-      // ?print=1 -> QuoteDetailPage sade rapor gorunumune gecer (bkz.
-      // bi-frontend app-shell.tsx / quote-detail-page.tsx).
-      await page.goto(`${frontendUrl}/teklifler/${quoteId}?print=1`, {
+      /**
+       * Ad-hoc (bkz. docs/VARSAYIMLAR.md V41): teklifin bir QuoteTemplate'i varsa
+       * markali cok sayfali yazdirma rotasina (quote-template-print-page.tsx)
+       * gidilir; yoksa DEGISMEYEN mevcut sade rota kullanilir - baska hicbir PDF
+       * export'u (dashboard, sablonsuz teklif) bu daldan etkilenmez.
+       */
+      const printPath = options?.branded
+        ? `/teklifler/${quoteId}/sablon-baski`
+        : `/teklifler/${quoteId}`;
+      await page.goto(`${frontendUrl}${printPath}?print=1`, {
         waitUntil: 'networkidle',
       });
       await page.waitForTimeout(RENDER_SETTLE_MS);

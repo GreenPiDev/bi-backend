@@ -78,6 +78,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'EXPORT'],
   },
   {
+    key: 'quote-templates',
+    label: 'Teklif Sablonlari',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
     key: 'post-sale-cases',
     label: 'Satis Sonrasi Destek',
     supportedActions: ['UPDATE'],
