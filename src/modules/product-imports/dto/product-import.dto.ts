@@ -11,7 +11,6 @@ export const PRODUCT_IMPORT_TARGET_FIELDS = [
   'currency',
   'description',
   'category',
-  'costPrice',
   'minStockLevel',
   'maxDiscountPct',
 ] as const;

@@ -20,10 +20,13 @@ const fakeQuotesCache = {
 } as never;
 const fakeOpportunitiesCache = { invalidate: vi.fn() } as never;
 const fakePostSaleCasesCache = { invalidate: vi.fn() } as never;
+const fakeProductsCache = { invalidate: vi.fn() } as never;
 const fakeFx = { getRatesToBase: vi.fn() } as never;
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
 const notificationsCreate = vi.fn();
 const fakeNotifications = { create: notificationsCreate } as never;
+const decreaseStockTx = vi.fn();
+const fakeStockItems = { decreaseStockTx } as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -57,6 +60,7 @@ interface Setup {
   postSaleCase?: unknown;
   actingUser?: unknown;
   activeUsers?: unknown[];
+  existingStockMovement?: unknown;
 }
 
 function createPrisma({
@@ -66,6 +70,7 @@ function createPrisma({
   postSaleCase,
   actingUser,
   activeUsers,
+  existingStockMovement,
 }: Setup) {
   const tx = {
     account: {
@@ -98,6 +103,9 @@ function createPrisma({
     },
     opportunity: { create: vi.fn().mockResolvedValue({ id: 'opp-1' }) },
     quoteTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
+    stockMovement: {
+      findFirst: vi.fn().mockResolvedValue(existingStockMovement ?? null),
+    },
   };
   return {
     quote: {
@@ -118,6 +126,7 @@ describe('QuotesService', () => {
   beforeEach(() => {
     auditLog.mockClear();
     surveyQueueAdd.mockClear();
+    decreaseStockTx.mockClear();
   });
 
   it('getById: bulunamayan teklif icin NOT_FOUND firlatir', async () => {
@@ -129,9 +138,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -150,9 +161,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -188,9 +201,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -222,9 +237,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(
       service.create('user-1', {
@@ -245,9 +262,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(
       service.create('user-1', {
@@ -277,9 +296,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -320,9 +341,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(
       service.create('user-1', {
@@ -353,9 +376,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await runInTenant(() =>
       service.create('user-1', {
@@ -389,9 +414,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(
       service.update('quote-1', { items: [] } as never, 'user-1'),
@@ -414,9 +441,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.update(
       'quote-1',
@@ -454,9 +483,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.update(
       'quote-1',
@@ -493,9 +524,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     notificationsCreate.mockClear();
     await runInTenant(() =>
@@ -537,9 +570,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     notificationsCreate.mockClear();
     await runInTenant(() =>
@@ -562,9 +597,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.update(
       'quote-1',
@@ -591,9 +628,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.update('quote-1', { contactId: null } as never, 'user-1');
 
@@ -617,9 +656,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(
       service.update('quote-1', { contactId: 'contact-2' } as never, 'user-1'),
@@ -653,9 +694,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await expect(
       service.update(
@@ -695,9 +738,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.update(
       'quote-1',
@@ -741,17 +786,140 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
-    await service.approve('quote-1', 'manager-1');
+    await service.approve('quote-1', 'manager-1', {
+      warehouseId: 'warehouse-1',
+    });
     expect(prisma.__tx.quote.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: 'APPROVED',
           approvedById: 'manager-1',
         }),
+      }),
+    );
+  });
+
+  it('approve: her teklif kalemi icin stokItems.decreaseStockTx QUOTE_SALE tipiyle cagrilir', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'PENDING_APPROVAL',
+        items: [
+          { productId: 'product-1', quantity: 3 },
+          { productId: 'product-2', quantity: 7 },
+        ],
+      }),
+      products: [],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeProductsCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+      fakeStockItems,
+    );
+    await service.approve('quote-1', 'manager-1', {
+      warehouseId: 'warehouse-1',
+    });
+
+    expect(decreaseStockTx).toHaveBeenCalledTimes(2);
+    expect(decreaseStockTx).toHaveBeenCalledWith(
+      prisma.__tx,
+      expect.objectContaining({
+        productId: 'product-1',
+        warehouseId: 'warehouse-1',
+        quantity: 3,
+        type: 'QUOTE_SALE',
+        quoteId: 'quote-1',
+      }),
+    );
+    expect(decreaseStockTx).toHaveBeenCalledWith(
+      prisma.__tx,
+      expect.objectContaining({
+        productId: 'product-2',
+        warehouseId: 'warehouse-1',
+        quantity: 7,
+        type: 'QUOTE_SALE',
+        quoteId: 'quote-1',
+      }),
+    );
+  });
+
+  it('approve: ayni teklif icin zaten bir QUOTE_SALE hareketi varsa tekrar dusmez (idempotent)', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'PENDING_APPROVAL',
+        items: [{ productId: 'product-1', quantity: 3 }],
+      }),
+      products: [],
+      existingStockMovement: { id: 'mv-1' },
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeProductsCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+      fakeStockItems,
+    );
+    await service.approve('quote-1', 'manager-1', {
+      warehouseId: 'warehouse-1',
+    });
+
+    expect(decreaseStockTx).not.toHaveBeenCalled();
+  });
+
+  it("update: status APPROVED'a cekilince de teklif kalemleri stoktan duser", async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({
+        status: 'PENDING_APPROVAL',
+        items: [{ productId: 'product-1', quantity: 5 }],
+      }),
+      products: [],
+    });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeProductsCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+      fakeStockItems,
+    );
+    await service.update(
+      'quote-1',
+      { status: 'APPROVED', warehouseId: 'warehouse-2' } as never,
+      'manager-1',
+    );
+
+    expect(decreaseStockTx).toHaveBeenCalledWith(
+      prisma.__tx,
+      expect.objectContaining({
+        productId: 'product-1',
+        warehouseId: 'warehouse-2',
+        quantity: 5,
+        type: 'QUOTE_SALE',
+        quoteId: 'quote-1',
       }),
     );
   });
@@ -772,11 +940,15 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
-    await service.approve('quote-1', 'manager-1');
+    await service.approve('quote-1', 'manager-1', {
+      warehouseId: 'warehouse-1',
+    });
 
     expect(prisma.__tx.postSaleCase.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -805,11 +977,15 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
-    await service.approve('quote-1', 'manager-1');
+    await service.approve('quote-1', 'manager-1', {
+      warehouseId: 'warehouse-1',
+    });
 
     expect(surveyQueueAdd).not.toHaveBeenCalled();
   });
@@ -826,15 +1002,17 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
-    await expect(service.approve('quote-1', 'manager-1')).rejects.toMatchObject(
-      {
-        code: 'QUOTE_NOT_PENDING',
-      },
-    );
+    await expect(
+      service.approve('quote-1', 'manager-1', { warehouseId: 'warehouse-1' }),
+    ).rejects.toMatchObject({
+      code: 'QUOTE_NOT_PENDING',
+    });
   });
 
   it('reject: onay bekleyen teklifi reddeder', async () => {
@@ -849,9 +1027,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.reject('quote-1', 'manager-1');
     expect(prisma.quote.update).toHaveBeenCalledWith(
@@ -870,9 +1050,11 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeProductsCache,
       fakeFx,
       fakeFileUrl,
       fakeNotifications,
+      fakeStockItems,
     );
     await service.remove('quote-1');
     expect(prisma.quote.delete).toHaveBeenCalledWith({

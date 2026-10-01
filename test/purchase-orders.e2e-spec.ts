@@ -30,6 +30,7 @@ describe('Purchase Orders & Stock (e2e)', () => {
   let approvedQuoteId: string;
   let purchaseOrderId: string;
   let stockItemIdA: string;
+  let warehouseIdA: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -112,6 +113,7 @@ describe('Purchase Orders & Stock (e2e)', () => {
     const warehouse = await prisma.warehouse.create({
       data: { tenantId: tenantIdA, name: `Depo${emailSuffix}` },
     });
+    warehouseIdA = warehouse.id;
 
     // productWithStockId icin yeterli stok var (SP2: teklif miktarindan dusulecek)
     await prisma.stockItem.create({
@@ -360,37 +362,49 @@ describe('Purchase Orders & Stock (e2e)', () => {
     expect(productIds).not.toContain(productWithStockId);
   });
 
-  it('PATCH /stock-items/:productId: stok miktarini setler (create-then-update)', async () => {
-    const createRes = await request(app.getHttpServer())
-      .patch(`/api/v1/stock-items/${productWithoutStockId}`)
+  it('POST /stock-items/:productId/increase: stok girer ve agirlikli ortalama maliyeti hesaplar (WAC)', async () => {
+    const firstRes = await request(app.getHttpServer())
+      .post(`/api/v1/stock-items/${productWithoutStockId}/increase`)
       .set('Cookie', cookiesA)
-      .send({ quantity: 25 });
-    expect(createRes.status).toBe(200);
-    expect(createRes.body.quantity).toBe('25');
-    stockItemIdA = createRes.body.id as string;
+      .send({ warehouseId: warehouseIdA, quantity: 15, unitCost: 5 });
+    expect(firstRes.status).toBe(201);
+    expect(firstRes.body.quantity).toBe('15');
+    stockItemIdA = firstRes.body.id as string;
 
-    const updateRes = await request(app.getHttpServer())
-      .patch(`/api/v1/stock-items/${productWithoutStockId}`)
+    const secondRes = await request(app.getHttpServer())
+      .post(`/api/v1/stock-items/${productWithoutStockId}/increase`)
       .set('Cookie', cookiesA)
-      .send({ quantity: 30 });
-    expect(updateRes.status).toBe(200);
-    expect(updateRes.body.id).toBe(stockItemIdA);
-    expect(updateRes.body.quantity).toBe('30');
+      .send({ warehouseId: warehouseIdA, quantity: 3, unitCost: 10 });
+    expect(secondRes.status).toBe(201);
+    expect(secondRes.body.id).toBe(stockItemIdA);
+    expect(secondRes.body.quantity).toBe('18');
+    // (15*5 + 3*10) / 18 = 5.8333...
+    expect(Number(secondRes.body.product.avgCost)).toBeCloseTo(5.8333, 3);
   });
 
-  it('PATCH /stock-items/:productId: bilinmeyen urun icin 404 doner', async () => {
+  it('POST /stock-items/:productId/decrease: miktari dusurur, ortalama maliyeti degistirmez', async () => {
     const res = await request(app.getHttpServer())
-      .patch(`/api/v1/stock-items/${randomUUID()}`)
+      .post(`/api/v1/stock-items/${productWithoutStockId}/decrease`)
       .set('Cookie', cookiesA)
-      .send({ quantity: 5 });
+      .send({ warehouseId: warehouseIdA, quantity: 5 });
+    expect(res.status).toBe(201);
+    expect(res.body.quantity).toBe('13');
+    expect(Number(res.body.product.avgCost)).toBeCloseTo(5.8333, 3);
+  });
+
+  it('POST /stock-items/:productId/increase: bilinmeyen urun icin 404 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/stock-items/${randomUUID()}/increase`)
+      .set('Cookie', cookiesA)
+      .send({ warehouseId: warehouseIdA, quantity: 5, unitCost: 1 });
     expect(res.status).toBe(404);
   });
 
-  it('B tenanti A tenantinin urunu icin stok gorunumune erisemez (404, cross-tenant product)', async () => {
+  it('B tenanti A tenantinin urunu icin stok girisi yapamaz (404, cross-tenant product)', async () => {
     const res = await request(app.getHttpServer())
-      .patch(`/api/v1/stock-items/${productWithoutStockId}`)
+      .post(`/api/v1/stock-items/${productWithoutStockId}/increase`)
       .set('Cookie', cookiesB)
-      .send({ quantity: 5 });
+      .send({ warehouseId: warehouseIdA, quantity: 5, unitCost: 1 });
     expect(res.status).toBe(404);
   });
 

@@ -1,21 +1,60 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Product, StockItem } from '@prisma/client';
+import type { Product, StockItem, StockMovementType } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
-import { AuditService } from '../audit/audit.service';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { ProductsCacheService } from '../products/products-cache.service';
 import type {
+  DecreaseStockDto,
+  IncreaseStockDto,
   StockHistoryQueryDto,
   StockItemQueryDto,
   TransferStockDto,
-  UpsertStockItemDto,
 } from './dto/stock-item.dto';
 import { getStockStatus, STOCK_STATUS_SORT_ORDER } from './stock-status.util';
+
+/** `$transaction`'in callback'ine Prisma'nin gectigi `tx` client'in tipi - tenant-scoped
+ * extension'li client uzerinden turetilir ki extension'in enjekte ettigi tenantId filtresi
+ * tx icinde de gecerli olsun (bkz. QuotesService'teki ayni desen, `this.prisma.$transaction`). */
+export type StockTx = Parameters<
+  Parameters<TenantPrismaClient['$transaction']>[0]
+>[0];
+
+/** Postgres SERIALIZABLE izolasyonunda yazma catismasi (iki eszamanli stok girisi/cikisi
+ * ayni urune carpisirsa) Prisma'nin P2034 hatasiyla sinyallenir - Prisma'nin resmi onerisi
+ * bu hatada islemi yeniden denemektir (bkz. docs/PLAN_STOK_MALIYET.md Faz 2). */
+const STOCK_WRITE_MAX_RETRIES = 3;
+
+/** AuditService.list'teki LIST_LIMIT ile ayni desen - stok gecmisi tek seferde tum
+ * listeyi ister (sayfalama yok), asiri buyumeyi onlemek icin ust sinir. */
+const STOCK_HISTORY_LIST_LIMIT = 200;
+
+async function runSerializableStockWrite<T>(
+  prisma: TenantPrismaClient,
+  fn: (tx: StockTx) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 1; attempt <= STOCK_WRITE_MAX_RETRIES; attempt++) {
+    try {
+      return await prisma.$transaction(fn, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      const isSerializationConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2034';
+      if (!isSerializationConflict || attempt === STOCK_WRITE_MAX_RETRIES) {
+        throw error;
+      }
+    }
+  }
+  // Teorik olarak ulasilmaz: dongu ya basariyla doner ya da son denemede firlatir.
+  throw new Error('runSerializableStockWrite: beklenmeyen dongu sonu.');
+}
 
 /** Depo bazinda miktar - bir urunun hangi depoda kac tane oldugunu gosteren
  * aciklatilmis satir (/envanter?tab=stock'taki genisletilmis satirin icerigi). */
@@ -44,17 +83,25 @@ export interface StockMovementView {
   warehouseName: string;
   userName: string;
   userEmail: string;
+  type: StockMovementType;
   note: string | null;
   previousQuantity: number;
   quantity: number;
+  newQuantity: number;
   delta: number;
+  /** Sadece INCREASE'de dolu. */
+  unitCost: number | null;
+  previousAvgCost: number | null;
+  newAvgCost: number | null;
+  /** QUOTE_SALE'in hangi teklifin onayindan geldigi (Faz 4). */
+  quoteId: string | null;
   createdAt: Date;
 }
 
 /** Henuz hic miktar girilmemis (StockItem kaydi olmayan) urunler icin de bir
  * satir uretmek amaciyla kullanilan sentetik id - StockItemsController hicbir
- * yerde bu id'yi PK olarak yazmaya calismaz, PATCH /stock-items/:productId
- * her zaman productId + warehouseId ile calisir. */
+ * yerde bu id'yi PK olarak yazmaya calismaz, artis/azalis uclari her zaman
+ * productId + warehouseId ile calisir. */
 function virtualId(productId: string): string {
   return `virtual:${productId}`;
 }
@@ -136,14 +183,13 @@ function sortRows(
 export class StockItemsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
-    private readonly audit: AuditService,
     private readonly productsCache: ProductsCacheService,
   ) {}
 
   /**
    * /urunler'de tanimli her urun /stok'ta bir satir olarak gorunur - toplam miktar
    * hic girilmemisse (hicbir depoda StockItem kaydi yoksa) 0 miktarli "sanal" bir
-   * satir uretilir (PATCH ile ilk kez kaydedildiginde gercek satira doner). Aksi
+   * satir uretilir (ilk stok girisiyle gercek satira doner). Aksi
    * halde kullanici yeni bir urune stok girecek bir satir/buton hic goremiyordu
    * (bkz. bug raporu). Gercek depolari olan urunler icin toplam, depolar arasi
    * StockItem.quantity toplamidir (bkz. toStockItemWithProduct).
@@ -224,8 +270,11 @@ export class StockItemsService {
     });
   }
 
-  private async requireProduct(productId: string): Promise<Product> {
-    const product = await this.prisma.product.findFirst({
+  private async requireProduct(
+    productId: string,
+    tx: StockTx = this.prisma,
+  ): Promise<Product> {
+    const product = await tx.product.findFirst({
       where: { id: productId },
     });
     if (!product) {
@@ -240,8 +289,9 @@ export class StockItemsService {
 
   private async requireWarehouse(
     warehouseId: string,
+    tx: StockTx = this.prisma,
   ): Promise<{ id: string; name: string }> {
-    const warehouse = await this.prisma.warehouse.findFirst({
+    const warehouse = await tx.warehouse.findFirst({
       where: { id: warehouseId },
     });
     if (!warehouse) {
@@ -254,51 +304,173 @@ export class StockItemsService {
     return warehouse;
   }
 
-  /** `upsertByProductId` ve `transferStock` arasinda paylasilan cekirdek:
-   * urun + depo basina miktari setler ve bunu denetim kaydina yazar.
-   * tenant-scoped extension upsert desteklemedigi icin (bkz. QuotesService.
-   * ensurePostSaleCase) findFirst + create/update deseni kullanilir. */
-  private async setWarehouseQuantity(params: {
-    productId: string;
-    productName: string;
-    warehouseId: string;
-    warehouseName: string;
-    quantity: number;
-    note?: string | null;
-  }): Promise<StockItem> {
-    const existing = await this.prisma.stockItem.findFirst({
+  /**
+   * Stok girisi (INCREASE) - WAC (hareketli agirlikli ortalama maliyet) hesabinin
+   * kalbi, bkz. docs/PLAN_STOK_MALIYET.md Faz 2. Maliyet urun bazinda tutuldugu icin
+   * (depo bazinda degil) oldTotalQty bu urunun TUM depolardaki toplam miktaridir.
+   * `tx` disaridan verilirse (bkz. Faz 4 - teklif onayinda kullanilacak) o transaction
+   * icinde calisir; verilmezse kendi SERIALIZABLE transaction'ini acar.
+   */
+  private async increaseStockTx(
+    tx: StockTx,
+    params: {
+      productId: string;
+      warehouseId: string;
+      quantity: number;
+      unitCost: number;
+      note?: string | null;
+    },
+  ): Promise<void> {
+    const product = await this.requireProduct(params.productId, tx);
+    await this.requireWarehouse(params.warehouseId, tx);
+
+    const stockItems = await tx.stockItem.findMany({
+      where: { productId: params.productId },
+    });
+    const oldTotalQty = stockItems.reduce(
+      (sum, si) => sum.add(si.quantity),
+      new Prisma.Decimal(0),
+    );
+    const oldAvgCost = new Prisma.Decimal(product.avgCost ?? 0);
+    const quantity = new Prisma.Decimal(params.quantity);
+    const unitCost = new Prisma.Decimal(params.unitCost);
+    const newTotalQty = oldTotalQty.add(quantity);
+    const newAvgCost = newTotalQty.isZero()
+      ? unitCost
+      : oldTotalQty
+          .mul(oldAvgCost)
+          .add(quantity.mul(unitCost))
+          .div(newTotalQty);
+
+    const existing = stockItems.find(
+      (si) => si.warehouseId === params.warehouseId,
+    );
+    const previousQuantity = new Prisma.Decimal(existing?.quantity ?? 0);
+    const newQuantity = previousQuantity.add(quantity);
+
+    if (existing) {
+      await tx.stockItem.update({
+        where: { id: existing.id },
+        data: { quantity: newQuantity },
+      });
+    } else {
+      await tx.stockItem.create({
+        data: {
+          productId: params.productId,
+          warehouseId: params.warehouseId,
+          quantity: newQuantity,
+        } as never,
+      });
+    }
+
+    await tx.product.update({
+      where: { id: params.productId },
+      data: { avgCost: newAvgCost },
+    });
+
+    const actingUserId = TenantContext.getOrThrow().userId;
+    await tx.stockMovement.create({
+      data: {
+        productId: params.productId,
+        warehouseId: params.warehouseId,
+        type: 'INCREASE',
+        quantity,
+        unitCost,
+        previousAvgCost: product.avgCost,
+        newAvgCost,
+        previousQuantity,
+        newQuantity,
+        note: params.note ?? null,
+        createdById: actingUserId,
+      } as never,
+    });
+  }
+
+  async increaseStock(
+    productId: string,
+    dto: IncreaseStockDto,
+  ): Promise<StockItemWithProduct> {
+    await runSerializableStockWrite(this.prisma, (tx) =>
+      this.increaseStockTx(tx, { productId, ...dto }),
+    );
+    await this.productsCache.invalidate();
+    return this.refreshRow(productId);
+  }
+
+  /**
+   * Stok cikisi - DECREASE (elle), QUOTE_SALE (teklif onayi, Faz 4) veya CORRECTION
+   * icin paylasilan cekirdek. Maliyeti DEGISTIRMEZ, sadece miktari dusurur. Negatife
+   * dusmeye izin verilir (bkz. docs/PLAN_STOK_MALIYET.md karar 6) - stok henuz
+   * gelmemis olsa da satis onaylanabilmeli.
+   *
+   * Bilerek `private` degil: QuotesService.ensureStockDecreaseForQuote (Faz 4) kendi
+   * `$transaction`'i icinden bunu dogrudan cagirir ki teklif onayi + stok dususu
+   * ATOMIK olsun (biri basarisiz olursa digeri de geri alinsin).
+   */
+  async decreaseStockTx(
+    tx: StockTx,
+    params: {
+      productId: string;
+      warehouseId: string;
+      quantity: number;
+      type: StockMovementType;
+      quoteId?: string | null;
+      note?: string | null;
+    },
+  ): Promise<void> {
+    const product = await this.requireProduct(params.productId, tx);
+    await this.requireWarehouse(params.warehouseId, tx);
+
+    const existing = await tx.stockItem.findFirst({
       where: { productId: params.productId, warehouseId: params.warehouseId },
     });
+    const previousQuantity = new Prisma.Decimal(existing?.quantity ?? 0);
+    const quantity = new Prisma.Decimal(params.quantity);
+    const newQuantity = previousQuantity.sub(quantity);
 
-    const stockItem = existing
-      ? await this.prisma.stockItem.update({
-          where: { id: existing.id },
-          data: { quantity: params.quantity },
-        })
-      : await this.prisma.stockItem.create({
-          data: {
-            productId: params.productId,
-            warehouseId: params.warehouseId,
-            quantity: params.quantity,
-          } as never,
-        });
+    if (existing) {
+      await tx.stockItem.update({
+        where: { id: existing.id },
+        data: { quantity: newQuantity },
+      });
+    } else {
+      await tx.stockItem.create({
+        data: {
+          productId: params.productId,
+          warehouseId: params.warehouseId,
+          quantity: newQuantity,
+        } as never,
+      });
+    }
 
-    await this.audit.log({
-      action: existing ? 'UPDATE' : 'CREATE',
-      entity: 'StockItem',
-      entityId: stockItem.id,
-      meta: {
+    const actingUserId = TenantContext.getOrThrow().userId;
+    await tx.stockMovement.create({
+      data: {
         productId: params.productId,
-        productName: params.productName,
         warehouseId: params.warehouseId,
-        warehouseName: params.warehouseName,
-        ...(existing ? { previousQuantity: existing.quantity } : {}),
-        quantity: params.quantity,
+        type: params.type,
+        quantity,
+        unitCost: null,
+        previousAvgCost: product.avgCost,
+        newAvgCost: product.avgCost,
+        previousQuantity,
+        newQuantity,
+        quoteId: params.quoteId ?? null,
         note: params.note ?? null,
-      },
+        createdById: actingUserId,
+      } as never,
     });
+  }
 
-    return stockItem;
+  async decreaseStock(
+    productId: string,
+    dto: DecreaseStockDto,
+  ): Promise<StockItemWithProduct> {
+    await runSerializableStockWrite(this.prisma, (tx) =>
+      this.decreaseStockTx(tx, { productId, type: 'DECREASE', ...dto }),
+    );
+    await this.productsCache.invalidate();
+    return this.refreshRow(productId);
   }
 
   private async refreshRow(productId: string): Promise<StockItemWithProduct> {
@@ -317,114 +489,163 @@ export class StockItemsService {
     return toStockItemWithProduct(refreshedProduct as ProductWithStockItems);
   }
 
-  /**
-   * Pragmatik ek uc (SP/ST kabul kriterlerinin literal bir parcasi degil): urun +
-   * depo basina stok miktarini elle setlemek icin minimal bir giris noktasi.
-   */
-  async upsertByProductId(
-    productId: string,
-    dto: UpsertStockItemDto,
-  ): Promise<StockItemWithProduct> {
-    const product = await this.requireProduct(productId);
-    const warehouse = await this.requireWarehouse(dto.warehouseId);
+  /** Ad-hoc (bkz. CLAUDE.md): bir urunun stogunu bir depodan diger bir depoya
+   * tasir. Maliyet urun bazinda oldugu icin (bkz. docs/PLAN_STOK_MALIYET.md)
+   * transfer Product.avgCost'u HIC etkilemez - sadece iki StockItem satirinin
+   * miktarini degistirir. Iki StockMovement satiri (TRANSFER_OUT/TRANSFER_IN)
+   * `relatedMovementId` ile birbirine baglanir. */
+  private async transferStockTx(
+    tx: StockTx,
+    params: {
+      productId: string;
+      fromWarehouseId: string;
+      toWarehouseId: string;
+      quantity: number;
+      note?: string;
+    },
+  ): Promise<void> {
+    await this.requireProduct(params.productId, tx);
+    const fromWarehouse = await this.requireWarehouse(
+      params.fromWarehouseId,
+      tx,
+    );
+    const toWarehouse = await this.requireWarehouse(params.toWarehouseId, tx);
 
-    await this.setWarehouseQuantity({
-      productId,
-      productName: product.name,
-      warehouseId: warehouse.id,
-      warehouseName: warehouse.name,
-      quantity: dto.quantity,
-      note: dto.note,
+    const fromStockItem = await tx.stockItem.findFirst({
+      where: {
+        productId: params.productId,
+        warehouseId: params.fromWarehouseId,
+      },
+    });
+    const fromQuantity = new Prisma.Decimal(fromStockItem?.quantity ?? 0);
+    const quantity = new Prisma.Decimal(params.quantity);
+    if (quantity.gt(fromQuantity)) {
+      throw new AppException(
+        'INSUFFICIENT_STOCK',
+        `Kaynak depoda yeterli stok yok (mevcut: ${fromQuantity.toString()}).`,
+        HttpStatus.BAD_REQUEST,
+        { available: fromQuantity.toNumber() },
+      );
+    }
+
+    const toStockItem = await tx.stockItem.findFirst({
+      where: { productId: params.productId, warehouseId: params.toWarehouseId },
+    });
+    const toQuantity = new Prisma.Decimal(toStockItem?.quantity ?? 0);
+
+    const newFromQuantity = fromQuantity.sub(quantity);
+    const newToQuantity = toQuantity.add(quantity);
+    const note = params.note?.trim() || undefined;
+
+    await tx.stockItem.update({
+      where: { id: (fromStockItem as StockItem).id },
+      data: { quantity: newFromQuantity },
     });
 
-    await this.productsCache.invalidate();
-    return this.refreshRow(productId);
+    if (toStockItem) {
+      await tx.stockItem.update({
+        where: { id: toStockItem.id },
+        data: { quantity: newToQuantity },
+      });
+    } else {
+      await tx.stockItem.create({
+        data: {
+          productId: params.productId,
+          warehouseId: params.toWarehouseId,
+          quantity: newToQuantity,
+        } as never,
+      });
+    }
+
+    const actingUserId = TenantContext.getOrThrow().userId;
+    const outMovement = await tx.stockMovement.create({
+      data: {
+        productId: params.productId,
+        warehouseId: params.fromWarehouseId,
+        type: 'TRANSFER_OUT',
+        quantity,
+        unitCost: null,
+        previousAvgCost: null,
+        newAvgCost: null,
+        previousQuantity: fromQuantity,
+        newQuantity: newFromQuantity,
+        note: note ?? `${toWarehouse.name} deposuna tasindi.`,
+        createdById: actingUserId,
+      } as never,
+    });
+    await tx.stockMovement.create({
+      data: {
+        productId: params.productId,
+        warehouseId: params.toWarehouseId,
+        type: 'TRANSFER_IN',
+        quantity,
+        unitCost: null,
+        previousAvgCost: null,
+        newAvgCost: null,
+        previousQuantity: toQuantity,
+        newQuantity: newToQuantity,
+        relatedMovementId: (outMovement as { id: string }).id,
+        note: note ?? `${fromWarehouse.name} deposundan tasindi.`,
+        createdById: actingUserId,
+      } as never,
+    });
   }
 
-  /** Ad-hoc (bkz. CLAUDE.md): bir urunun stogunu bir depodan diger bir depoya
-   * tasir. Iki ayri StockItem satirini guncelleyip her biri icin ayri bir
-   * denetim kaydi uretir (bkz. setWarehouseQuantity) - boylece Stok Gecmisi
-   * ekrani ozel bir "transfer" turu bilmeden, iki normal hareket olarak
-   * gosterir (kaynakta eksi, hedefte arti delta). */
   async transferStock(
     productId: string,
     dto: TransferStockDto,
   ): Promise<StockItemWithProduct> {
-    const product = await this.requireProduct(productId);
-    const fromWarehouse = await this.requireWarehouse(dto.fromWarehouseId);
-    const toWarehouse = await this.requireWarehouse(dto.toWarehouseId);
-
-    const fromStockItem = await this.prisma.stockItem.findFirst({
-      where: { productId, warehouseId: dto.fromWarehouseId },
-    });
-    const fromQuantity = Number(fromStockItem?.quantity ?? 0);
-    if (dto.quantity > fromQuantity) {
-      throw new AppException(
-        'INSUFFICIENT_STOCK',
-        `Kaynak depoda yeterli stok yok (mevcut: ${fromQuantity}).`,
-        HttpStatus.BAD_REQUEST,
-        { available: fromQuantity },
-      );
-    }
-
-    const toStockItem = await this.prisma.stockItem.findFirst({
-      where: { productId, warehouseId: dto.toWarehouseId },
-    });
-    const toQuantity = Number(toStockItem?.quantity ?? 0);
-
-    const note = dto.note?.trim() || undefined;
-
-    await this.setWarehouseQuantity({
-      productId,
-      productName: product.name,
-      warehouseId: fromWarehouse.id,
-      warehouseName: fromWarehouse.name,
-      quantity: fromQuantity - dto.quantity,
-      note: note ?? `${toWarehouse.name} deposuna tasindi.`,
-    });
-    await this.setWarehouseQuantity({
-      productId,
-      productName: product.name,
-      warehouseId: toWarehouse.id,
-      warehouseName: toWarehouse.name,
-      quantity: toQuantity + dto.quantity,
-      note: note ?? `${fromWarehouse.name} deposundan tasindi.`,
-    });
-
+    await runSerializableStockWrite(this.prisma, (tx) =>
+      this.transferStockTx(tx, { productId, ...dto }),
+    );
     await this.productsCache.invalidate();
     return this.refreshRow(productId);
   }
 
-  /** Stok Gecmisi (/envanter?tab=stockHistory): AuditService'in genel denetim
-   * kaydini StockItem entity'sine gore filtreleyip tabloya uygun sekle cevirir. */
+  /** Stok Gecmisi (/envanter?tab=stockHistory) - bkz. docs/PLAN_STOK_MALIYET.md Faz 3.
+   * Eskiden AuditLog'un meta JSON'undan yeniden kuruluyordu; artik gercek StockMovement
+   * tablosundan okur. Kullanici adi/e-postasi AuditService.hydrateUsers ile ayni desen:
+   * StockMovement sadece createdById tutar, isim/e-posta User tablosundan join'lenir. */
   async listHistory(query: StockHistoryQueryDto): Promise<StockMovementView[]> {
-    const metaFilter: Record<string, string> = {};
-    if (query.productId) metaFilter.productId = query.productId;
-    if (query.warehouseId) metaFilter.warehouseId = query.warehouseId;
-    const logs = await this.audit.list('StockItem', {
-      userId: query.userId,
-      meta: Object.keys(metaFilter).length > 0 ? metaFilter : undefined,
+    const movements = await this.prisma.stockMovement.findMany({
+      where: {
+        ...(query.productId ? { productId: query.productId } : {}),
+        ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+        ...(query.userId ? { createdById: query.userId } : {}),
+      },
+      include: { product: true, warehouse: true },
+      orderBy: { createdAt: 'desc' },
+      take: STOCK_HISTORY_LIST_LIMIT,
     });
-    return logs.map((log) => {
-      const meta = (log.meta ?? {}) as Record<string, unknown>;
-      const quantity = Number(meta.quantity ?? 0);
-      const previousQuantity = Number(meta.previousQuantity ?? 0);
+
+    const userIds = [...new Set(movements.map((m) => m.createdById))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+    });
+    const usersById = new Map(users.map((u) => [u.id, u]));
+
+    return movements.map((m) => {
+      const user = usersById.get(m.createdById);
       return {
-        id: log.id,
-        productId: String(meta.productId ?? ''),
-        productName: String(meta.productName ?? '—'),
-        warehouseId: String(meta.warehouseId ?? ''),
-        warehouseName: String(meta.warehouseName ?? '—'),
-        userName: log.userName,
-        userEmail: log.userEmail,
-        note:
-          typeof meta.note === 'string' && meta.note.length > 0
-            ? meta.note
-            : null,
-        previousQuantity,
-        quantity,
-        delta: quantity - previousQuantity,
-        createdAt: log.createdAt,
+        id: m.id,
+        productId: m.productId,
+        productName: m.product.name,
+        warehouseId: m.warehouseId,
+        warehouseName: m.warehouse.name,
+        userName: user?.name ?? '—',
+        userEmail: user?.email ?? '—',
+        type: m.type,
+        note: m.note,
+        previousQuantity: Number(m.previousQuantity),
+        quantity: Number(m.quantity),
+        newQuantity: Number(m.newQuantity),
+        delta: Number(m.newQuantity) - Number(m.previousQuantity),
+        unitCost: m.unitCost != null ? Number(m.unitCost) : null,
+        previousAvgCost:
+          m.previousAvgCost != null ? Number(m.previousAvgCost) : null,
+        newAvgCost: m.newAvgCost != null ? Number(m.newAvgCost) : null,
+        quoteId: m.quoteId,
+        createdAt: m.createdAt,
       };
     });
   }

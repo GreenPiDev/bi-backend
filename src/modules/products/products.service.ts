@@ -289,8 +289,7 @@ export class ProductsService {
 
   /** Urunun fiyati olusturulurken/guncellenirken degistiginde 'ProductPrice' adinda
    * ayri bir denetim-kaydi kovasina yazar - listPriceHistory bunu filtreler. Ayri bir
-   * DB modeli (PriceHistory) yerine StockItemsService.upsertByProductId ile ayni,
-   * AuditLog-tabanli desen kullanildi. */
+   * DB modeli (PriceHistory) yerine AuditLog-tabanli, hafif bir desen kullanildi. */
   private async logPriceChange(
     action: 'CREATE' | 'UPDATE',
     productId: string,

@@ -22,10 +22,12 @@ import {
   type PurchaseOrderWithItems,
 } from '../purchase-orders/purchase-orders.service';
 import {
+  ApproveQuoteSchema,
   CreateQuoteSchema,
   FxRatesQuerySchema,
   QuoteQuerySchema,
   UpdateQuoteSchema,
+  type ApproveQuoteDto,
   type CreateQuoteDto,
   type FxRatesQueryDto,
   type QuoteQueryDto,
@@ -120,9 +122,10 @@ export class QuotesController {
   @RequiresPermission('quotes', 'APPROVE')
   approve(
     @Param('id') id: string,
+    @Body(new ZodValidationPipe(ApproveQuoteSchema)) dto: ApproveQuoteDto,
     @CurrentUser() user: RequestUser,
   ): Promise<QuoteWithDetails> {
-    return this.quotes.approve(id, user.id);
+    return this.quotes.approve(id, user.id, dto);
   }
 
   @Post(':id/reject')

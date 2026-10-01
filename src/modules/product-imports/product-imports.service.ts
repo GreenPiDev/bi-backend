@@ -24,7 +24,6 @@ const RAW_PREVIEW_ROW_COUNT = 14;
  * category) string olarak birebir gecer. */
 const NUMERIC_TARGET_FIELDS = [
   'price',
-  'costPrice',
   'maxDiscountPct',
   'minStockLevel',
 ] as const;

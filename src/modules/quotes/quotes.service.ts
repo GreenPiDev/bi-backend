@@ -29,12 +29,18 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
 import { PostSaleCasesCacheService } from '../post-sale-cases/post-sale-cases-cache.service';
+import { ProductsCacheService } from '../products/products-cache.service';
+import {
+  StockItemsService,
+  type StockTx,
+} from '../stock-items/stock-items.service';
 import {
   DEFAULT_POST_SALE_FOLLOW_UP_DAYS,
   POST_SALE_FOLLOW_UP_DAYS_KEY,
 } from '../tenant-settings/tenant-settings.constants';
 import { QuotesCacheService } from './quotes-cache.service';
 import type {
+  ApproveQuoteDto,
   CreateQuoteDto,
   QuoteExchangeRatesDto,
   QuoteItemInputDto,
@@ -146,9 +152,11 @@ export class QuotesService {
     private readonly quotesCache: QuotesCacheService,
     private readonly opportunitiesCache: OpportunitiesCacheService,
     private readonly postSaleCasesCache: PostSaleCasesCacheService,
+    private readonly productsCache: ProductsCacheService,
     private readonly fx: FxService,
     private readonly fileUrl: FileUrlService,
     private readonly notifications: NotificationsService,
+    private readonly stockItems: StockItemsService,
   ) {}
 
   /** Teklif para birimi secim formu icin guncel kur (otomatik on-doldurma, kullanici
@@ -234,6 +242,42 @@ export class QuotesService {
     });
 
     return { id: postSaleCase.id, contactId: postSaleCase.contactId };
+  }
+
+  /**
+   * Faz 4 (bkz. docs/PLAN_STOK_MALIYET.md): Quote.status APPROVED'a ulastigi HER an
+   * (update/approve - ensurePostSaleCase ile ayni iki nokta) teklif kalemlerindeki
+   * urunleri secilen depodan otomatik duser. Idempotent: bu teklife ait QUOTE_SALE
+   * hareketi zaten varsa (ayni teklifin iki ayri yoldan APPROVED'a "gecmeye"
+   * calisilmasi - ensurePostSaleCase'deki findFirst idempotency'siyle ayni risk)
+   * tekrar dusmez. Maliyeti (Product.avgCost) DEGISTIRMEZ (karar 4), yetersiz stokta
+   * negatife dusmeye izin verilir (karar 6) - onay hic engellenmez.
+   */
+  private async ensureStockDecreaseForQuote(
+    tx: StockTx,
+    params: {
+      quoteId: string;
+      quoteNumber: string;
+      warehouseId: string;
+      items: { productId: string; quantity: Prisma.Decimal | number }[];
+    },
+  ): Promise<void> {
+    const alreadyApplied = await tx.stockMovement.findFirst({
+      where: { quoteId: params.quoteId },
+    });
+    if (alreadyApplied) {
+      return;
+    }
+    for (const item of params.items) {
+      await this.stockItems.decreaseStockTx(tx, {
+        productId: item.productId,
+        warehouseId: params.warehouseId,
+        quantity: Number(item.quantity),
+        type: 'QUOTE_SALE',
+        quoteId: params.quoteId,
+        note: `Teklif ${params.quoteNumber} onayi`,
+      });
+    }
   }
 
   /** Odeme yontemi, tenant'in tanimladigi listeye karsi dogrulanir - sektor
@@ -855,6 +899,17 @@ export class QuotesService {
             ...contactUpdateData,
           },
         });
+        // dto.warehouseId burada kesinlikle dolu: UpdateQuoteSchema.refine
+        // status==='APPROVED' oldugunda bunu zorunlu kilar.
+        await this.ensureStockDecreaseForQuote(tx, {
+          quoteId: id,
+          quoteNumber: existing.quoteNumber,
+          warehouseId: dto.warehouseId as string,
+          items: existing.items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
+        });
         return this.ensurePostSaleCase(tx, {
           quoteId: id,
           accountId: existing.accountId,
@@ -889,6 +944,7 @@ export class QuotesService {
     await this.quotesCache.invalidate();
     if (postSaleCase) {
       await this.postSaleCasesCache.invalidate();
+      await this.productsCache.invalidate();
     }
     if (postSaleCase?.contactId) {
       await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
@@ -921,13 +977,26 @@ export class QuotesService {
     return quote;
   }
 
-  async approve(id: string, approvedById: string): Promise<QuoteWithDetails> {
+  async approve(
+    id: string,
+    approvedById: string,
+    dto: ApproveQuoteDto,
+  ): Promise<QuoteWithDetails> {
     const existing = await this.assertPendingApproval(id);
     const approvedAt = new Date();
     const postSaleCase = await this.prisma.$transaction(async (tx) => {
       await tx.quote.update({
         where: { id },
         data: { status: 'APPROVED', approvedAt, approvedById },
+      });
+      await this.ensureStockDecreaseForQuote(tx, {
+        quoteId: id,
+        quoteNumber: existing.quoteNumber,
+        warehouseId: dto.warehouseId,
+        items: existing.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
       });
       return this.ensurePostSaleCase(tx, {
         quoteId: id,
@@ -939,6 +1008,7 @@ export class QuotesService {
     await this.audit.log({ action: 'APPROVE', entity: 'Quote', entityId: id });
     await this.quotesCache.invalidate();
     await this.postSaleCasesCache.invalidate();
+    await this.productsCache.invalidate();
     if (postSaleCase.contactId) {
       await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
         postSaleCaseId: postSaleCase.id,

@@ -27,6 +27,7 @@ describe('Post-Sale Cases (e2e)', () => {
   let otherAccountContactId: string;
   let productId: string;
   let limitedProductId: string;
+  let warehouseIdA: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -135,6 +136,11 @@ describe('Post-Sale Cases (e2e)', () => {
       },
     });
     limitedProductId = limitedProduct.id;
+
+    const warehouse = await prisma.warehouse.create({
+      data: { tenantId: tenantIdA, name: `Depo${emailSuffix}` },
+    });
+    warehouseIdA = warehouse.id;
   });
 
   it('POST /quotes: baska firmaya ait kisi secilirse 400 CONTACT_ACCOUNT_MISMATCH doner', async () => {
@@ -215,7 +221,8 @@ describe('Post-Sale Cases (e2e)', () => {
   it('POST /quotes/:id/approve: onaylaninca PostSaleCase (contactId olmadan) acilir', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/quotes/${pendingQuoteId}/approve`)
-      .set('Cookie', cookiesA);
+      .set('Cookie', cookiesA)
+      .send({ warehouseId: warehouseIdA });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('APPROVED');
 

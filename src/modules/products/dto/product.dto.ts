@@ -19,8 +19,6 @@ export const CreateProductSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   category: z.string().trim().max(100).optional(),
   brand: z.string().trim().max(100).optional(),
-  /** costPrice Decimal(12,2). */
-  costPrice: z.number().min(0).max(9_999_999_999.99).optional(),
 });
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 
@@ -46,7 +44,6 @@ export const UpdateProductSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
   category: z.string().trim().max(100).nullable().optional(),
   brand: z.string().trim().max(100).nullable().optional(),
-  costPrice: z.number().min(0).max(9_999_999_999.99).nullable().optional(),
 });
 export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
 

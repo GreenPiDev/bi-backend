@@ -1,9 +1,12 @@
+import { Prisma } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { StockItemsService } from './stock-items.service';
 
-const auditLog = vi.fn();
-const auditList = vi.fn();
-const fakeAudit = { log: auditLog, list: auditList } as never;
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
+}
+
 const productsCacheInvalidate = vi.fn();
 const fakeProductsCache = { invalidate: productsCacheInvalidate } as never;
 
@@ -33,74 +36,22 @@ function stockItem(overrides: Partial<Record<string, unknown>> = {}) {
 
 interface Setup {
   products?: unknown[];
-  productRow?: unknown;
-  warehouseRow?: unknown;
-  existingStockItem?: unknown;
-  createdStockItem?: unknown;
-  updatedStockItem?: unknown;
-  refreshedProductRow?: unknown;
 }
 
-function createPrisma({
-  products = [],
-  productRow = { id: 'product-1', name: 'Sunucu', minStockLevel: 5 },
-  warehouseRow = { id: 'warehouse-1', name: 'Ana Depo' },
-  existingStockItem = null,
-  createdStockItem,
-  updatedStockItem,
-  refreshedProductRow,
-}: Setup = {}) {
-  const productFindFirst = vi
-    .fn()
-    .mockResolvedValueOnce(productRow)
-    .mockResolvedValue(
-      refreshedProductRow ?? createProductRow({ stockItems: [stockItem()] }),
-    );
+function createPrisma({ products = [] }: Setup = {}) {
   return {
     product: {
       findMany: vi.fn().mockResolvedValue(products),
-      findFirst: productFindFirst,
-    },
-    warehouse: {
-      findFirst: vi.fn().mockResolvedValue(warehouseRow),
-    },
-    stockItem: {
-      findFirst: vi.fn().mockResolvedValue(existingStockItem),
-      create: vi.fn().mockResolvedValue(
-        createdStockItem ?? {
-          id: 'stock-new',
-          productId: 'product-1',
-          warehouseId: 'warehouse-1',
-          quantity: '10',
-        },
-      ),
-      update: vi.fn().mockResolvedValue(
-        updatedStockItem ?? {
-          id: 'stock-1',
-          productId: 'product-1',
-          warehouseId: 'warehouse-1',
-          quantity: '10',
-        },
-      ),
     },
   };
 }
 
 describe('StockItemsService', () => {
-  beforeEach(() => {
-    auditLog.mockClear();
-    auditList.mockClear();
-  });
-
   it('list: hic StockItem kaydi olmayan urunler icin 0 miktarli "sanal" satir uretir', async () => {
     const prisma = createPrisma({
       products: [createProductRow({ stockItems: [] })],
     });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
     const result = await service.list({ page: 1, pageSize: 20 } as never);
     expect(result.data).toHaveLength(1);
     expect(result.data[0].productId).toBe('product-1');
@@ -117,11 +68,7 @@ describe('StockItemsService', () => {
         }),
       ],
     });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
     const result = await service.list({ page: 1, pageSize: 20 } as never);
     expect(result.data[0].id).toBe('stock-1');
     expect(Number(result.data[0].quantity)).toBe(10);
@@ -155,11 +102,7 @@ describe('StockItemsService', () => {
         }),
       ],
     });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
     const result = await service.list({ page: 1, pageSize: 20 } as never);
     expect(Number(result.data[0].quantity)).toBe(15);
     expect(result.data[0].warehouses).toHaveLength(2);
@@ -178,11 +121,7 @@ describe('StockItemsService', () => {
         }),
       ],
     });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
     const result = await service.listLowStock();
     expect(result).toHaveLength(0);
   });
@@ -222,11 +161,7 @@ describe('StockItemsService', () => {
         }), // ustunde -> disarida
       ],
     });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
     const result = await service.listLowStock();
     expect(result.map((r) => r.productId)).toEqual(['product-1', 'product-2']);
   });
@@ -235,244 +170,273 @@ describe('StockItemsService', () => {
     const prisma = createPrisma({
       products: [createProductRow({ minStockLevel: 5, stockItems: [] })],
     });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
     const result = await service.listLowStock();
     expect(result).toHaveLength(1);
   });
 
-  it('upsertByProductId: urun bulunamazsa NOT_FOUND firlatir', async () => {
-    const prisma = createPrisma({ productRow: null });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await expect(
-      service.upsertByProductId('yok', {
-        warehouseId: 'warehouse-1',
-        quantity: 5,
-      }),
-    ).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-    } satisfies Partial<AppException>);
-  });
+  describe('increaseStock / decreaseStock (WAC)', () => {
+    function createWacPrisma(
+      opts: {
+        productRow?: Record<string, unknown>;
+        warehouseRow?: Record<string, unknown> | null;
+        stockItems?: Record<string, unknown>[];
+        refreshedProductRow?: Record<string, unknown>;
+      } = {},
+    ) {
+      const productRow = opts.productRow ?? {
+        id: 'product-1',
+        name: 'Sunucu',
+        avgCost: null,
+      };
+      const warehouseRow =
+        opts.warehouseRow === undefined
+          ? { id: 'warehouse-1', name: 'Ana Depo' }
+          : opts.warehouseRow;
+      const stockItems = opts.stockItems ?? [];
 
-  it('upsertByProductId: depo bulunamazsa NOT_FOUND firlatir', async () => {
-    const prisma = createPrisma({ warehouseRow: null });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await expect(
-      service.upsertByProductId('product-1', {
-        warehouseId: 'yok',
-        quantity: 5,
-      }),
-    ).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-    } satisfies Partial<AppException>);
-  });
-
-  it('upsertByProductId: mevcut stok kaydi yoksa create eder', async () => {
-    const prisma = createPrisma({ existingStockItem: null });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await service.upsertByProductId('product-1', {
-      warehouseId: 'warehouse-1',
-      quantity: 12,
-    });
-    expect(prisma.stockItem.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          productId: 'product-1',
-          warehouseId: 'warehouse-1',
-          quantity: 12,
-        }),
-      }),
-    );
-    expect(prisma.stockItem.update).not.toHaveBeenCalled();
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'CREATE' }),
-    );
-  });
-
-  it('upsertByProductId: mevcut stok kaydi varsa update eder', async () => {
-    const prisma = createPrisma({
-      existingStockItem: {
-        id: 'stock-1',
-        productId: 'product-1',
-        warehouseId: 'warehouse-1',
-        quantity: '3',
-      },
-    });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await service.upsertByProductId('product-1', {
-      warehouseId: 'warehouse-1',
-      quantity: 20,
-    });
-    expect(prisma.stockItem.update).toHaveBeenCalledWith({
-      where: { id: 'stock-1' },
-      data: { quantity: 20 },
-    });
-    expect(prisma.stockItem.create).not.toHaveBeenCalled();
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'UPDATE' }),
-    );
-  });
-
-  it('upsertByProductId: guncellemede denetim kaydina onceki ve yeni miktari, depo bilgisiyle birlikte yazar', async () => {
-    const prisma = createPrisma({
-      existingStockItem: {
-        id: 'stock-1',
-        productId: 'product-1',
-        warehouseId: 'warehouse-1',
-        quantity: '3',
-      },
-    });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await service.upsertByProductId('product-1', {
-      warehouseId: 'warehouse-1',
-      quantity: 20,
-    });
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'UPDATE',
-        meta: expect.objectContaining({
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Ana Depo',
-          previousQuantity: '3',
-          quantity: 20,
-        }),
-      }),
-    );
-  });
-
-  it('upsertByProductId: not girilirse denetim kaydinda note null olur, girilirse aynen yazilir', async () => {
-    const prisma = createPrisma({ existingStockItem: null });
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await service.upsertByProductId('product-1', {
-      warehouseId: 'warehouse-1',
-      quantity: 12,
-    });
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        meta: expect.objectContaining({ note: null }),
-      }),
-    );
-
-    auditLog.mockClear();
-    await service.upsertByProductId('product-1', {
-      warehouseId: 'warehouse-1',
-      quantity: 12,
-      note: 'Sayim farki',
-    });
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        meta: expect.objectContaining({ note: 'Sayim farki' }),
-      }),
-    );
-  });
-
-  it('listHistory: AuditService kayitlarini StockItem entity ile filtreleyip tabloya uygun sekle cevirir', async () => {
-    auditList.mockResolvedValue([
-      {
-        id: 'log-1',
-        userId: 'u1',
-        userName: 'Ada',
-        userEmail: 'ada@test.com',
-        action: 'UPDATE',
-        entity: 'StockItem',
-        entityId: 'stock-1',
-        meta: {
-          productId: 'product-1',
-          productName: 'Sunucu',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Ana Depo',
-          previousQuantity: 5,
-          quantity: 8,
-          note: 'Sayim farki',
+      const tx = {
+        product: {
+          findFirst: vi.fn().mockResolvedValue(productRow),
+          update: vi
+            .fn()
+            .mockImplementation(({ data }) =>
+              Promise.resolve({ ...productRow, ...data }),
+            ),
         },
-        createdAt: new Date('2026-09-28T00:00:00.000Z'),
-      },
-    ]);
-    const prisma = createPrisma();
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    const result = await service.listHistory({});
-    expect(auditList).toHaveBeenCalledWith('StockItem', {
-      userId: undefined,
-      meta: undefined,
-    });
-    expect(result).toEqual([
-      {
-        id: 'log-1',
-        productId: 'product-1',
-        productName: 'Sunucu',
-        warehouseId: 'warehouse-1',
-        warehouseName: 'Ana Depo',
-        userName: 'Ada',
-        userEmail: 'ada@test.com',
-        note: 'Sayim farki',
-        previousQuantity: 5,
-        quantity: 8,
-        delta: 3,
-        createdAt: new Date('2026-09-28T00:00:00.000Z'),
-      },
-    ]);
-  });
+        warehouse: {
+          findFirst: vi.fn().mockResolvedValue(warehouseRow),
+        },
+        stockItem: {
+          findMany: vi.fn().mockResolvedValue(stockItems),
+          findFirst: vi
+            .fn()
+            .mockImplementation(
+              ({ where }: { where: { warehouseId: string } }) =>
+                Promise.resolve(
+                  stockItems.find(
+                    (si) => si.warehouseId === where.warehouseId,
+                  ) ?? null,
+                ),
+            ),
+          create: vi
+            .fn()
+            .mockImplementation(({ data }) =>
+              Promise.resolve({ id: 'stock-new', ...data }),
+            ),
+          update: vi
+            .fn()
+            .mockImplementation(({ where, data }) =>
+              Promise.resolve({ id: where.id, ...data }),
+            ),
+        },
+        stockMovement: {
+          create: vi.fn().mockResolvedValue({ id: 'movement-1' }),
+        },
+      };
 
-  it('listHistory: productId, warehouseId ve userId filtreleri AuditService.list cagrisina aktarilir', async () => {
-    auditList.mockResolvedValue([]);
-    const prisma = createPrisma();
-    const service = new StockItemsService(
-      prisma as never,
-      fakeAudit,
-      fakeProductsCache,
-    );
-    await service.listHistory({
-      productId: 'product-1',
-      warehouseId: 'warehouse-1',
-      userId: 'u1',
+      const prisma = {
+        $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(tx)),
+        product: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValue(
+              opts.refreshedProductRow ?? createProductRow({ stockItems: [] }),
+            ),
+        },
+      };
+
+      return { prisma, tx };
+    }
+
+    it('increaseStock: sifirdan baslangicta yeni ortalama maliyet girilen birim maliyete esittir', async () => {
+      const { prisma, tx } = createWacPrisma({ stockItems: [] });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.increaseStock('product-1', {
+          warehouseId: 'warehouse-1',
+          quantity: 15,
+          unitCost: 5,
+        }),
+      );
+      const newAvgCost = tx.product.update.mock.calls[0][0].data.avgCost;
+      expect(newAvgCost.toString()).toBe('5');
+      expect(tx.stockMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'INCREASE',
+            createdById: 'u1',
+          }),
+        }),
+      );
     });
-    expect(auditList).toHaveBeenCalledWith('StockItem', {
-      userId: 'u1',
-      meta: { productId: 'product-1', warehouseId: 'warehouse-1' },
+
+    it('increaseStock: ardarda farkli maliyetli iki giris agirlikli ortalamayi dogru hesaplar', async () => {
+      // 5 TL'den 15 adet zaten depoda (ilk giristen sonraki durum), simdi 10 TL'den 3 adet daha giriyor.
+      const { prisma, tx } = createWacPrisma({
+        productRow: { id: 'product-1', name: 'Sunucu', avgCost: '5' },
+        stockItems: [
+          {
+            id: 'stock-1',
+            productId: 'product-1',
+            warehouseId: 'warehouse-1',
+            quantity: '15',
+          },
+        ],
+      });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.increaseStock('product-1', {
+          warehouseId: 'warehouse-1',
+          quantity: 3,
+          unitCost: 10,
+        }),
+      );
+      const newAvgCost = tx.product.update.mock.calls[0][0].data.avgCost;
+      // (15*5 + 3*10) / 18 = 105/18 = 5.8333...
+      expect(newAvgCost.toFixed(4)).toBe('5.8333');
+      const newQuantity = tx.stockItem.update.mock.calls[0][0].data.quantity;
+      expect(newQuantity.toString()).toBe('18');
+    });
+
+    it('increaseStock: farkli depolardaki mevcut miktar da urun toplamina dahil edilir', async () => {
+      const { prisma, tx } = createWacPrisma({
+        productRow: { id: 'product-1', name: 'Sunucu', avgCost: '4' },
+        stockItems: [
+          {
+            id: 'stock-1',
+            productId: 'product-1',
+            warehouseId: 'warehouse-1',
+            quantity: '10',
+          },
+          {
+            id: 'stock-2',
+            productId: 'product-1',
+            warehouseId: 'warehouse-2',
+            quantity: '10',
+          },
+        ],
+      });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.increaseStock('product-1', {
+          warehouseId: 'warehouse-2',
+          quantity: 20,
+          unitCost: 10,
+        }),
+      );
+      const newAvgCost = tx.product.update.mock.calls[0][0].data.avgCost;
+      // oldTotalQty = 20 (iki depo toplami), (20*4 + 20*10) / 40 = 280/40 = 7
+      expect(newAvgCost.toString()).toBe('7');
+    });
+
+    it('decreaseStock: ortalama maliyeti degistirmez, sadece miktari dusurur', async () => {
+      const { prisma, tx } = createWacPrisma({
+        productRow: { id: 'product-1', name: 'Sunucu', avgCost: '5.8333' },
+        stockItems: [
+          {
+            id: 'stock-1',
+            productId: 'product-1',
+            warehouseId: 'warehouse-1',
+            quantity: '18',
+          },
+        ],
+      });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.decreaseStock('product-1', {
+          warehouseId: 'warehouse-1',
+          quantity: 5,
+        }),
+      );
+      expect(tx.product.update).not.toHaveBeenCalled();
+      const newQuantity = tx.stockItem.update.mock.calls[0][0].data.quantity;
+      expect(newQuantity.toString()).toBe('13');
+      expect(tx.stockMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'DECREASE', unitCost: null }),
+        }),
+      );
+    });
+
+    it('decreaseStock: yetersiz stokta negatife dusmesine izin verir (karar 6)', async () => {
+      const { prisma, tx } = createWacPrisma({
+        stockItems: [
+          {
+            id: 'stock-1',
+            productId: 'product-1',
+            warehouseId: 'warehouse-1',
+            quantity: '2',
+          },
+        ],
+      });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.decreaseStock('product-1', {
+          warehouseId: 'warehouse-1',
+          quantity: 5,
+        }),
+      );
+      const newQuantity = tx.stockItem.update.mock.calls[0][0].data.quantity;
+      expect(newQuantity.toString()).toBe('-3');
+    });
+
+    it('increaseStock: urun bulunamazsa NOT_FOUND firlatir', async () => {
+      const tx = {
+        product: { findFirst: vi.fn().mockResolvedValue(null) },
+      };
+      const prisma = {
+        $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(tx)),
+      };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await expect(
+        runInTenant(() =>
+          service.increaseStock('yok', {
+            warehouseId: 'warehouse-1',
+            quantity: 1,
+            unitCost: 1,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      } satisfies Partial<AppException>);
+    });
+
+    it('runSerializableStockWrite: P2034 yazma catismasinda yeniden dener, sonunda basarili olur', async () => {
+      const { prisma, tx } = createWacPrisma({ stockItems: [] });
+      let attempts = 0;
+      prisma.$transaction = vi.fn((fn: (tx: unknown) => unknown) => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new Prisma.PrismaClientKnownRequestError('conflict', {
+            code: 'P2034',
+            clientVersion: 'test',
+          });
+        }
+        return fn(tx);
+      });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.increaseStock('product-1', {
+          warehouseId: 'warehouse-1',
+          quantity: 1,
+          unitCost: 1,
+        }),
+      );
+      expect(attempts).toBe(3);
     });
   });
 
   describe('transferStock', () => {
-    const productRow = { id: 'product-1', name: 'Sunucu', minStockLevel: 5 };
+    const productRow = { id: 'product-1', name: 'Sunucu' };
     const warehouses: Record<string, { id: string; name: string }> = {
       'w-from': { id: 'w-from', name: 'Ana Depo' },
       'w-to': { id: 'w-to', name: 'Sube Depo' },
     };
 
     function createTransferPrisma(opts: {
-      fromStockItem?: unknown;
-      toStockItem?: unknown;
+      fromStockItem?: Record<string, unknown> | null;
+      toStockItem?: Record<string, unknown> | null;
     }) {
       const stockItemFindFirst = vi
         .fn()
@@ -483,28 +447,8 @@ describe('StockItemsService', () => {
               : (opts.toStockItem ?? null),
           ),
         );
-      return {
-        product: {
-          findFirst: vi
-            .fn()
-            .mockResolvedValueOnce(productRow)
-            .mockResolvedValue(
-              createProductRow({
-                stockItems: [
-                  stockItem({
-                    id: 'stock-from',
-                    warehouseId: 'w-from',
-                    warehouse: warehouses['w-from'],
-                  }),
-                  stockItem({
-                    id: 'stock-to',
-                    warehouseId: 'w-to',
-                    warehouse: warehouses['w-to'],
-                  }),
-                ],
-              }),
-            ),
-        },
+      const tx = {
+        product: { findFirst: vi.fn().mockResolvedValue(productRow) },
         warehouse: {
           findFirst: vi
             .fn()
@@ -525,99 +469,205 @@ describe('StockItemsService', () => {
               Promise.resolve({ id: 'stock-new', ...data }),
             ),
         },
+        stockMovement: {
+          create: vi.fn().mockResolvedValue({ id: 'movement-out' }),
+        },
       };
+      const prisma = {
+        $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(tx)),
+        product: {
+          findFirst: vi.fn().mockResolvedValue(
+            createProductRow({
+              stockItems: [
+                stockItem({
+                  id: 'stock-from',
+                  warehouseId: 'w-from',
+                  warehouse: warehouses['w-from'],
+                }),
+                stockItem({
+                  id: 'stock-to',
+                  warehouseId: 'w-to',
+                  warehouse: warehouses['w-to'],
+                }),
+              ],
+            }),
+          ),
+        },
+      };
+      return { prisma, tx };
     }
 
     it('kaynak depoda yeterli stok yoksa INSUFFICIENT_STOCK firlatir', async () => {
-      const prisma = createTransferPrisma({
+      const { prisma, tx } = createTransferPrisma({
         fromStockItem: { id: 'stock-from', quantity: '2' },
       });
-      const service = new StockItemsService(
-        prisma as never,
-        fakeAudit,
-        fakeProductsCache,
-      );
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
       await expect(
-        service.transferStock('product-1', {
-          fromWarehouseId: 'w-from',
-          toWarehouseId: 'w-to',
-          quantity: 5,
-        }),
+        runInTenant(() =>
+          service.transferStock('product-1', {
+            fromWarehouseId: 'w-from',
+            toWarehouseId: 'w-to',
+            quantity: 5,
+          }),
+        ),
       ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
-      expect(prisma.stockItem.update).not.toHaveBeenCalled();
+      expect(tx.stockItem.update).not.toHaveBeenCalled();
     });
 
-    it('yeterli stok varsa kaynaktan dusup hedefe ekler, iki ayri denetim kaydi yazar', async () => {
-      const prisma = createTransferPrisma({
+    it('yeterli stok varsa kaynaktan dusup hedefe ekler, iki ayri hareket yazar (TRANSFER_OUT/TRANSFER_IN)', async () => {
+      const { prisma, tx } = createTransferPrisma({
         fromStockItem: { id: 'stock-from', quantity: '10' },
         toStockItem: { id: 'stock-to', quantity: '3' },
       });
-      const service = new StockItemsService(
-        prisma as never,
-        fakeAudit,
-        fakeProductsCache,
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.transferStock('product-1', {
+          fromWarehouseId: 'w-from',
+          toWarehouseId: 'w-to',
+          quantity: 4,
+        }),
       );
-      await service.transferStock('product-1', {
-        fromWarehouseId: 'w-from',
-        toWarehouseId: 'w-to',
-        quantity: 4,
-      });
 
-      expect(prisma.stockItem.update).toHaveBeenCalledWith(
+      expect(tx.stockItem.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'stock-from' },
-          data: { quantity: 6 },
+          data: { quantity: expect.anything() },
         }),
       );
-      expect(prisma.stockItem.update).toHaveBeenCalledWith(
+      const fromNewQuantity =
+        tx.stockItem.update.mock.calls[0][0].data.quantity;
+      expect(fromNewQuantity.toString()).toBe('6');
+      const toNewQuantity = tx.stockItem.update.mock.calls[1][0].data.quantity;
+      expect(toNewQuantity.toString()).toBe('7');
+
+      expect(tx.stockMovement.create).toHaveBeenCalledTimes(2);
+      expect(tx.stockMovement.create).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
-          where: { id: 'stock-to' },
-          data: { quantity: 7 },
-        }),
-      );
-      expect(auditLog).toHaveBeenCalledTimes(2);
-      expect(auditLog).toHaveBeenCalledWith(
-        expect.objectContaining({
-          meta: expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'TRANSFER_OUT',
             warehouseId: 'w-from',
-            previousQuantity: '10',
-            quantity: 6,
           }),
         }),
       );
-      expect(auditLog).toHaveBeenCalledWith(
+      expect(tx.stockMovement.create).toHaveBeenNthCalledWith(
+        2,
         expect.objectContaining({
-          meta: expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'TRANSFER_IN',
             warehouseId: 'w-to',
-            previousQuantity: '3',
-            quantity: 7,
+            relatedMovementId: 'movement-out',
           }),
         }),
       );
     });
 
     it('hedef depoda henuz stok kaydi yoksa yeni satir olusturur', async () => {
-      const prisma = createTransferPrisma({
+      const { prisma, tx } = createTransferPrisma({
         fromStockItem: { id: 'stock-from', quantity: '10' },
         toStockItem: null,
       });
-      const service = new StockItemsService(
-        prisma as never,
-        fakeAudit,
-        fakeProductsCache,
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.transferStock('product-1', {
+          fromWarehouseId: 'w-from',
+          toWarehouseId: 'w-to',
+          quantity: 4,
+        }),
       );
-      await service.transferStock('product-1', {
-        fromWarehouseId: 'w-from',
-        toWarehouseId: 'w-to',
-        quantity: 4,
-      });
-      expect(prisma.stockItem.create).toHaveBeenCalledWith(
+      expect(tx.stockItem.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             productId: 'product-1',
             warehouseId: 'w-to',
-            quantity: 4,
+            quantity: expect.anything(),
           }),
+        }),
+      );
+      const createdQuantity =
+        tx.stockItem.create.mock.calls[0][0].data.quantity;
+      expect(createdQuantity.toString()).toBe('4');
+    });
+  });
+
+  describe('listHistory', () => {
+    it('StockMovement kayitlarini urun/depo/kullanici bilgisiyle birlikte dondurur', async () => {
+      const prisma = {
+        stockMovement: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              id: 'mv-1',
+              productId: 'product-1',
+              product: { name: 'Sunucu' },
+              warehouseId: 'warehouse-1',
+              warehouse: { name: 'Ana Depo' },
+              type: 'INCREASE',
+              note: 'Alim',
+              previousQuantity: new Prisma.Decimal(5),
+              quantity: new Prisma.Decimal(3),
+              newQuantity: new Prisma.Decimal(8),
+              unitCost: new Prisma.Decimal(10),
+              previousAvgCost: new Prisma.Decimal(8),
+              newAvgCost: new Prisma.Decimal(8.75),
+              quoteId: null,
+              createdById: 'u1',
+              createdAt: new Date('2026-09-28T00:00:00.000Z'),
+            },
+          ]),
+        },
+        user: {
+          findMany: vi
+            .fn()
+            .mockResolvedValue([
+              { id: 'u1', name: 'Ada', email: 'ada@test.com' },
+            ]),
+        },
+      };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      const result = await service.listHistory({});
+      expect(result).toEqual([
+        {
+          id: 'mv-1',
+          productId: 'product-1',
+          productName: 'Sunucu',
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Ana Depo',
+          userName: 'Ada',
+          userEmail: 'ada@test.com',
+          type: 'INCREASE',
+          note: 'Alim',
+          previousQuantity: 5,
+          quantity: 3,
+          newQuantity: 8,
+          delta: 3,
+          unitCost: 10,
+          previousAvgCost: 8,
+          newAvgCost: 8.75,
+          quoteId: null,
+          createdAt: new Date('2026-09-28T00:00:00.000Z'),
+        },
+      ]);
+    });
+
+    it('productId, warehouseId ve userId filtreleri StockMovement.findMany sorgusuna aktarilir', async () => {
+      const findMany = vi.fn().mockResolvedValue([]);
+      const prisma = {
+        stockMovement: { findMany },
+        user: { findMany: vi.fn().mockResolvedValue([]) },
+      };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await service.listHistory({
+        productId: 'product-1',
+        warehouseId: 'warehouse-1',
+        userId: 'u1',
+      });
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            productId: 'product-1',
+            warehouseId: 'warehouse-1',
+            createdById: 'u1',
+          },
         }),
       );
     });

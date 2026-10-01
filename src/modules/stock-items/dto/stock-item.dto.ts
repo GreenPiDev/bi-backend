@@ -28,12 +28,28 @@ export const StockHistoryQuerySchema = z.object({
 });
 export type StockHistoryQueryDto = z.infer<typeof StockHistoryQuerySchema>;
 
-export const UpsertStockItemSchema = z.object({
+/**
+ * Stok girisi (alim/parti) - bkz. docs/PLAN_STOK_MALIYET.md Faz 2. unitCost zorunlu:
+ * her girisin WAC (hareketli agirlikli ortalama maliyet) hesabina katkisi var.
+ */
+export const IncreaseStockSchema = z.object({
   warehouseId: z.string().uuid('Depo secimi gerekli.'),
-  quantity: z.number().nonnegative(),
+  quantity: z.number().positive("Miktar 0'dan buyuk olmalidir."),
+  unitCost: z.number().positive("Birim maliyet 0'dan buyuk olmalidir."),
   note: z.string().trim().max(500).optional(),
 });
-export type UpsertStockItemDto = z.infer<typeof UpsertStockItemSchema>;
+export type IncreaseStockDto = z.infer<typeof IncreaseStockSchema>;
+
+/**
+ * Stok cikisi (elle dusus) - maliyeti degistirmez, sadece miktari dusurur. Negatife
+ * dusmeye izin verilir (bkz. docs/PLAN_STOK_MALIYET.md karar 6).
+ */
+export const DecreaseStockSchema = z.object({
+  warehouseId: z.string().uuid('Depo secimi gerekli.'),
+  quantity: z.number().positive("Miktar 0'dan buyuk olmalidir."),
+  note: z.string().trim().max(500).optional(),
+});
+export type DecreaseStockDto = z.infer<typeof DecreaseStockSchema>;
 
 /** Depolar arasi stok tasima (ad-hoc, bkz. CLAUDE.md). */
 export const TransferStockSchema = z

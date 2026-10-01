@@ -25,6 +25,7 @@ describe('Quotes (e2e)', () => {
   let accountIdA: string;
   let limitedProductId: string;
   let unlistedProductId: string;
+  let warehouseIdA: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -104,6 +105,11 @@ describe('Quotes (e2e)', () => {
       data: { tenantId: tenantIdA, productListId, name: 'Klavye' },
     });
     unlistedProductId = unlistedProduct.id;
+
+    const warehouse = await prisma.warehouse.create({
+      data: { tenantId: tenantIdA, name: `Depo${emailSuffix}` },
+    });
+    warehouseIdA = warehouse.id;
   });
 
   it('POST /quotes: fiyati tanimli olmayan ve manuel fiyati da girilmeyen urun icin 400 PRICE_NOT_FOUND doner', async () => {
@@ -211,7 +217,8 @@ describe('Quotes (e2e)', () => {
   it('POST /quotes/:id/approve: onay bekleyen teklifi onaylar', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/quotes/${pendingQuoteId}/approve`)
-      .set('Cookie', cookiesA);
+      .set('Cookie', cookiesA)
+      .send({ warehouseId: warehouseIdA });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('APPROVED');
     expect(res.body.approvedAt).toBeTruthy();
@@ -286,7 +293,8 @@ describe('Quotes (e2e)', () => {
   it('POST /quotes/:id/approve: PENDING_APPROVAL disindaki teklif icin 409 doner', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/quotes/${pendingQuoteId}/approve`)
-      .set('Cookie', cookiesA);
+      .set('Cookie', cookiesA)
+      .send({ warehouseId: warehouseIdA });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('QUOTE_NOT_PENDING');
   });

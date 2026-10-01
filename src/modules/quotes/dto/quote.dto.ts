@@ -91,33 +91,48 @@ export const CreateQuoteSchema = z.object({
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
 
-export const UpdateQuoteSchema = z.object({
-  items: z.array(QuoteItemInputSchema).min(1).max(200).optional(),
-  /** /teklifler listesindeki durum dropdown'undan gelen dogrudan durum degisikligi. */
-  status: QuoteStatusSchema.optional(),
-  /** Ad-hoc revizyon takibi: teklif REVIZE durumundayken `items` ile birlikte
-   * gonderilirse zorunludur (bkz. QuotesService.update, revisionNote dogrulamasi). */
-  revisionNote: z.string().trim().min(1).max(2000).optional(),
-  /** null verilirse muhatap kisi kaldirilir, alan hic verilmezse mevcut deger korunur. */
-  contactId: z.string().uuid().nullable().optional(),
-  quoteDate: z.coerce.date().optional(),
-  /** null verilirse alan temizlenir, hic verilmezse mevcut deger korunur. */
-  leadTime: z.string().trim().max(200).nullable().optional(),
-  paymentMethod: z.string().trim().max(200).nullable().optional(),
-  title: z.string().trim().max(200).nullable().optional(),
-  paymentTerms: z.string().trim().max(4000).nullable().optional(),
-  salesTerms: z.string().trim().max(4000).nullable().optional(),
-  deliveryTerms: z.string().trim().max(4000).nullable().optional(),
-  generalTerms: z.string().trim().max(4000).nullable().optional(),
-  /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger korunur. */
-  ibanOptionId: z.string().uuid().nullable().optional(),
-  quoteCurrency: CurrencyCodeSchema.optional(),
-  exchangeRates: QuoteExchangeRatesSchema.optional(),
-  /** null verilirse sablon kaldirilir (sade export'a doner), hic verilmezse mevcut
-   * deger korunur. */
-  templateId: z.string().uuid().nullable().optional(),
-});
+export const UpdateQuoteSchema = z
+  .object({
+    items: z.array(QuoteItemInputSchema).min(1).max(200).optional(),
+    /** /teklifler listesindeki durum dropdown'undan gelen dogrudan durum degisikligi. */
+    status: QuoteStatusSchema.optional(),
+    /** Status 'APPROVED' ise zorunlu - hangi depodan otomatik dusulecegi (bkz.
+     * docs/PLAN_STOK_MALIYET.md Faz 4, QuotesService.ensureStockDecreaseForQuote). */
+    warehouseId: z.string().uuid().optional(),
+    /** Ad-hoc revizyon takibi: teklif REVIZE durumundayken `items` ile birlikte
+     * gonderilirse zorunludur (bkz. QuotesService.update, revisionNote dogrulamasi). */
+    revisionNote: z.string().trim().min(1).max(2000).optional(),
+    /** null verilirse muhatap kisi kaldirilir, alan hic verilmezse mevcut deger korunur. */
+    contactId: z.string().uuid().nullable().optional(),
+    quoteDate: z.coerce.date().optional(),
+    /** null verilirse alan temizlenir, hic verilmezse mevcut deger korunur. */
+    leadTime: z.string().trim().max(200).nullable().optional(),
+    paymentMethod: z.string().trim().max(200).nullable().optional(),
+    title: z.string().trim().max(200).nullable().optional(),
+    paymentTerms: z.string().trim().max(4000).nullable().optional(),
+    salesTerms: z.string().trim().max(4000).nullable().optional(),
+    deliveryTerms: z.string().trim().max(4000).nullable().optional(),
+    generalTerms: z.string().trim().max(4000).nullable().optional(),
+    /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger korunur. */
+    ibanOptionId: z.string().uuid().nullable().optional(),
+    quoteCurrency: CurrencyCodeSchema.optional(),
+    exchangeRates: QuoteExchangeRatesSchema.optional(),
+    /** null verilirse sablon kaldirilir (sade export'a doner), hic verilmezse mevcut
+     * deger korunur. */
+    templateId: z.string().uuid().nullable().optional(),
+  })
+  .refine((dto) => dto.status !== 'APPROVED' || dto.warehouseId !== undefined, {
+    message: 'Onaylamak icin depo secimi gerekli.',
+    path: ['warehouseId'],
+  });
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
+
+/** `POST /quotes/:id/approve` - hangi depodan otomatik dusulecegi (bkz.
+ * docs/PLAN_STOK_MALIYET.md Faz 4 karar 5: kullanici her onayda depoyu secer). */
+export const ApproveQuoteSchema = z.object({
+  warehouseId: z.string().uuid('Depo secimi gerekli.'),
+});
+export type ApproveQuoteDto = z.infer<typeof ApproveQuoteSchema>;
 
 export const QuoteQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
