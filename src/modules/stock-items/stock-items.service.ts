@@ -12,6 +12,7 @@ import { ProductsCacheService } from '../products/products-cache.service';
 import type {
   StockHistoryQueryDto,
   StockItemQueryDto,
+  StockStatusFilter,
   UpsertStockItemDto,
 } from './dto/stock-item.dto';
 
@@ -39,6 +40,19 @@ export interface StockMovementView {
  * her zaman productId ile calisir. */
 function virtualId(productId: string): string {
   return `virtual:${productId}`;
+}
+
+/** Satir arkaplan renklendirmesiyle (bi-frontend stock-status.ts) ayni esik - filtre
+ * penceresindeki 4 secenegin karsiligi. */
+function getStockStatus(
+  quantity: Prisma.Decimal | string | number,
+  minStockLevel: number | null,
+): StockStatusFilter {
+  if (minStockLevel === null || minStockLevel === undefined) return 'unknown';
+  const qty = Number(quantity);
+  if (qty < minStockLevel) return 'low';
+  if (qty === minStockLevel) return 'equal';
+  return 'ok';
 }
 
 @Injectable()
@@ -101,10 +115,18 @@ export class StockItemsService {
   async list(
     query: StockItemQueryDto,
   ): Promise<PagedResult<StockItemWithProduct>> {
-    const { page, pageSize, q, productListId, brand, category } = query;
+    const { page, pageSize, q, productListId, brand, category, stockStatus } =
+      query;
     const rows = await this.resolveRows({ q, productListId, brand, category });
-    const total = rows.length;
-    const data = rows.slice((page - 1) * pageSize, page * pageSize);
+    const filteredRows = stockStatus
+      ? rows.filter(
+          (row) =>
+            getStockStatus(row.quantity, row.product.minStockLevel) ===
+            stockStatus,
+        )
+      : rows;
+    const total = filteredRows.length;
+    const data = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       data,
