@@ -615,8 +615,10 @@ export class QuotesService {
               leadTime: dto.leadTime ?? null,
               paymentMethod: dto.paymentMethod ?? null,
               title: dto.title ?? null,
+              paymentTerms: dto.paymentTerms ?? null,
               salesTerms: dto.salesTerms ?? null,
               deliveryTerms: dto.deliveryTerms ?? null,
+              generalTerms: dto.generalTerms ?? null,
               ...ibanSnapshot,
               templateId,
               status: 'DRAFT',
@@ -759,11 +761,17 @@ export class QuotesService {
         ? { paymentMethod: dto.paymentMethod ?? null }
         : {}),
       ...(dto.title !== undefined ? { title: dto.title ?? null } : {}),
+      ...(dto.paymentTerms !== undefined
+        ? { paymentTerms: dto.paymentTerms ?? null }
+        : {}),
       ...(dto.salesTerms !== undefined
         ? { salesTerms: dto.salesTerms ?? null }
         : {}),
       ...(dto.deliveryTerms !== undefined
         ? { deliveryTerms: dto.deliveryTerms ?? null }
+        : {}),
+      ...(dto.generalTerms !== undefined
+        ? { generalTerms: dto.generalTerms ?? null }
         : {}),
       ...(ibanSnapshot ?? {}),
       ...(dto.quoteCurrency !== undefined

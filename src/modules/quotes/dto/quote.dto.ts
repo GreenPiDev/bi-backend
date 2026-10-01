@@ -73,8 +73,10 @@ export const CreateQuoteSchema = z.object({
   /** Tenant'in tanimladigi listeye karsi dogrulanir, bkz. QuotesService.assertValidPaymentMethod. */
   paymentMethod: z.string().trim().max(200).optional(),
   title: z.string().trim().max(200).optional(),
+  paymentTerms: z.string().trim().max(4000).optional(),
   salesTerms: z.string().trim().max(4000).optional(),
   deliveryTerms: z.string().trim().max(4000).optional(),
+  generalTerms: z.string().trim().max(4000).optional(),
   /** Tenant'in crm_iban_options listesinden secilir, 4 alani teklife kopyalanir
    * (bkz. QuotesService.resolveIbanSnapshot). */
   ibanOptionId: z.string().uuid().optional(),
@@ -103,8 +105,10 @@ export const UpdateQuoteSchema = z.object({
   leadTime: z.string().trim().max(200).nullable().optional(),
   paymentMethod: z.string().trim().max(200).nullable().optional(),
   title: z.string().trim().max(200).nullable().optional(),
+  paymentTerms: z.string().trim().max(4000).nullable().optional(),
   salesTerms: z.string().trim().max(4000).nullable().optional(),
   deliveryTerms: z.string().trim().max(4000).nullable().optional(),
+  generalTerms: z.string().trim().max(4000).nullable().optional(),
   /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger korunur. */
   ibanOptionId: z.string().uuid().nullable().optional(),
   quoteCurrency: CurrencyCodeSchema.optional(),

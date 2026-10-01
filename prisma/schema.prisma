@@ -1060,8 +1060,10 @@ model Quote {
    */
   paymentMethod         String?
   title                 String?
+  paymentTerms          String?
   salesTerms            String?
   deliveryTerms         String?
+  generalTerms          String?
   /**
    * Secilen IbanOption'in 4 alani olusturma/guncelleme aninda buraya kopyalanir
    * (bkz. IbanOption doc comment'i) - FK degil, snapshot.
