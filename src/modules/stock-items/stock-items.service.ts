@@ -2,7 +2,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Product, StockItem } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
-import { type PagedResult } from '../../core/dto/list-query.dto';
+import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
@@ -12,9 +12,9 @@ import { ProductsCacheService } from '../products/products-cache.service';
 import type {
   StockHistoryQueryDto,
   StockItemQueryDto,
-  StockStatusFilter,
   UpsertStockItemDto,
 } from './dto/stock-item.dto';
+import { getStockStatus, STOCK_STATUS_SORT_ORDER } from './stock-status.util';
 
 export type StockItemWithProduct = Pick<
   StockItem,
@@ -42,17 +42,35 @@ function virtualId(productId: string): string {
   return `virtual:${productId}`;
 }
 
-/** Satir arkaplan renklendirmesiyle (bi-frontend stock-status.ts) ayni esik - filtre
- * penceresindeki 4 secenegin karsiligi. */
-function getStockStatus(
-  quantity: Prisma.Decimal | string | number,
-  minStockLevel: number | null,
-): StockStatusFilter {
-  if (minStockLevel === null || minStockLevel === undefined) return 'unknown';
-  const qty = Number(quantity);
-  if (qty < minStockLevel) return 'low';
-  if (qty === minStockLevel) return 'equal';
-  return 'ok';
+/** Siralama tum sonuc kumesi uzerinde (sayfalamadan once) uygulanir - /kisiler gibi
+ * diger liste sayfalarinin server-side sort deseniyle ayni, aksi halde "Urun" kolonuna
+ * tiklamak sadece o anki sayfanin satirlarini yeniden siralar (bkz. kullanici bulgusu).
+ * `name` disinda bir alan (veya hic sort) verilirse varsayilan renk/durum sirasina
+ * duser - Array.sort'un stabil olmasi sayesinde esit durumdaki satirlar aralarinda
+ * zaten DB'den gelen isim sirasini korur. */
+function sortRows(
+  rows: StockItemWithProduct[],
+  sort: string | undefined,
+): StockItemWithProduct[] {
+  const parsed = parseSort(sort, ['name'], {
+    field: 'status',
+    direction: 'asc',
+  });
+  if (parsed.field === 'name') {
+    const dir = parsed.direction === 'asc' ? 1 : -1;
+    return [...rows].sort(
+      (a, b) => dir * a.product.name.localeCompare(b.product.name, 'tr'),
+    );
+  }
+  return [...rows].sort(
+    (a, b) =>
+      STOCK_STATUS_SORT_ORDER[
+        getStockStatus(a.quantity, a.product.minStockLevel)
+      ] -
+      STOCK_STATUS_SORT_ORDER[
+        getStockStatus(b.quantity, b.product.minStockLevel)
+      ],
+  );
 }
 
 @Injectable()
@@ -115,8 +133,16 @@ export class StockItemsService {
   async list(
     query: StockItemQueryDto,
   ): Promise<PagedResult<StockItemWithProduct>> {
-    const { page, pageSize, q, productListId, brand, category, stockStatus } =
-      query;
+    const {
+      page,
+      pageSize,
+      q,
+      productListId,
+      brand,
+      category,
+      stockStatus,
+      sort,
+    } = query;
     const rows = await this.resolveRows({ q, productListId, brand, category });
     const filteredRows = stockStatus
       ? rows.filter(
@@ -125,8 +151,9 @@ export class StockItemsService {
             stockStatus,
         )
       : rows;
-    const total = filteredRows.length;
-    const data = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+    const sortedRows = sortRows(filteredRows, sort);
+    const total = sortedRows.length;
+    const data = sortedRows.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       data,

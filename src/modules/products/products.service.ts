@@ -10,6 +10,10 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
+import {
+  getStockStatus,
+  STOCK_STATUS_SORT_ORDER,
+} from '../stock-items/stock-status.util';
 import { ProductPriceHistoryCacheService } from './product-price-history-cache.service';
 import { ProductsCacheService } from './products-cache.service';
 import type {
@@ -36,6 +40,44 @@ export type ProductView = ProductWithProductList;
 export type ProductListItem = ProductWithProductList & {
   stockQuantity: Prisma.Decimal;
 };
+
+/** Siralama tum sonuc kumesi uzerinde (sayfalamadan once) uygulanir - aksi halde
+ * (StockItemsService.sortRows'ta oldugu gibi) sadece o anki sayfanin satirlari
+ * yeniden siralanir (bkz. kullanici bulgusu, /envanter?tab=stock'ta ayni sinif
+ * hata vardi). `sort` verilmezse varsayilan renk/durum sirasina duser - Array.sort
+ * stabil oldugu icin esit durumdaki satirlar aralarinda DB'den gelen isim sirasini
+ * (name asc) korur. */
+function sortProducts(
+  items: ProductListItem[],
+  sort: string | undefined,
+): ProductListItem[] {
+  const parsed = parseSort(sort, SORTABLE_FIELDS, {
+    field: 'status',
+    direction: 'asc',
+  });
+  const dir = parsed.direction === 'asc' ? 1 : -1;
+  if (parsed.field === 'name') {
+    return [...items].sort((a, b) => dir * a.name.localeCompare(b.name, 'tr'));
+  }
+  if (parsed.field === 'sku') {
+    return [...items].sort(
+      (a, b) =>
+        dir * String(a.sku ?? '').localeCompare(String(b.sku ?? ''), 'tr'),
+    );
+  }
+  if (parsed.field === 'createdAt') {
+    return [...items].sort(
+      (a, b) => dir * (a.createdAt.getTime() - b.createdAt.getTime()),
+    );
+  }
+  return [...items].sort(
+    (a, b) =>
+      STOCK_STATUS_SORT_ORDER[
+        getStockStatus(a.stockQuantity, a.minStockLevel)
+      ] -
+      STOCK_STATUS_SORT_ORDER[getStockStatus(b.stockQuantity, b.minStockLevel)],
+  );
+}
 
 /** Fiyat Gecmisi (/envanter?tab=priceHistory): ayrik bir PriceHistory modeli yerine,
  * StockItemsService.listHistory ile ayni desen - AuditLog'un 'ProductPrice' entity'sine
@@ -78,11 +120,8 @@ export class ProductsService {
       category,
       attr,
       includeDeleted,
+      sort,
     } = query;
-    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
-      field: 'name',
-      direction: 'asc',
-    });
 
     const attrConditions = attr
       ? Object.entries(attr).map(([key, value]) => ({
@@ -115,39 +154,35 @@ export class ProductsService {
     // silinmis" istedigimizde ekstra bir Prisma filtre degeri de yazamayiz.
     // Bu yuzden bu tek durumda extension'siz ham client'a gecip tenantId'yi
     // elle ekliyoruz (bkz. getAttributeKeys() ayni desen icin $queryRaw kullaniyor).
-    const [rows, total] = includeDeleted
-      ? await Promise.all([
-          this.rawPrisma.product.findMany({
-            where: { ...where, tenantId: TenantContext.getOrThrow().tenantId },
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-            orderBy: { [field]: direction },
-            include: { productList: true, stockItems: true },
-          }),
-          this.rawPrisma.product.count({
-            where: { ...where, tenantId: TenantContext.getOrThrow().tenantId },
-          }),
-        ])
-      : await Promise.all([
-          this.prisma.product.findMany({
-            where,
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-            orderBy: { [field]: direction },
-            include: { productList: true, stockItems: true },
-          }),
-          this.prisma.product.count({ where }),
-        ]);
+    //
+    // Siralama (varsayilan renk/durum sirasi dahil) tum filtrelenmis sonuc kumesi
+    // uzerinde yapilmasi gerektigi icin (bkz. sortProducts) burada skip/take
+    // kullanilmiyor - tum eslesen urunler cekilir, asagida siralanip sayfalanir.
+    const rows = includeDeleted
+      ? await this.rawPrisma.product.findMany({
+          where: { ...where, tenantId: TenantContext.getOrThrow().tenantId },
+          orderBy: { name: 'asc' },
+          include: { productList: true, stockItems: true },
+        })
+      : await this.prisma.product.findMany({
+          where,
+          orderBy: { name: 'asc' },
+          include: { productList: true, stockItems: true },
+        });
 
     // Stok miktarini /stok sayfasindaki ayni desenle (resolveRows) tek alana indirgiyoruz:
     // henuz hic StockItem kaydi olmayan urun icin 0 sayilir.
-    const data: ProductListItem[] = rows.map((row) => {
+    const items: ProductListItem[] = rows.map((row) => {
       const { stockItems, ...productFields } = row;
       return {
         ...(productFields as ProductWithProductList),
         stockQuantity: stockItems[0]?.quantity ?? new Prisma.Decimal(0),
       };
     });
+
+    const sortedItems = sortProducts(items, sort);
+    const total = sortedItems.length;
+    const data = sortedItems.slice((page - 1) * pageSize, page * pageSize);
 
     const result = {
       data,
