@@ -109,13 +109,27 @@ describe('Purchase Orders & Stock (e2e)', () => {
     });
     productLowStockId = productLowStock.id;
 
+    const warehouse = await prisma.warehouse.create({
+      data: { tenantId: tenantIdA, name: `Depo${emailSuffix}` },
+    });
+
     // productWithStockId icin yeterli stok var (SP2: teklif miktarindan dusulecek)
     await prisma.stockItem.create({
-      data: { tenantId: tenantIdA, productId: productWithStockId, quantity: 3 },
+      data: {
+        tenantId: tenantIdA,
+        productId: productWithStockId,
+        warehouseId: warehouse.id,
+        quantity: 3,
+      },
     });
     // productLowStockId dusuk stok esiginin altinda (ST1)
     await prisma.stockItem.create({
-      data: { tenantId: tenantIdA, productId: productLowStockId, quantity: 2 },
+      data: {
+        tenantId: tenantIdA,
+        productId: productLowStockId,
+        warehouseId: warehouse.id,
+        quantity: 2,
+      },
     });
   }, 30_000);
 

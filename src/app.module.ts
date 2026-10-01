@@ -59,6 +59,7 @@ import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { TitleOptionsModule } from './modules/title-options/title-options.module';
 import { UsersModule } from './modules/users/users.module';
+import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { WidgetsModule } from './modules/widgets/widgets.module';
 
 @Module({
@@ -119,6 +120,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     ProjectsModule,
     PurchaseOrdersModule,
     StockItemsModule,
+    WarehousesModule,
     MessagesModule,
     NotificationsModule,
     JobsModule,

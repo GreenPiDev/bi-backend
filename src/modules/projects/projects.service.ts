@@ -19,9 +19,18 @@ import type {
 const SORTABLE_FIELDS = ['projectNumber', 'name', 'createdAt'] as const;
 const PROJECT_NUMBER_CREATE_RETRIES = 5;
 
-const PROJECT_INCLUDE = { quotes: true } as const;
+const PROJECT_INCLUDE = { quotes: true, responsibles: true } as const;
 
-export type ProjectWithQuotes = Project & { quotes: Quote[] };
+export type ProjectResponsibleUser = { id: string; name: string };
+
+export type ProjectWithQuotes = Project & {
+  quotes: Quote[];
+  responsibleUsers: ProjectResponsibleUser[];
+};
+
+export type ProjectListItem = Project & {
+  responsibleUsers: ProjectResponsibleUser[];
+};
 
 function projectNumberPrefix(date: Date): string {
   const yyyy = date.getFullYear();
@@ -38,8 +47,8 @@ export class ProjectsService {
     private readonly cache: ProjectsCacheService,
   ) {}
 
-  async list(query: ProjectQueryDto): Promise<PagedResult<Project>> {
-    const cached = await this.cache.get(query);
+  async list(query: ProjectQueryDto): Promise<PagedResult<ProjectListItem>> {
+    const cached = await this.cache.get<ProjectListItem>(query);
     if (cached) {
       return cached;
     }
@@ -65,16 +74,99 @@ export class ProjectsService {
     ]);
 
     const result = {
-      data,
+      data: await this.attachResponsibleUsers(data),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
     await this.cache.set(query, result);
     return result;
   }
 
-  async getById(id: string): Promise<ProjectWithQuotes> {
+  /**
+   * Birden fazla projenin "bizden ilgili" kullanicilarini tek seferde cozer (liste
+   * sayfasi icin N+1 sorgu yerine 2 toplu sorgu) - CalendarEventsService'in
+   * attendeeName cozumlemesiyle ayni desen.
+   */
+  private async attachResponsibleUsers(
+    projects: Project[],
+  ): Promise<ProjectListItem[]> {
+    if (projects.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.projectResponsible.findMany({
+      where: { projectId: { in: projects.map((p) => p.id) } },
+    });
+    const nameById = await this.resolveUserNames(rows.map((r) => r.userId));
+    const byProject = new Map<string, ProjectResponsibleUser[]>();
+    for (const row of rows) {
+      const list = byProject.get(row.projectId) ?? [];
+      list.push({
+        id: row.userId,
+        name: nameById.get(row.userId) ?? 'Bir kullanici',
+      });
+      byProject.set(row.projectId, list);
+    }
+    return projects.map((project) => ({
+      ...project,
+      responsibleUsers: byProject.get(project.id) ?? [],
+    }));
+  }
+
+  private async resolveUserNames(
+    userIds: string[],
+  ): Promise<Map<string, string>> {
+    const uniqueIds = [...new Set(userIds)];
+    if (uniqueIds.length === 0) {
+      return new Map();
+    }
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, name: true },
+    });
+    return new Map(users.map((user) => [user.id, user.name]));
+  }
+
+  /**
+   * Proje duzenleme/olusturma formundaki "Bizden ilgili" cok-secimli alani icin
+   * secilebilir kullanici listesi - CalendarEventsService.listAssignableUsers ile
+   * ayni filtre (aktif, platform admin olmayan kullanicilar).
+   */
+  async listAssignableUsers(): Promise<{ id: string; name: string }[]> {
+    return this.prisma.user.findMany({
+      where: { isActive: true, isPlatformAdmin: false },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * "Bizden ilgili" alaninda secilen kullanicilarin hepsinin (tenant icinde) var
+   * oldugunu dogrular - assertQuotesAssignable ile ayni amac.
+   */
+  private async assertResponsibleUsersExist(userIds: string[]): Promise<void> {
+    if (userIds.length === 0) {
+      return;
+    }
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+    });
+    if (users.length !== new Set(userIds).size) {
+      throw new AppException(
+        'USER_NOT_FOUND',
+        'Secilen kullanicilardan biri bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * `idOrNumber` ikisinden biri olabilir: gercek UUID `id` (detay sayfasi,
+   * ic cagrilar) veya `projectNumber` (frontend duzenleme rotasi artik
+   * `/projeler/duzenle/:projectNumber` - bkz. App.tsx). Ikisi de tenant
+   * basina unique oldugu icin OR ile tek sorguda cozuluyor.
+   */
+  async getById(idOrNumber: string): Promise<ProjectWithQuotes> {
     const project = await this.prisma.project.findFirst({
-      where: { id },
+      where: { OR: [{ id: idOrNumber }, { projectNumber: idOrNumber }] },
       include: PROJECT_INCLUDE,
     });
     if (!project) {
@@ -84,7 +176,15 @@ export class ProjectsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    return project;
+    const { responsibles, ...rest } = project;
+    const nameById = await this.resolveUserNames(
+      (responsibles ?? []).map((r) => r.userId),
+    );
+    const responsibleUsers = (responsibles ?? []).map((r) => ({
+      id: r.userId,
+      name: nameById.get(r.userId) ?? 'Bir kullanici',
+    }));
+    return { ...rest, responsibleUsers };
   }
 
   /**
@@ -164,6 +264,11 @@ export class ProjectsService {
       );
     }
 
+    const { responsibleUserIds, ...projectFields } = dto;
+    if (responsibleUserIds) {
+      await this.assertResponsibleUsersExist(responsibleUserIds);
+    }
+
     let created: Project | undefined;
     for (
       let attempt = 0;
@@ -175,7 +280,7 @@ export class ProjectsService {
       const projectNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
       try {
         created = await this.prisma.project.create({
-          data: { ...dto, projectNumber, createdById } as never,
+          data: { ...projectFields, projectNumber, createdById } as never,
         });
         break;
       } catch (error) {
@@ -201,6 +306,15 @@ export class ProjectsService {
       );
     }
 
+    if (responsibleUserIds && responsibleUserIds.length > 0) {
+      await this.prisma.projectResponsible.createMany({
+        data: responsibleUserIds.map((userId) => ({
+          projectId: created.id,
+          userId,
+        })),
+      });
+    }
+
     await this.audit.log({
       action: 'CREATE',
       entity: 'Project',
@@ -213,9 +327,12 @@ export class ProjectsService {
 
   async update(id: string, dto: UpdateProjectDto): Promise<ProjectWithQuotes> {
     const project = await this.getById(id);
-    const { quoteIds, ...fields } = dto;
+    const { quoteIds, responsibleUserIds, ...fields } = dto;
     if (quoteIds !== undefined) {
       await this.assertQuotesAssignable(quoteIds, project.accountId, id);
+    }
+    if (responsibleUserIds !== undefined) {
+      await this.assertResponsibleUsersExist(responsibleUserIds);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -231,6 +348,17 @@ export class ProjectsService {
           await tx.quote.updateMany({
             where: { id: { in: quoteIds } },
             data: { projectId: id },
+          });
+        }
+      }
+      if (responsibleUserIds !== undefined) {
+        await tx.projectResponsible.deleteMany({ where: { projectId: id } });
+        if (responsibleUserIds.length > 0) {
+          await tx.projectResponsible.createMany({
+            data: responsibleUserIds.map((userId) => ({
+              projectId: id,
+              userId,
+            })),
           });
         }
       }

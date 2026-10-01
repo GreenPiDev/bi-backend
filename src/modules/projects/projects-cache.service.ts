@@ -25,16 +25,19 @@ export class ProjectsCacheService {
     return `tenant:${tenantId}:projects:list:${hashParams(params)}`;
   }
 
-  async get(params: unknown): Promise<PagedResult<Project> | null> {
+  async get<T = Project>(params: unknown): Promise<PagedResult<T> | null> {
     const { tenantId } = TenantContext.getOrThrow();
     const raw = await this.redis.get(this.buildKey(tenantId, params));
     if (!raw) {
       return null;
     }
-    return JSON.parse(raw) as PagedResult<Project>;
+    return JSON.parse(raw) as PagedResult<T>;
   }
 
-  async set(params: unknown, result: PagedResult<Project>): Promise<void> {
+  async set<T = Project>(
+    params: unknown,
+    result: PagedResult<T>,
+  ): Promise<void> {
     const { tenantId } = TenantContext.getOrThrow();
     await this.redis.set(
       this.buildKey(tenantId, params),

@@ -251,12 +251,17 @@ export class PurchaseOrdersService {
           where: { productId: { in: productIds } },
         })
       : [];
-    const stockQuantityByProduct = new Map(
-      stockItems.map((stockItem) => [
+    // Birden fazla depoda stogu olan bir urunun toplam miktari, SP2'deki "mevcut
+    // stok" hesabinda depolar arasi toplanir (bkz. CLAUDE.md, cok depolu stok
+    // ad-hoc genislemesi).
+    const stockQuantityByProduct = new Map<string, number>();
+    for (const stockItem of stockItems) {
+      stockQuantityByProduct.set(
         stockItem.productId,
-        Number(stockItem.quantity),
-      ]),
-    );
+        (stockQuantityByProduct.get(stockItem.productId) ?? 0) +
+          Number(stockItem.quantity),
+      );
+    }
 
     const itemsData = quote.items.map((quoteItem) => {
       const stockQuantity =

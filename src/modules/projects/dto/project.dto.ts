@@ -16,6 +16,8 @@ export const CreateProjectSchema = z.object({
     .nonnegative()
     .max(MAX_DECIMAL_14_2, 'Gerceklesen maliyet cok buyuk.')
     .optional(),
+  /** "Bizden ilgili" - projeyle ilgilenen dahili kullanicilar, coklu secim. */
+  responsibleUserIds: z.array(z.string().uuid()).max(50).optional(),
 });
 export type CreateProjectDto = z.infer<typeof CreateProjectSchema>;
 
@@ -38,6 +40,11 @@ export const UpdateProjectSchema = z.object({
    * ProjectsService.update).
    */
   quoteIds: z.array(z.string().uuid()).max(200).optional(),
+  /**
+   * "Bizden ilgili" kullanicilarin tam listesi (replace semantigi, quoteIds ile
+   * ayni desen) - verilirse mevcut atamalarin yerine gecer.
+   */
+  responsibleUserIds: z.array(z.string().uuid()).max(50).optional(),
 });
 export type UpdateProjectDto = z.infer<typeof UpdateProjectSchema>;
 

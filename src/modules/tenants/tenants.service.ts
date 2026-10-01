@@ -163,6 +163,12 @@ export class TenantsService {
             roles: { create: { roleId: companyAdminRole.id } },
           },
         });
+        // Ad-hoc (bkz. CLAUDE.md, cok depolu stok genislemesi): her yeni tenant
+        // bir "Ana Depo" ile baslar - aksi halde kullanici /envanter?tab=stock'ta
+        // hicbir stok islemi yapamadan once elle depo olusturmak zorunda kalirdi.
+        await tx.warehouse.create({
+          data: { tenantId, name: 'Ana Depo', isDefault: true },
+        });
         return createdTenant;
       });
       return {

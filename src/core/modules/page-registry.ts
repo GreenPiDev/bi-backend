@@ -103,6 +103,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['UPDATE'],
   },
   {
+    key: 'warehouses',
+    label: 'Depolar',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
     key: 'messages',
     label: 'Mesajlar',
     supportedActions: ['CREATE'],

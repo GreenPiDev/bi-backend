@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import type { PagedResult } from '../../core/dto/list-query.dto';
@@ -6,9 +14,11 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   StockHistoryQuerySchema,
   StockItemQuerySchema,
+  TransferStockSchema,
   UpsertStockItemSchema,
   type StockHistoryQueryDto,
   type StockItemQueryDto,
+  type TransferStockDto,
   type UpsertStockItemDto,
 } from './dto/stock-item.dto';
 import {
@@ -54,5 +64,15 @@ export class StockItemsController {
     dto: UpsertStockItemDto,
   ): Promise<StockItemWithProduct> {
     return this.stockItems.upsertByProductId(productId, dto);
+  }
+
+  @Post(':productId/transfer')
+  @RequiresPermission('stock', 'UPDATE')
+  transfer(
+    @Param('productId') productId: string,
+    @Body(new ZodValidationPipe(TransferStockSchema))
+    dto: TransferStockDto,
+  ): Promise<StockItemWithProduct> {
+    return this.stockItems.transferStock(productId, dto);
   }
 }

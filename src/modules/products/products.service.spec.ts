@@ -290,8 +290,24 @@ describe('ProductsService', () => {
       fakePriceHistoryCache,
     );
     const result = await service.list({ page: 1, pageSize: 25 } as never);
-    expect(result.data[0]).toMatchObject({ stockQuantity: '12.5' });
+    expect(result.data[0].stockQuantity.toString()).toBe('12.5');
     expect(result.data[0]).not.toHaveProperty('stockItems');
+  });
+
+  it('list: birden fazla depodaki stockItems kayitlarini toplar (cok depolu stok)', async () => {
+    const rowWithStock = createProductRow({
+      stockItems: [{ quantity: '12.5' }, { quantity: '7.5' }],
+    });
+    const prisma = createPrisma(undefined, undefined, [rowWithStock]);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.list({ page: 1, pageSize: 25 } as never);
+    expect(result.data[0].stockQuantity.toString()).toBe('20');
   });
 
   it('list: hic StockItem kaydi olmayan urun icin stockQuantity 0 doner', async () => {

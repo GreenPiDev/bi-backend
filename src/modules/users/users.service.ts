@@ -46,6 +46,9 @@ export interface UserStats {
     projects: number;
     purchaseOrders: number;
   };
+  /** Bu kullanicinin "bizden ilgili" olarak atandigi projeler (ProjectResponsible
+   * uzerinden - createdById'den bagimsiz, counts.projects'ten farkli bir kume). */
+  responsibleProjects: { id: string; projectNumber: string; name: string }[];
 }
 
 @Injectable()
@@ -461,6 +464,18 @@ export class UsersService {
       this.prisma.purchaseOrder.count({ where: { createdById: targetUserId } }),
     ]);
 
+    const responsibleRows = await this.prisma.projectResponsible.findMany({
+      where: { userId: targetUserId },
+      include: { project: true },
+    });
+    const responsibleProjects = responsibleRows
+      .filter((row) => row.project !== null)
+      .map((row) => ({
+        id: row.project.id,
+        projectNumber: row.project.projectNumber,
+        name: row.project.name,
+      }));
+
     return {
       user: toSafeUser(user as UserWithRoles, this.fileUrl),
       counts: {
@@ -472,6 +487,7 @@ export class UsersService {
         projects,
         purchaseOrders,
       },
+      responsibleProjects,
     };
   }
 

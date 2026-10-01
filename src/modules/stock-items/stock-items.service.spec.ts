@@ -18,25 +18,51 @@ function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function stockItem(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'stock-1',
+    productId: 'product-1',
+    warehouseId: 'warehouse-1',
+    warehouse: { id: 'warehouse-1', name: 'Ana Depo' },
+    quantity: '0',
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-01-01'),
+    ...overrides,
+  };
+}
+
 interface Setup {
   products?: unknown[];
   productRow?: unknown;
+  warehouseRow?: unknown;
   existingStockItem?: unknown;
   createdStockItem?: unknown;
   updatedStockItem?: unknown;
+  refreshedProductRow?: unknown;
 }
 
 function createPrisma({
   products = [],
   productRow = { id: 'product-1', name: 'Sunucu', minStockLevel: 5 },
+  warehouseRow = { id: 'warehouse-1', name: 'Ana Depo' },
   existingStockItem = null,
   createdStockItem,
   updatedStockItem,
+  refreshedProductRow,
 }: Setup = {}) {
+  const productFindFirst = vi
+    .fn()
+    .mockResolvedValueOnce(productRow)
+    .mockResolvedValue(
+      refreshedProductRow ?? createProductRow({ stockItems: [stockItem()] }),
+    );
   return {
     product: {
       findMany: vi.fn().mockResolvedValue(products),
-      findFirst: vi.fn().mockResolvedValue(productRow),
+      findFirst: productFindFirst,
+    },
+    warehouse: {
+      findFirst: vi.fn().mockResolvedValue(warehouseRow),
     },
     stockItem: {
       findFirst: vi.fn().mockResolvedValue(existingStockItem),
@@ -44,6 +70,7 @@ function createPrisma({
         createdStockItem ?? {
           id: 'stock-new',
           productId: 'product-1',
+          warehouseId: 'warehouse-1',
           quantity: '10',
         },
       ),
@@ -51,6 +78,7 @@ function createPrisma({
         updatedStockItem ?? {
           id: 'stock-1',
           productId: 'product-1',
+          warehouseId: 'warehouse-1',
           quantity: '10',
         },
       ),
@@ -78,15 +106,14 @@ describe('StockItemsService', () => {
     expect(result.data[0].productId).toBe('product-1');
     expect(Number(result.data[0].quantity)).toBe(0);
     expect(result.data[0].id).not.toBe('product-1');
+    expect(result.data[0].warehouses).toEqual([]);
   });
 
-  it('list: gercek StockItem kaydi varsa onu kullanir', async () => {
+  it('list: tek depoda StockItem kaydi varsa onu kullanir', async () => {
     const prisma = createPrisma({
       products: [
         createProductRow({
-          stockItems: [
-            { id: 'stock-1', productId: 'product-1', quantity: '10.000' },
-          ],
+          stockItems: [stockItem({ id: 'stock-1', quantity: '10.000' })],
         }),
       ],
     });
@@ -98,17 +125,56 @@ describe('StockItemsService', () => {
     const result = await service.list({ page: 1, pageSize: 20 } as never);
     expect(result.data[0].id).toBe('stock-1');
     expect(Number(result.data[0].quantity)).toBe(10);
+    expect(result.data[0].warehouses).toEqual([
+      {
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Ana Depo',
+        quantity: '10.000',
+      },
+    ]);
+  });
+
+  it('list: birden fazla depodaki miktarlari toplayip kirilimini doner', async () => {
+    const prisma = createPrisma({
+      products: [
+        createProductRow({
+          stockItems: [
+            stockItem({
+              id: 'stock-1',
+              warehouseId: 'warehouse-1',
+              warehouse: { id: 'warehouse-1', name: 'Ana Depo' },
+              quantity: '10.000',
+            }),
+            stockItem({
+              id: 'stock-2',
+              warehouseId: 'warehouse-2',
+              warehouse: { id: 'warehouse-2', name: 'Sube Depo' },
+              quantity: '5.000',
+            }),
+          ],
+        }),
+      ],
+    });
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
+    const result = await service.list({ page: 1, pageSize: 20 } as never);
+    expect(Number(result.data[0].quantity)).toBe(15);
+    expect(result.data[0].warehouses).toHaveLength(2);
+    expect(result.data[0].warehouses.map((w) => w.warehouseName)).toEqual([
+      'Ana Depo',
+      'Sube Depo',
+    ]);
   });
 
   it('listLowStock: minStockLevel tanimsizsa disari birakir', async () => {
     const prisma = createPrisma({
       products: [
         createProductRow({
-          productId: 'product-1',
           minStockLevel: null,
-          stockItems: [
-            { id: 'stock-1', productId: 'product-1', quantity: '3.000' },
-          ],
+          stockItems: [stockItem({ quantity: '3.000' })],
         }),
       ],
     });
@@ -127,7 +193,7 @@ describe('StockItemsService', () => {
         createProductRow({
           id: 'product-1',
           stockItems: [
-            { id: 'stock-1', productId: 'product-1', quantity: '5.000' },
+            stockItem({ productId: 'product-1', quantity: '5.000' }),
           ],
         }), // esit -> dahil
         createProductRow({
@@ -135,7 +201,11 @@ describe('StockItemsService', () => {
           name: 'Klavye',
           minStockLevel: 5,
           stockItems: [
-            { id: 'stock-2', productId: 'product-2', quantity: '3.000' },
+            stockItem({
+              id: 'stock-2',
+              productId: 'product-2',
+              quantity: '3.000',
+            }),
           ],
         }), // altinda -> dahil
         createProductRow({
@@ -143,7 +213,11 @@ describe('StockItemsService', () => {
           name: 'Monitor',
           minStockLevel: 5,
           stockItems: [
-            { id: 'stock-3', productId: 'product-3', quantity: '10.000' },
+            stockItem({
+              id: 'stock-3',
+              productId: 'product-3',
+              quantity: '10.000',
+            }),
           ],
         }), // ustunde -> disarida
       ],
@@ -178,7 +252,27 @@ describe('StockItemsService', () => {
       fakeProductsCache,
     );
     await expect(
-      service.upsertByProductId('yok', { quantity: 5 }),
+      service.upsertByProductId('yok', {
+        warehouseId: 'warehouse-1',
+        quantity: 5,
+      }),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    } satisfies Partial<AppException>);
+  });
+
+  it('upsertByProductId: depo bulunamazsa NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma({ warehouseRow: null });
+    const service = new StockItemsService(
+      prisma as never,
+      fakeAudit,
+      fakeProductsCache,
+    );
+    await expect(
+      service.upsertByProductId('product-1', {
+        warehouseId: 'yok',
+        quantity: 5,
+      }),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -191,10 +285,17 @@ describe('StockItemsService', () => {
       fakeAudit,
       fakeProductsCache,
     );
-    await service.upsertByProductId('product-1', { quantity: 12 });
+    await service.upsertByProductId('product-1', {
+      warehouseId: 'warehouse-1',
+      quantity: 12,
+    });
     expect(prisma.stockItem.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ productId: 'product-1', quantity: 12 }),
+        data: expect.objectContaining({
+          productId: 'product-1',
+          warehouseId: 'warehouse-1',
+          quantity: 12,
+        }),
       }),
     );
     expect(prisma.stockItem.update).not.toHaveBeenCalled();
@@ -208,6 +309,7 @@ describe('StockItemsService', () => {
       existingStockItem: {
         id: 'stock-1',
         productId: 'product-1',
+        warehouseId: 'warehouse-1',
         quantity: '3',
       },
     });
@@ -216,7 +318,10 @@ describe('StockItemsService', () => {
       fakeAudit,
       fakeProductsCache,
     );
-    await service.upsertByProductId('product-1', { quantity: 20 });
+    await service.upsertByProductId('product-1', {
+      warehouseId: 'warehouse-1',
+      quantity: 20,
+    });
     expect(prisma.stockItem.update).toHaveBeenCalledWith({
       where: { id: 'stock-1' },
       data: { quantity: 20 },
@@ -227,11 +332,12 @@ describe('StockItemsService', () => {
     );
   });
 
-  it('upsertByProductId: guncellemede denetim kaydina onceki ve yeni miktari birlikte yazar', async () => {
+  it('upsertByProductId: guncellemede denetim kaydina onceki ve yeni miktari, depo bilgisiyle birlikte yazar', async () => {
     const prisma = createPrisma({
       existingStockItem: {
         id: 'stock-1',
         productId: 'product-1',
+        warehouseId: 'warehouse-1',
         quantity: '3',
       },
     });
@@ -240,11 +346,16 @@ describe('StockItemsService', () => {
       fakeAudit,
       fakeProductsCache,
     );
-    await service.upsertByProductId('product-1', { quantity: 20 });
+    await service.upsertByProductId('product-1', {
+      warehouseId: 'warehouse-1',
+      quantity: 20,
+    });
     expect(auditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'UPDATE',
         meta: expect.objectContaining({
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Ana Depo',
           previousQuantity: '3',
           quantity: 20,
         }),
@@ -259,7 +370,10 @@ describe('StockItemsService', () => {
       fakeAudit,
       fakeProductsCache,
     );
-    await service.upsertByProductId('product-1', { quantity: 12 });
+    await service.upsertByProductId('product-1', {
+      warehouseId: 'warehouse-1',
+      quantity: 12,
+    });
     expect(auditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         meta: expect.objectContaining({ note: null }),
@@ -268,6 +382,7 @@ describe('StockItemsService', () => {
 
     auditLog.mockClear();
     await service.upsertByProductId('product-1', {
+      warehouseId: 'warehouse-1',
       quantity: 12,
       note: 'Sayim farki',
     });
@@ -291,6 +406,8 @@ describe('StockItemsService', () => {
         meta: {
           productId: 'product-1',
           productName: 'Sunucu',
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Ana Depo',
           previousQuantity: 5,
           quantity: 8,
           note: 'Sayim farki',
@@ -314,6 +431,8 @@ describe('StockItemsService', () => {
         id: 'log-1',
         productId: 'product-1',
         productName: 'Sunucu',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Ana Depo',
         userName: 'Ada',
         userEmail: 'ada@test.com',
         note: 'Sayim farki',
@@ -325,7 +444,7 @@ describe('StockItemsService', () => {
     ]);
   });
 
-  it('listHistory: productId ve userId filtreleri AuditService.list cagrisina aktarilir', async () => {
+  it('listHistory: productId, warehouseId ve userId filtreleri AuditService.list cagrisina aktarilir', async () => {
     auditList.mockResolvedValue([]);
     const prisma = createPrisma();
     const service = new StockItemsService(
@@ -333,10 +452,174 @@ describe('StockItemsService', () => {
       fakeAudit,
       fakeProductsCache,
     );
-    await service.listHistory({ productId: 'product-1', userId: 'u1' });
+    await service.listHistory({
+      productId: 'product-1',
+      warehouseId: 'warehouse-1',
+      userId: 'u1',
+    });
     expect(auditList).toHaveBeenCalledWith('StockItem', {
       userId: 'u1',
-      meta: { productId: 'product-1' },
+      meta: { productId: 'product-1', warehouseId: 'warehouse-1' },
+    });
+  });
+
+  describe('transferStock', () => {
+    const productRow = { id: 'product-1', name: 'Sunucu', minStockLevel: 5 };
+    const warehouses: Record<string, { id: string; name: string }> = {
+      'w-from': { id: 'w-from', name: 'Ana Depo' },
+      'w-to': { id: 'w-to', name: 'Sube Depo' },
+    };
+
+    function createTransferPrisma(opts: {
+      fromStockItem?: unknown;
+      toStockItem?: unknown;
+    }) {
+      const stockItemFindFirst = vi
+        .fn()
+        .mockImplementation(({ where }: { where: { warehouseId: string } }) =>
+          Promise.resolve(
+            where.warehouseId === 'w-from'
+              ? (opts.fromStockItem ?? null)
+              : (opts.toStockItem ?? null),
+          ),
+        );
+      return {
+        product: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValueOnce(productRow)
+            .mockResolvedValue(
+              createProductRow({
+                stockItems: [
+                  stockItem({
+                    id: 'stock-from',
+                    warehouseId: 'w-from',
+                    warehouse: warehouses['w-from'],
+                  }),
+                  stockItem({
+                    id: 'stock-to',
+                    warehouseId: 'w-to',
+                    warehouse: warehouses['w-to'],
+                  }),
+                ],
+              }),
+            ),
+        },
+        warehouse: {
+          findFirst: vi
+            .fn()
+            .mockImplementation(({ where }: { where: { id: string } }) =>
+              Promise.resolve(warehouses[where.id] ?? null),
+            ),
+        },
+        stockItem: {
+          findFirst: stockItemFindFirst,
+          update: vi
+            .fn()
+            .mockImplementation(({ where, data }) =>
+              Promise.resolve({ id: where.id, ...data }),
+            ),
+          create: vi
+            .fn()
+            .mockImplementation(({ data }) =>
+              Promise.resolve({ id: 'stock-new', ...data }),
+            ),
+        },
+      };
+    }
+
+    it('kaynak depoda yeterli stok yoksa INSUFFICIENT_STOCK firlatir', async () => {
+      const prisma = createTransferPrisma({
+        fromStockItem: { id: 'stock-from', quantity: '2' },
+      });
+      const service = new StockItemsService(
+        prisma as never,
+        fakeAudit,
+        fakeProductsCache,
+      );
+      await expect(
+        service.transferStock('product-1', {
+          fromWarehouseId: 'w-from',
+          toWarehouseId: 'w-to',
+          quantity: 5,
+        }),
+      ).rejects.toMatchObject({ code: 'INSUFFICIENT_STOCK' });
+      expect(prisma.stockItem.update).not.toHaveBeenCalled();
+    });
+
+    it('yeterli stok varsa kaynaktan dusup hedefe ekler, iki ayri denetim kaydi yazar', async () => {
+      const prisma = createTransferPrisma({
+        fromStockItem: { id: 'stock-from', quantity: '10' },
+        toStockItem: { id: 'stock-to', quantity: '3' },
+      });
+      const service = new StockItemsService(
+        prisma as never,
+        fakeAudit,
+        fakeProductsCache,
+      );
+      await service.transferStock('product-1', {
+        fromWarehouseId: 'w-from',
+        toWarehouseId: 'w-to',
+        quantity: 4,
+      });
+
+      expect(prisma.stockItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'stock-from' },
+          data: { quantity: 6 },
+        }),
+      );
+      expect(prisma.stockItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'stock-to' },
+          data: { quantity: 7 },
+        }),
+      );
+      expect(auditLog).toHaveBeenCalledTimes(2);
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          meta: expect.objectContaining({
+            warehouseId: 'w-from',
+            previousQuantity: '10',
+            quantity: 6,
+          }),
+        }),
+      );
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          meta: expect.objectContaining({
+            warehouseId: 'w-to',
+            previousQuantity: '3',
+            quantity: 7,
+          }),
+        }),
+      );
+    });
+
+    it('hedef depoda henuz stok kaydi yoksa yeni satir olusturur', async () => {
+      const prisma = createTransferPrisma({
+        fromStockItem: { id: 'stock-from', quantity: '10' },
+        toStockItem: null,
+      });
+      const service = new StockItemsService(
+        prisma as never,
+        fakeAudit,
+        fakeProductsCache,
+      );
+      await service.transferStock('product-1', {
+        fromWarehouseId: 'w-from',
+        toWarehouseId: 'w-to',
+        quantity: 4,
+      });
+      expect(prisma.stockItem.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            productId: 'product-1',
+            warehouseId: 'w-to',
+            quantity: 4,
+          }),
+        }),
+      );
     });
   });
 });

@@ -171,12 +171,16 @@ export class ProductsService {
         });
 
     // Stok miktarini /stok sayfasindaki ayni desenle (resolveRows) tek alana indirgiyoruz:
-    // henuz hic StockItem kaydi olmayan urun icin 0 sayilir.
+    // depolar arasi StockItem.quantity toplami - henuz hic StockItem kaydi olmayan
+    // urun icin 0 sayilir (bkz. CLAUDE.md, cok depolu stok ad-hoc genislemesi).
     const items: ProductListItem[] = rows.map((row) => {
       const { stockItems, ...productFields } = row;
       return {
         ...(productFields as ProductWithProductList),
-        stockQuantity: stockItems[0]?.quantity ?? new Prisma.Decimal(0),
+        stockQuantity: stockItems.reduce(
+          (sum, si) => sum.add(si.quantity),
+          new Prisma.Decimal(0),
+        ),
       };
     });
 

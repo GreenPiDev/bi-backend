@@ -9,7 +9,6 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { Project } from '@prisma/client';
 import {
   CurrentUser,
   type RequestUser,
@@ -26,7 +25,11 @@ import {
   type ProjectQueryDto,
   type UpdateProjectDto,
 } from './dto/project.dto';
-import { ProjectsService, type ProjectWithQuotes } from './projects.service';
+import {
+  ProjectsService,
+  type ProjectListItem,
+  type ProjectWithQuotes,
+} from './projects.service';
 
 @ModulePage('projects')
 @Controller('projects')
@@ -38,8 +41,14 @@ export class ProjectsController {
   list(
     @Query(new ZodValidationPipe(ProjectQuerySchema))
     query: ProjectQueryDto,
-  ): Promise<PagedResult<Project>> {
+  ): Promise<PagedResult<ProjectListItem>> {
     return this.projects.list(query);
+  }
+
+  @Get('assignable-users')
+  @RequiresPermission('projects', 'VIEW')
+  listAssignableUsers(): Promise<{ id: string; name: string }[]> {
+    return this.projects.listAssignableUsers();
   }
 
   @Get(':id')

@@ -20,15 +20,31 @@ export const StockItemQuerySchema = ListQuerySchema.extend({
 });
 export type StockItemQueryDto = z.infer<typeof StockItemQuerySchema>;
 
-/** Stok Gecmisi filtre penceresi: urune ve guncellemeyi yapan kullaniciya gore. */
+/** Stok Gecmisi filtre penceresi: urune, depoya ve guncellemeyi yapan kullaniciya gore. */
 export const StockHistoryQuerySchema = z.object({
   productId: z.string().optional(),
+  warehouseId: z.string().optional(),
   userId: z.string().optional(),
 });
 export type StockHistoryQueryDto = z.infer<typeof StockHistoryQuerySchema>;
 
 export const UpsertStockItemSchema = z.object({
+  warehouseId: z.string().uuid('Depo secimi gerekli.'),
   quantity: z.number().nonnegative(),
   note: z.string().trim().max(500).optional(),
 });
 export type UpsertStockItemDto = z.infer<typeof UpsertStockItemSchema>;
+
+/** Depolar arasi stok tasima (ad-hoc, bkz. CLAUDE.md). */
+export const TransferStockSchema = z
+  .object({
+    fromWarehouseId: z.string().uuid('Kaynak depo secimi gerekli.'),
+    toWarehouseId: z.string().uuid('Hedef depo secimi gerekli.'),
+    quantity: z.number().positive("Miktar 0'dan buyuk olmalidir."),
+    note: z.string().trim().max(500).optional(),
+  })
+  .refine((dto) => dto.fromWarehouseId !== dto.toWarehouseId, {
+    message: 'Kaynak ve hedef depo farkli olmalidir.',
+    path: ['toWarehouseId'],
+  });
+export type TransferStockDto = z.infer<typeof TransferStockSchema>;

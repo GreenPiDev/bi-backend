@@ -221,6 +221,7 @@ model Tenant {
   projects               Project[]
   purchaseOrders         PurchaseOrder[]
   stockItems             StockItem[]
+  warehouses             Warehouse[]
   messages               Message[]
   messageStars           MessageStar[]
   messageAttachments     MessageAttachment[]
@@ -1294,14 +1295,34 @@ model Project {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  account Account @relation(fields: [accountId], references: [id])
-  quotes  Quote[]
+  tenant      Tenant               @relation(fields: [tenantId], references: [id])
+  account     Account              @relation(fields: [accountId], references: [id])
+  quotes      Quote[]
+  responsibles ProjectResponsible[]
 
   @@unique([tenantId, projectNumber])
   @@index([tenantId, accountId])
   @@index([tenantId, deletedAt])
   @@map("crm_projects")
+}
+
+/**
+ * "Bizden ilgili" (dahili sorumlu) kullanicilar - CalendarEventAttendee.userId ile
+ * ayni desen: gercek FK degil (User relation yok, sadece id); isimler ProjectsService
+ * tarafindan ayrica sorgulanip map'lenir. Coklu secim, replace semantigiyle yonetilir
+ * (bkz. UpdateProjectDto.responsibleUserIds).
+ */
+model ProjectResponsible {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("crm_project_responsibles")
 }
 
 /**
@@ -1366,19 +1387,42 @@ model PurchaseOrderItem {
  * hesaplanir (Product.minStockLevel ile karsilastirma).
  */
 model StockItem {
+  id          String   @id @default(uuid())
+  tenantId    String
+  productId   String
+  /** Depo bazli stok (ad-hoc, bkz. CLAUDE.md) - bir urun birden fazla depoda
+   * farkli miktarlarla bulunabilir, her (urun, depo) ciftinin kendi satiri vardir. */
+  warehouseId String
+  quantity    Decimal  @default(0) @db.Decimal(14, 3)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([tenantId, productId, warehouseId])
+  @@index([tenantId])
+  @@index([tenantId, warehouseId])
+  @@map("crm_stock_items")
+}
+
+/** Depo (ad-hoc, bkz. CLAUDE.md) - tenant'in fiziksel/mantiksal stok lokasyonlari. */
+model Warehouse {
   id        String   @id @default(uuid())
   tenantId  String
-  productId String
-  quantity  Decimal  @default(0) @db.Decimal(14, 3)
+  name      String
+  address   String?
+  isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  stockItems StockItem[]
 
-  @@unique([tenantId, productId])
+  @@unique([tenantId, name])
   @@index([tenantId])
-  @@map("crm_stock_items")
+  @@map("crm_warehouses")
 }
 
 /**
