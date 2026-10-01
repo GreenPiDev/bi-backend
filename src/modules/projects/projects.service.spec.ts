@@ -16,6 +16,12 @@ const fakeCache = {
   set: vi.fn(),
   invalidate: vi.fn(),
 } as never;
+const fakeFileUrl = { build: vi.fn().mockReturnValue(null) } as never;
+const fakeStorage = {
+  upload: vi.fn(),
+  delete: vi.fn(),
+  download: vi.fn(),
+} as never;
 
 function createProjectRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -71,7 +77,13 @@ function createPrisma(
 describe('ProjectsService', () => {
   it('getById: bulunamayan proje icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ projectRow: null });
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -79,7 +91,13 @@ describe('ProjectsService', () => {
 
   it('create: PRJ-YYYY-AA-GG-NNN formatinda numara uretir ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await runInTenant(() =>
       service.create('user-1', {
         accountId: 'account-1',
@@ -100,7 +118,13 @@ describe('ProjectsService', () => {
 
   it('update: bulunamayan proje icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ projectRow: null });
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await expect(
       service.update('yok', { name: 'x' } as never),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -110,7 +134,13 @@ describe('ProjectsService', () => {
     const prisma = createPrisma({
       quoteRows: [{ id: 'quote-1', accountId: 'baska-firma', projectId: null }],
     });
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await expect(
       service.update('project-1', { quoteIds: ['quote-1'] } as never),
     ).rejects.toMatchObject({ code: 'QUOTE_ACCOUNT_MISMATCH' });
@@ -123,7 +153,13 @@ describe('ProjectsService', () => {
         { id: 'quote-1', accountId: 'account-1', projectId: 'other-project' },
       ],
     });
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await expect(
       service.update('project-1', { quoteIds: ['quote-1'] } as never),
     ).rejects.toMatchObject({ code: 'QUOTE_ALREADY_LINKED_TO_PROJECT' });
@@ -134,7 +170,13 @@ describe('ProjectsService', () => {
     const prisma = createPrisma({
       quoteRows: [{ id: 'quote-2', accountId: 'account-1', projectId: null }],
     });
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await service.update('project-1', { quoteIds: ['quote-2'] } as never);
 
     expect(prisma.__tx.quote.updateMany).toHaveBeenNthCalledWith(1, {
@@ -150,7 +192,13 @@ describe('ProjectsService', () => {
 
   it('update: bos quoteIds verilince sadece mevcut iliskiler kaldirilir', async () => {
     const prisma = createPrisma();
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await service.update('project-1', { quoteIds: [] } as never);
 
     expect(prisma.quote.findMany).not.toHaveBeenCalled();
@@ -163,7 +211,13 @@ describe('ProjectsService', () => {
 
   it('remove: projeyi siler ve audit log yazar', async () => {
     const prisma = createPrisma();
-    const service = new ProjectsService(prisma as never, fakeAudit, fakeCache);
+    const service = new ProjectsService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeFileUrl,
+      fakeStorage,
+    );
     await service.remove('project-1');
     expect(prisma.project.delete).toHaveBeenCalledWith({
       where: { id: 'project-1' },

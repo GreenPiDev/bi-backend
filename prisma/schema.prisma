@@ -219,6 +219,7 @@ model Tenant {
   postSaleCases          PostSaleCase[]
   feedbackSurveys        FeedbackSurvey[]
   projects               Project[]
+  projectAttachments     ProjectAttachment[]
   purchaseOrders         PurchaseOrder[]
   stockItems             StockItem[]
   warehouses             Warehouse[]
@@ -823,10 +824,10 @@ enum CalendarAttendeeStatus {
  * (Faz 11b) relatedEntityType='Interaction' ile yeniden kullaniliyor, bkz. VARSAYIMLAR.md V26.
  */
 model Interaction {
-  id                 String            @id @default(uuid())
-  tenantId           String
-  accountId          String?
-  contactId          String?
+  id                  String            @id @default(uuid())
+  tenantId            String
+  accountId           String?
+  contactId           String?
   /**
    * Eskiden sabit InteractionType enum'iydi (CALL/VISIT/MEETING/EMAIL/OTHER) - kullanicinin
    * ice aktardigi Excel'lerdeki "Gorusme Sekli" degerleri bu 5 sabitle sinirli olmadigindan
@@ -834,45 +835,62 @@ model Interaction {
    * dogrulanan serbest metne cevrildi (bkz. AccountsService.assertValidSector ile ayni "bos
    * listede serbest gec" deseni, InteractionsService.assertValidInteractionType).
    */
-  type               String
+  type                String
   /**
    * Ice aktarma (interaction-imports) "Konu" kolonu icin eklendi - serbest metin, zorunlu degil.
    */
-  subject            String?
+  subject             String?
   /**
    * Konu (subject) eklendikten sonra artik zorunlu degil - gorusme sadece bir konu
    * basligiyla da anlamli olabilir.
    */
-  notes              String?
-  occurredAt         DateTime
-  status             InteractionStatus @default(OPEN)
+  notes               String?
+  occurredAt          DateTime
+  status              InteractionStatus @default(OPEN)
   /**
    * M2: bilinmeyen firma serbest metinle girildiyse otomatik olusan cari - bildirim icin.
    */
-  accountAutoCreated Boolean           @default(false)
+  accountAutoCreated  Boolean           @default(false)
   /**
    * M1: bilinmeyen kisi serbest metinle girildiyse otomatik olusan kontak - bildirim icin.
    */
-  contactAutoCreated Boolean           @default(false)
+  contactAutoCreated  Boolean           @default(false)
   /**
    * Excel/CSV ice aktarmada eslenmeyen sutunlar icin catch-all - Account.customFields ile
    * ayni desen (bkz. docs/VARSAYIMLAR.md V41, /gorusmeler ice aktarma "ozel alan" secenegi).
    */
-  customFields       Json              @default("{}")
-  createdById        String
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  deletedAt          DateTime?
+  customFields        Json              @default("{}")
+  /**
+   * Gorusme detay sayfasindaki "Bagli Gorusme Ekle" (yesil +) butonuyla eklenen ek gorusme
+   * kayitlari icin self-relation - bu alan doluysa kayit /gorusmeler ana listesinde GOSTERILMEZ
+   * (InteractionsService.list varsayilan filtresi), sadece ait oldugu ana gorusmenin detay
+   * sayfasinda kart olarak gorunur. Ana kayit silinirse bagli kayitlar da cascade silinir.
+   */
+  parentInteractionId String?
+  /**
+   * Gorusmeyi fiilen yapan kullanici - createdById ile ayni desen (iliskisel FK degil,
+   * serbest String), kaydi SISTEME girenden farkli olabilir (orn. asistan baskasi adina
+   * girer). Su an sadece "Bagli Gorusme Ekle" modalindan doldurulur, varsayilani o anki
+   * kullanicidir ama degistirilebilir.
+   */
+  performedByUserId   String?
+  createdById         String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  deletedAt           DateTime?
 
-  tenant       Tenant                   @relation(fields: [tenantId], references: [id])
-  account      Account?                 @relation(fields: [accountId], references: [id])
-  contact      Contact?                 @relation(fields: [contactId], references: [id])
-  opportunity  Opportunity?
-  participants InteractionParticipant[]
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id])
+  account            Account?                 @relation(fields: [accountId], references: [id])
+  contact            Contact?                 @relation(fields: [contactId], references: [id])
+  opportunity        Opportunity?
+  participants       InteractionParticipant[]
+  parentInteraction  Interaction?             @relation("InteractionLinked", fields: [parentInteractionId], references: [id], onDelete: Cascade)
+  linkedInteractions Interaction[]            @relation("InteractionLinked")
 
   @@index([tenantId, accountId])
   @@index([tenantId, occurredAt])
   @@index([tenantId, deletedAt])
+  @@index([tenantId, parentInteractionId])
   @@map("crm_interactions")
 }
 
@@ -1297,15 +1315,38 @@ model Project {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  tenant      Tenant               @relation(fields: [tenantId], references: [id])
-  account     Account              @relation(fields: [accountId], references: [id])
-  quotes      Quote[]
+  tenant       Tenant               @relation(fields: [tenantId], references: [id])
+  account      Account              @relation(fields: [accountId], references: [id])
+  quotes       Quote[]
   responsibles ProjectResponsible[]
+  attachments  ProjectAttachment[]
 
   @@unique([tenantId, projectNumber])
   @@index([tenantId, accountId])
   @@index([tenantId, deletedAt])
   @@map("crm_projects")
+}
+
+/**
+ * Proje ile ilgili dosyalar (sozlesme, teknik sartname vb.) - MessageAttachment ile
+ * ayni desen (fileKey R2'de, orijinal ad/mimeType/boyut burada), tek fark bir Message'a
+ * degil dogrudan bir Project'e bagli olmasi.
+ */
+model ProjectAttachment {
+  id        String   @id @default(uuid())
+  tenantId  String
+  projectId String
+  fileKey   String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, projectId])
+  @@map("crm_project_attachments")
 }
 
 /**
@@ -1392,8 +1433,10 @@ model StockItem {
   id          String   @id @default(uuid())
   tenantId    String
   productId   String
-  /** Depo bazli stok (ad-hoc, bkz. CLAUDE.md) - bir urun birden fazla depoda
-   * farkli miktarlarla bulunabilir, her (urun, depo) ciftinin kendi satiri vardir. */
+  /**
+   * Depo bazli stok (ad-hoc, bkz. CLAUDE.md) - bir urun birden fazla depoda
+   * farkli miktarlarla bulunabilir, her (urun, depo) ciftinin kendi satiri vardir.
+   */
   warehouseId String
   quantity    Decimal  @default(0) @db.Decimal(14, 3)
   createdAt   DateTime @default(now())
@@ -1409,7 +1452,9 @@ model StockItem {
   @@map("crm_stock_items")
 }
 
-/** Depo (ad-hoc, bkz. CLAUDE.md) - tenant'in fiziksel/mantiksal stok lokasyonlari. */
+/**
+ * Depo (ad-hoc, bkz. CLAUDE.md) - tenant'in fiziksel/mantiksal stok lokasyonlari.
+ */
 model Warehouse {
   id        String   @id @default(uuid())
   tenantId  String

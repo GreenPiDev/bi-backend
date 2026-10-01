@@ -89,6 +89,7 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
           async (args: { where?: { id?: { in?: string[] } } } = {}) =>
             (args.where?.id?.in ?? []).map((id) => ({ id })),
         ),
+      findFirst: vi.fn().mockResolvedValue({ id: USER_ID }),
     },
     $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(client)),
   };
@@ -443,6 +444,216 @@ describe('InteractionsService', () => {
     expect(result.reminderConflicts).toEqual([
       { userId: USER_ID, suggestedStartAt: expect.any(Date) },
     ]);
+  });
+
+  it('create: parentInteractionId verilmisse ama ana kayit bulunamazsa PARENT_INTERACTION_NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.interaction.findFirst = vi.fn().mockResolvedValue(null);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await expect(
+      service.create(TENANT_ID, USER_ID, {
+        accountId: ACCOUNT_ID,
+        type: 'CALL',
+        notes: 'Bagli gorusme',
+        occurredAt: new Date('2026-01-01'),
+        parentInteractionId: 'parent-1',
+      } as never),
+    ).rejects.toMatchObject({
+      code: 'PARENT_INTERACTION_NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it('create: parentInteractionId verilmisse ve ana kayit mevcutsa bagli kayit olusturur', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await service.create(TENANT_ID, USER_ID, {
+      accountId: ACCOUNT_ID,
+      type: 'CALL',
+      notes: 'Bagli gorusme',
+      occurredAt: new Date('2026-01-01'),
+      parentInteractionId: 'interaction-1',
+    } as never);
+    expect(prisma.interaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ parentInteractionId: 'interaction-1' }),
+      }),
+    );
+  });
+
+  it('create: performedByUserId verilmisse ama kullanici bulunamazsa USER_NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.user.findFirst = vi.fn().mockResolvedValue(null);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await expect(
+      service.create(TENANT_ID, USER_ID, {
+        accountId: ACCOUNT_ID,
+        type: 'CALL',
+        notes: 'notlar',
+        occurredAt: new Date('2026-01-01'),
+        performedByUserId: 'yok-kullanici',
+      } as never),
+    ).rejects.toMatchObject({
+      code: 'USER_NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(prisma.interaction.create).not.toHaveBeenCalled();
+  });
+
+  it('create: performedByUserId verilmisse kaydedilir', async () => {
+    const prisma = createPrisma();
+    prisma.user.findFirst = vi.fn().mockResolvedValue({ id: USER_ID });
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await service.create(TENANT_ID, USER_ID, {
+      accountId: ACCOUNT_ID,
+      type: 'CALL',
+      notes: 'notlar',
+      occurredAt: new Date('2026-01-01'),
+      performedByUserId: USER_ID,
+    } as never);
+    expect(prisma.interaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ performedByUserId: USER_ID }),
+      }),
+    );
+  });
+
+  it('list: varsayilan olarak bagli (child) kayitlari haric tutar', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await service.list({ page: 1, pageSize: 20 } as never);
+    expect(prisma.interaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ parentInteractionId: null }),
+      }),
+    );
+  });
+
+  it('list: parentInteractionId verilmisse sadece o anaya bagli kayitlari getirir', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await service.list({
+      page: 1,
+      pageSize: 20,
+      parentInteractionId: 'interaction-1',
+    } as never);
+    expect(prisma.interaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          parentInteractionId: 'interaction-1',
+        }),
+      }),
+    );
+  });
+
+  it('update: contactId verilmisse ama kisi bulunamazsa CONTACT_NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.contact.findFirst = vi.fn().mockResolvedValue(null);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await expect(
+      service.update('interaction-1', { contactId: 'yok-kisi' } as never),
+    ).rejects.toMatchObject({
+      code: 'CONTACT_NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(prisma.interaction.update).not.toHaveBeenCalled();
+  });
+
+  it('update: performedByUserId verilmisse ama kullanici bulunamazsa USER_NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.user.findFirst = vi.fn().mockResolvedValue(null);
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await expect(
+      service.update('interaction-1', {
+        performedByUserId: 'yok-kullanici',
+      } as never),
+    ).rejects.toMatchObject({
+      code: 'USER_NOT_FOUND',
+    } satisfies Partial<AppException>);
+    expect(prisma.interaction.update).not.toHaveBeenCalled();
+  });
+
+  it('update: contactId ve performedByUserId gecerliyse kaydedilir', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+    );
+    await service.update('interaction-1', {
+      contactId: 'contact-1',
+      performedByUserId: USER_ID,
+    } as never);
+    expect(prisma.interaction.update).toHaveBeenCalledWith({
+      where: { id: 'interaction-1' },
+      data: { contactId: 'contact-1', performedByUserId: USER_ID },
+    });
   });
 
   it('remove: gorusmeyi siler ve audit log yazar', async () => {

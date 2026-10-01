@@ -74,6 +74,12 @@ export const CreateInteractionSchema = z
     participants: z.array(ParticipantSchema).max(20).optional(),
     opportunity: NestedOpportunitySchema.optional(),
     reminder: ReminderSchema.optional(),
+    /** "Bagli Gorusme Ekle" modalindan olusturulan ek kayitlar bu alani doldurur - bkz.
+     * schema.prisma Interaction.parentInteractionId yorumu. */
+    parentInteractionId: z.string().uuid().optional(),
+    /** Gorusmeyi fiilen yapan kullanici - bkz. schema.prisma Interaction.performedByUserId
+     * yorumu. */
+    performedByUserId: z.string().uuid().optional(),
   })
   .refine((dto) => !(dto.accountId && dto.accountName), {
     message: 'accountId ve accountName ayni anda verilemez.',
@@ -102,6 +108,11 @@ export const UpdateInteractionSchema = z.object({
   notes: z.string().trim().max(5000).optional(),
   occurredAt: z.coerce.date().optional(),
   status: z.enum(['OPEN', 'CLOSED']).optional(),
+  /** Sadece "Bagli Gorusme Ekle" ile olusturulan kayitlarin duzenleme modalindan gelir -
+   * ana gorusmenin kendi duzenleme formu (interaction-edit-page.tsx) bu alanlari
+   * gondermez, bkz. schema.prisma Interaction.parentInteractionId/performedByUserId. */
+  contactId: z.string().uuid().optional(),
+  performedByUserId: z.string().uuid().optional(),
 });
 export type UpdateInteractionDto = z.infer<typeof UpdateInteractionSchema>;
 
@@ -116,5 +127,9 @@ export const InteractionQuerySchema = ListQuerySchema.extend({
    * from/to ciftine cevrilir - bkz. opportunity.dto.ts'teki ayni desen. */
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  /** Verilirse, o ana gorusmeye bagli ek kayitlar (bkz. parentInteractionId) listelenir -
+   * verilmezse varsayilan olarak bu kayitlar ana /gorusmeler listesinden HARIC tutulur
+   * (InteractionsService.list). */
+  parentInteractionId: z.string().uuid().optional(),
 });
 export type InteractionQueryDto = z.infer<typeof InteractionQuerySchema>;

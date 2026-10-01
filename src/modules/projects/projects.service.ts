@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { Project, Quote } from '@prisma/client';
+import type { Project, ProjectAttachment, Quote } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
@@ -8,6 +9,9 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
+import { FileUrlService } from '../../core/storage/file-url.service';
+import { R2StorageService } from '../../core/storage/r2-storage.service';
+import { detectAttachmentExtension } from '../../core/validators/attachment-upload-validation';
 import { AuditService } from '../audit/audit.service';
 import { ProjectsCacheService } from './projects-cache.service';
 import type {
@@ -18,14 +22,30 @@ import type {
 
 const SORTABLE_FIELDS = ['projectNumber', 'name', 'createdAt'] as const;
 const PROJECT_NUMBER_CREATE_RETRIES = 5;
+export const MAX_PROJECT_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+export const MAX_PROJECT_ATTACHMENTS_PER_PROJECT = 10;
 
-const PROJECT_INCLUDE = { quotes: true, responsibles: true } as const;
+const PROJECT_INCLUDE = {
+  quotes: true,
+  responsibles: true,
+  attachments: true,
+} as const;
 
 export type ProjectResponsibleUser = { id: string; name: string };
+
+export interface ProjectAttachmentView {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string | null;
+  createdAt: Date;
+}
 
 export type ProjectWithQuotes = Project & {
   quotes: Quote[];
   responsibleUsers: ProjectResponsibleUser[];
+  attachments: ProjectAttachmentView[];
 };
 
 export type ProjectListItem = Project & {
@@ -45,7 +65,129 @@ export class ProjectsService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
     private readonly cache: ProjectsCacheService,
+    private readonly fileUrl: FileUrlService,
+    private readonly storage: R2StorageService,
   ) {}
+
+  private mapAttachment(attachment: ProjectAttachment): ProjectAttachmentView {
+    return {
+      id: attachment.id,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      sizeBytes: attachment.sizeBytes,
+      url: this.fileUrl.build(
+        attachment.fileKey,
+        attachment.createdAt,
+        attachment.fileName,
+      ),
+      createdAt: attachment.createdAt,
+    };
+  }
+
+  /** Hem "Yeni Proje" (proje olusturulduktan hemen sonra) hem "Duzenle" sayfasindan
+   * cagrilir - dosya secimi aninda degil, form "Kaydet"e basilinca yuklenir (kullanici
+   * yanlis dosya secip Kaydet'ten once vazgecebilsin diye, bkz. docs/YOL_HARITASI.md). */
+  async addAttachment(
+    projectId: string,
+    tenantId: string,
+    file: { mimetype: string; buffer: Buffer; originalname: string },
+  ): Promise<ProjectAttachmentView> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Proje bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const existingCount = await this.prisma.projectAttachment.count({
+      where: { projectId },
+    });
+    if (existingCount >= MAX_PROJECT_ATTACHMENTS_PER_PROJECT) {
+      throw new AppException(
+        'TOO_MANY_ATTACHMENTS',
+        `En fazla ${MAX_PROJECT_ATTACHMENTS_PER_PROJECT} dosya eklenebilir.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const ext = detectAttachmentExtension(file.mimetype, file.buffer);
+    const env =
+      process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    const key = `PILENS/${env}/${tenantId}/projects/${randomUUID()}.${ext}`;
+    await this.storage.upload(key, file.buffer, file.mimetype);
+    const attachment = await this.prisma.projectAttachment.create({
+      data: {
+        projectId,
+        fileKey: key,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.buffer.length,
+      } as never,
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Project',
+      entityId: projectId,
+      meta: { addedAttachment: attachment.fileName },
+    });
+    return this.mapAttachment(attachment);
+  }
+
+  async removeAttachment(
+    projectId: string,
+    attachmentId: string,
+  ): Promise<void> {
+    const attachment = await this.prisma.projectAttachment.findFirst({
+      where: { id: attachmentId, projectId },
+    });
+    if (!attachment) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Dosya bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    await this.storage.delete(attachment.fileKey);
+    await this.prisma.projectAttachment.delete({ where: { id: attachmentId } });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Project',
+      entityId: projectId,
+      meta: { removedAttachment: attachment.fileName },
+    });
+  }
+
+  /** Kullaniciya gorunen dosya adini degistirir - R2'deki gercek fileKey/nesne
+   * etkilenmez, sadece goruntulenen fileName. */
+  async renameAttachment(
+    projectId: string,
+    attachmentId: string,
+    fileName: string,
+  ): Promise<ProjectAttachmentView> {
+    const attachment = await this.prisma.projectAttachment.findFirst({
+      where: { id: attachmentId, projectId },
+    });
+    if (!attachment) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Dosya bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const updated = await this.prisma.projectAttachment.update({
+      where: { id: attachmentId },
+      data: { fileName },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Project',
+      entityId: projectId,
+      meta: { renamedAttachment: { from: attachment.fileName, to: fileName } },
+    });
+    return this.mapAttachment(updated);
+  }
 
   async list(query: ProjectQueryDto): Promise<PagedResult<ProjectListItem>> {
     const cached = await this.cache.get<ProjectListItem>(query);
@@ -176,7 +318,7 @@ export class ProjectsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    const { responsibles, ...rest } = project;
+    const { responsibles, attachments, ...rest } = project;
     const nameById = await this.resolveUserNames(
       (responsibles ?? []).map((r) => r.userId),
     );
@@ -184,7 +326,11 @@ export class ProjectsService {
       id: r.userId,
       name: nameById.get(r.userId) ?? 'Bir kullanici',
     }));
-    return { ...rest, responsibleUsers };
+    return {
+      ...rest,
+      responsibleUsers,
+      attachments: (attachments ?? []).map((a) => this.mapAttachment(a)),
+    };
   }
 
   /**

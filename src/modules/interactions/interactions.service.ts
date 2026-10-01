@@ -37,6 +37,7 @@ export type InteractionWithDetails = Interaction & {
   participants: InteractionParticipant[];
   opportunity: Opportunity | null;
   createdByName: string | null;
+  performedByName: string | null;
 };
 
 export interface ReminderConflict {
@@ -92,12 +93,20 @@ export class InteractionsService {
     private readonly opportunitiesCache: OpportunitiesCacheService,
   ) {}
 
-  /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
-   * User tablosundan toplu cozumleniyor. */
+  /** createdById/performedByUserId iliskisel bir FK degil (bkz. schema); isimler
+   * gostermek icin User tablosundan toplu cozumleniyor. */
   private async attachCreatedByNames(
     rows: InteractionRow[],
   ): Promise<InteractionWithDetails[]> {
-    const ids = [...new Set(rows.map((row) => row.createdById))];
+    const ids = [
+      ...new Set(
+        rows.flatMap((row) =>
+          [row.createdById, row.performedByUserId].filter((id): id is string =>
+            Boolean(id),
+          ),
+        ),
+      ),
+    ];
     const users = await this.prisma.user.findMany({
       where: { id: { in: ids } },
       select: { id: true, name: true },
@@ -106,6 +115,9 @@ export class InteractionsService {
     return rows.map((row) => ({
       ...row,
       createdByName: nameById.get(row.createdById) ?? null,
+      performedByName: row.performedByUserId
+        ? (nameById.get(row.performedByUserId) ?? null)
+        : null,
     }));
   }
 
@@ -154,6 +166,7 @@ export class InteractionsService {
       status,
       from,
       to,
+      parentInteractionId,
     } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'occurredAt',
@@ -161,6 +174,10 @@ export class InteractionsService {
     });
 
     const where = {
+      // "Bagli Gorusme Ekle" ile olusturulan ek kayitlar varsayilan olarak ana listede
+      // gorunmez; sadece parentInteractionId acikca istendiginde (detay sayfasindaki
+      // kartlar) gosterilir - bkz. schema.prisma Interaction.parentInteractionId yorumu.
+      parentInteractionId: parentInteractionId ?? null,
       ...(accountId ? { accountId } : {}),
       ...(contactId ? { contactId } : {}),
       ...(createdById ? { createdById } : {}),
@@ -298,6 +315,32 @@ export class InteractionsService {
         )
       : [];
 
+    if (dto.parentInteractionId) {
+      const parent = await this.prisma.interaction.findFirst({
+        where: { id: dto.parentInteractionId },
+      });
+      if (!parent) {
+        throw new AppException(
+          'PARENT_INTERACTION_NOT_FOUND',
+          'Bagli olunacak gorusme bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    if (dto.performedByUserId) {
+      const performer = await this.prisma.user.findFirst({
+        where: { id: dto.performedByUserId },
+      });
+      if (!performer) {
+        throw new AppException(
+          'USER_NOT_FOUND',
+          'Secilen kullanici bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     let accountWasCreated = false;
     const { interactionId, reminderEvent } = await this.prisma.$transaction(
       async (tx) => {
@@ -375,6 +418,8 @@ export class InteractionsService {
             occurredAt: dto.occurredAt,
             accountAutoCreated,
             contactAutoCreated,
+            parentInteractionId: dto.parentInteractionId,
+            performedByUserId: dto.performedByUserId,
             ...(dto.participants?.length
               ? { participants: { create: dto.participants } }
               : {}),
@@ -492,6 +537,30 @@ export class InteractionsService {
     await this.getById(id);
     if (dto.type) {
       await this.assertValidInteractionType(dto.type);
+    }
+    if (dto.contactId) {
+      const contact = await this.prisma.contact.findFirst({
+        where: { id: dto.contactId },
+      });
+      if (!contact) {
+        throw new AppException(
+          'CONTACT_NOT_FOUND',
+          'Secilen kisi bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+    if (dto.performedByUserId) {
+      const performer = await this.prisma.user.findFirst({
+        where: { id: dto.performedByUserId },
+      });
+      if (!performer) {
+        throw new AppException(
+          'USER_NOT_FOUND',
+          'Secilen kullanici bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
     }
     await this.prisma.interaction.update({ where: { id }, data: dto });
     await this.audit.log({

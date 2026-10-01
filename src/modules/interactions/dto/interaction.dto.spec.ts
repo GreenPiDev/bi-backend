@@ -76,4 +76,22 @@ describe('Interaction DTO', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('parentInteractionId gecerli bir uuid degilse hata verir', () => {
+    const result = CreateInteractionSchema.safeParse({
+      ...base,
+      accountId: '11111111-1111-1111-8111-111111111111',
+      parentInteractionId: 'gecersiz',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('parentInteractionId gecerli bir uuid ise kabul edilir', () => {
+    const result = CreateInteractionSchema.safeParse({
+      ...base,
+      accountId: '11111111-1111-1111-8111-111111111111',
+      parentInteractionId: '11111111-1111-1111-8111-111111111111',
+    });
+    expect(result.success).toBe(true);
+  });
 });

@@ -52,3 +52,10 @@ export const ProjectQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
 });
 export type ProjectQueryDto = z.infer<typeof ProjectQuerySchema>;
+
+export const RenameProjectAttachmentSchema = z.object({
+  fileName: z.string().trim().min(1, 'Dosya adi bos birakilamaz.').max(255),
+});
+export type RenameProjectAttachmentDto = z.infer<
+  typeof RenameProjectAttachmentSchema
+>;
