@@ -60,6 +60,11 @@ export async function cleanupTestTenants(
   await prisma.contact.deleteMany({ where: tenantFilter });
   await prisma.account.deleteMany({ where: tenantFilter });
   await prisma.calendarEvent.deleteMany({ where: tenantFilter });
+  // Gorusme ice aktarmanin "bilinmeyen gorusme sekli" otomatik-olusturma yolu
+  // (InteractionTypeOptionsService.create) tenant'a bagli yeni secenekler
+  // acabiliyor - Tenant silinmeden once bunlar da temizlenmeli, aksi halde
+  // FK ihlaliyle Tenant.deleteMany basarisiz olur.
+  await prisma.interactionTypeOption.deleteMany({ where: tenantFilter });
   await prisma.sectorOption.deleteMany({ where: tenantFilter });
   await prisma.tenantSetting.deleteMany({ where: tenantFilter });
   await prisma.user.deleteMany({ where: tenantFilter });

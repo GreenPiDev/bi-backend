@@ -7,6 +7,7 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { AuditService } from '../audit/audit.service';
+import { ContactsCacheService } from './contacts-cache.service';
 import type {
   ContactQueryDto,
   CreateContactDto,
@@ -37,6 +38,7 @@ export class ContactsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly cache: ContactsCacheService,
   ) {}
 
   /** createdById iliskisel bir FK degil (bkz. schema); isim gostermek icin
@@ -68,6 +70,11 @@ export class ContactsService {
   }
 
   async list(query: ContactQueryDto): Promise<PagedResult<ContactWithMeta>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
     const { page, pageSize, q, accountId, ownerId, status, createdById } =
       query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
@@ -113,7 +120,7 @@ export class ContactsService {
         (page - 1) * pageSize,
         (page - 1) * pageSize + pageSize,
       );
-      return {
+      const result = {
         data: await this.attachCreatedByNames(pageRows),
         meta: {
           page,
@@ -122,6 +129,8 @@ export class ContactsService {
           totalPages: Math.ceil(total / pageSize),
         },
       };
+      await this.cache.set(query, result);
+      return result;
     }
 
     const [data, total] = await Promise.all([
@@ -135,10 +144,12 @@ export class ContactsService {
       this.prisma.contact.count({ where }),
     ]);
 
-    return {
+    const result = {
       data: await this.attachCreatedByNames(data),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+    await this.cache.set(query, result);
+    return result;
   }
 
   async getById(id: string): Promise<ContactWithMeta> {
@@ -225,6 +236,7 @@ export class ContactsService {
       entityId: contact.id,
       meta: { firstName: contact.firstName, lastName: contact.lastName },
     });
+    await this.cache.invalidate();
     return contact;
   }
 
@@ -244,6 +256,7 @@ export class ContactsService {
       data: data as never,
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Contact', entityId: id });
+    await this.cache.invalidate();
     return contact;
   }
 
@@ -251,5 +264,6 @@ export class ContactsService {
     await this.getById(id);
     await this.prisma.contact.delete({ where: { id } });
     await this.audit.log({ action: 'DELETE', entity: 'Contact', entityId: id });
+    await this.cache.invalidate();
   }
 }

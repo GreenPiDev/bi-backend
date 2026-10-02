@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { DataSourceType } from '@prisma/client';
+import type { DataSourceType, Interaction } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { z } from 'zod';
 import { AppException } from '../../core/errors/app.exception';
@@ -12,6 +12,7 @@ import { TenantContext } from '../../core/tenant/tenant-context';
 import { parseFlexibleDate } from '../../core/validators/date';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { normalizeAccountName } from '../accounts/account-name.util';
+import { AuditService } from '../audit/audit.service';
 import { FileParserService } from '../datasources/file-parser.service';
 import { InteractionTypeSchema } from '../interactions/dto/interaction.dto';
 import { InteractionsCacheService } from '../interactions/interactions-cache.service';
@@ -33,6 +34,8 @@ export interface InteractionImportRowError {
 export interface InteractionImportResult {
   totalRows: number;
   imported: number;
+  created: number;
+  updated: number;
   errors: InteractionImportRowError[];
 }
 
@@ -162,6 +165,7 @@ export class InteractionImportsService {
     private readonly accountsCache: AccountsCacheService,
     private readonly interactionsCache: InteractionsCacheService,
     private readonly interactionTypeOptions: InteractionTypeOptionsService,
+    private readonly audit: AuditService,
   ) {}
 
   private async readRows(
@@ -354,8 +358,37 @@ export class InteractionImportsService {
     const accountIdByName = new Map<string, string>();
     const ownerIdByName = new Map<string, string>();
     const typeLabelCache = new Map<string, string>();
-    let imported = 0;
+    let created = 0;
+    let updated = 0;
     let anyAccountCreated = false;
+
+    // Ayni dosya iki kez (veya kismen kesisen iki dosya) yuklenirse, ikinci
+    // yuklemede eslesen gorusmeler tekrar eklenmez, mevcut kaydin uzerine
+    // yazilir - eslestirme anahtari: firma/kisi + gun bazinda tarih + gorusme
+    // sekli. Dosyada eslenmemis alanlara (subject/notes disinda) dokunulmaz,
+    // katilimcilar (participants) guncellemede degistirilmez (bkz.
+    // docs/VARSAYIMLAR.md V50). Tek seferlik findMany ile Map'e yuklenir,
+    // satir bazinda sorgu yapilmaz.
+    const existingInteractions = await this.prisma.interaction.findMany();
+    const interactionsByKey = new Map<string, Interaction>();
+    const interactionKey = (
+      accountId: string | undefined,
+      contactId: string | undefined,
+      occurredAt: Date,
+      typeLabel: string,
+    ) =>
+      `${accountId ?? contactId ?? ''}|${truncateToUtcDate(occurredAt).getTime()}|${typeLabel}`;
+    for (const interaction of existingInteractions) {
+      interactionsByKey.set(
+        interactionKey(
+          interaction.accountId ?? undefined,
+          interaction.contactId ?? undefined,
+          interaction.occurredAt,
+          interaction.type,
+        ),
+        interaction,
+      );
+    }
 
     // "Bizden Ilgili" bir sutuna eslendiyse, satirlarda gerekebilecek dummy kullanicilar
     // icin "Temel Kullanici" sistem rolu ve tenant slug'i (email uretimi) bir kez cekilir.
@@ -390,6 +423,15 @@ export class InteractionImportsService {
         const value = record[source];
         mapped[target] = value === '' ? undefined : value;
       }
+
+      // Sadece dosyada gercekten eslenmis (bos olmayan) alanlar guncellemede
+      // yazilir - accountName/contactName/type/occurredAt/katilimci/ownerName
+      // alanlari FK/tip/tarih cozumlemek icin tuketilir, dogrudan yazilmaz;
+      // bu yuzden guncellemede sadece subject/notes'un "saglanmis" olup olmadigi
+      // kontrol edilir (bkz. asagidaki updateData).
+      const providedFields = new Set(
+        Object.keys(mapped).filter((key) => mapped[key] !== undefined),
+      );
 
       const customFields: Record<string, string> = {};
       for (const column of attributeColumns) {
@@ -483,22 +525,71 @@ export class InteractionImportsService {
           typeLabelCache,
         );
 
-        await this.prisma.interaction.create({
-          data: {
-            createdById: rowCreatedById,
-            accountId,
-            contactId,
-            type: resolvedType.label,
-            subject: row.subject,
-            notes: row.notes,
-            occurredAt: row.occurredAt,
-            ...(participantsData.length > 0
-              ? { participants: { create: participantsData } }
-              : {}),
-            ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
-          } as never,
-        });
-        imported++;
+        const key = interactionKey(
+          accountId,
+          contactId,
+          row.occurredAt,
+          resolvedType.label,
+        );
+        const existingInteraction = interactionsByKey.get(key);
+
+        if (existingInteraction) {
+          const updateData: Record<string, unknown> = {};
+          if (providedFields.has('subject')) {
+            updateData.subject = row.subject;
+          }
+          if (providedFields.has('notes')) {
+            updateData.notes = row.notes;
+          }
+          if (Object.keys(customFields).length > 0) {
+            const existingCustomFields =
+              (existingInteraction.customFields as Record<
+                string,
+                string
+              > | null) ?? {};
+            updateData.customFields = {
+              ...existingCustomFields,
+              ...customFields,
+            };
+          }
+
+          const interaction = await this.prisma.interaction.update({
+            where: { id: existingInteraction.id },
+            data: updateData as never,
+          });
+          interactionsByKey.set(key, interaction);
+          updated++;
+
+          await this.audit.log({
+            action: 'UPDATE',
+            entity: 'Interaction',
+            entityId: interaction.id,
+          });
+        } else {
+          const interaction = await this.prisma.interaction.create({
+            data: {
+              createdById: rowCreatedById,
+              accountId,
+              contactId,
+              type: resolvedType.label,
+              subject: row.subject,
+              notes: row.notes,
+              occurredAt: row.occurredAt,
+              ...(participantsData.length > 0
+                ? { participants: { create: participantsData } }
+                : {}),
+              ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
+            } as never,
+          });
+          interactionsByKey.set(key, interaction);
+          created++;
+
+          await this.audit.log({
+            action: 'CREATE',
+            entity: 'Interaction',
+            entityId: interaction.id,
+          });
+        }
       } catch (error) {
         errors.push({
           row: fileRow,
@@ -514,6 +605,12 @@ export class InteractionImportsService {
     }
     await this.interactionsCache.invalidate();
 
-    return { totalRows: records.length, imported, errors };
+    return {
+      totalRows: records.length,
+      imported: created + updated,
+      created,
+      updated,
+      errors,
+    };
   }
 }

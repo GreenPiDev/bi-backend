@@ -1,14 +1,16 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { DataSourceType } from '@prisma/client';
+import type { Account, Contact, DataSourceType } from '@prisma/client';
 import * as ExcelJS from 'exceljs';
 import { AppException } from '../../core/errors/app.exception';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { AuditService } from '../audit/audit.service';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { normalizeAccountName } from '../accounts/account-name.util';
 import { CreateAccountSchema } from '../accounts/dto/account.dto';
+import { ContactsCacheService } from '../contacts/contacts-cache.service';
 import { CreateContactSchema } from '../contacts/dto/contact.dto';
 import { FileParserService } from '../datasources/file-parser.service';
 import type {
@@ -27,7 +29,24 @@ export interface ImportRowError {
 export interface ImportResult {
   totalRows: number;
   imported: number;
+  created: number;
+  updated: number;
   errors: ImportRowError[];
+}
+
+/** Dosyada (bos olmayan) gercekten eslenmis alanlar - guncellemede sadece bunlar
+ * yazilir, eslenmemis/bos birakilan hucreler mevcut degeri silmez (bkz.
+ * product-imports.service.ts'teki ayni desen, docs/VARSAYIMLAR.md V44/V50). */
+interface ValidImportRow {
+  data: Record<string, unknown>;
+  providedFields: string[];
+  customFields: Record<string, string>;
+}
+
+/** Firma e-posta alani ayri bir normalizasyon utility'si gerektirmeyecek kadar
+ * basit - sadece bu dosyada kullanilan kucuk bir yardimci (bkz. docs/VARSAYIMLAR.md V50). */
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }
 
 export interface ImportPreview {
@@ -102,6 +121,8 @@ export class ImportsService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly fileParser: FileParserService,
     private readonly accountsCache: AccountsCacheService,
+    private readonly contactsCache: ContactsCacheService,
+    private readonly audit: AuditService,
   ) {}
 
   private async readRows(
@@ -187,12 +208,13 @@ export class ImportsService {
     );
     const records = rowsToRecords(headers, rows);
     const errors: ImportRowError[] = [];
-    const validRows: Record<string, unknown>[] = [];
+    const validRows: ValidImportRow[] = [];
 
     records.forEach((record, index) => {
       const mapped = applyMapping(record, mapping);
       uppercaseAccountName(mapped);
       splitAccountSector(mapped);
+      const providedFields = Object.keys(mapped);
 
       const customFields: Record<string, string> = {};
       for (const column of attributeColumns) {
@@ -216,17 +238,111 @@ export class ImportsService {
         });
         return;
       }
-      validRows.push(result.data);
+      validRows.push({
+        data: result.data as Record<string, unknown>,
+        providedFields,
+        customFields,
+      });
     });
 
+    let created = 0;
+    let updated = 0;
+
     if (validRows.length > 0) {
-      await this.prisma.account.createMany({
-        data: validRows.map((row) => ({ ...row, createdById })) as never,
-      });
+      // Ayni excel iki kez (veya kismen kesisen iki excel) yuklenirse, ikinci
+      // yuklemede eslesen firmalar tekrar eklenmez, mevcut kaydin uzerine
+      // yazilir - eslestirme oncelikle VKN/TCKN'e (doluysa), yoksa normalize
+      // edilmis firma adina gore yapilir. Dosyada eslenmemis alanlara
+      // dokunulmaz, customFields birlestirilir (eski anahtarlar silinmez).
+      // Bkz. docs/VARSAYIMLAR.md V50.
+      const existingAccounts = await this.prisma.account.findMany();
+      const byTaxNumber = new Map<string, Account>();
+      const byName = new Map<string, Account>();
+      for (const account of existingAccounts) {
+        if (account.taxNumber) {
+          byTaxNumber.set(account.taxNumber, account);
+        }
+        byName.set(normalizeAccountName(account.name), account);
+      }
+
+      for (const row of validRows) {
+        const taxNumber =
+          typeof row.data.taxNumber === 'string' && row.data.taxNumber
+            ? row.data.taxNumber
+            : undefined;
+        const name = row.data.name as string;
+        const existing = taxNumber
+          ? byTaxNumber.get(taxNumber)
+          : byName.get(normalizeAccountName(name));
+
+        if (existing) {
+          const updateData: Record<string, unknown> = {};
+          for (const field of row.providedFields) {
+            if (field === 'customFields') {
+              continue;
+            }
+            updateData[field] = row.data[field];
+          }
+          if (Object.keys(row.customFields).length > 0) {
+            const existingCustomFields =
+              (existing.customFields as Record<string, string> | null) ?? {};
+            updateData.customFields = {
+              ...existingCustomFields,
+              ...row.customFields,
+            };
+          }
+
+          const account = await this.prisma.account.update({
+            where: { id: existing.id },
+            data: updateData as never,
+          });
+          if (account.taxNumber) {
+            byTaxNumber.set(account.taxNumber, account);
+          }
+          byName.set(normalizeAccountName(account.name), account);
+          updated++;
+
+          await this.audit.log({
+            action: 'UPDATE',
+            entity: 'Account',
+            entityId: account.id,
+          });
+        } else {
+          const account = await this.prisma.account.create({
+            data: {
+              ...row.data,
+              createdById,
+              customFields:
+                Object.keys(row.customFields).length > 0
+                  ? row.customFields
+                  : undefined,
+            } as never,
+          });
+          if (account.taxNumber) {
+            byTaxNumber.set(account.taxNumber, account);
+          }
+          byName.set(normalizeAccountName(account.name), account);
+          created++;
+
+          await this.audit.log({
+            action: 'CREATE',
+            entity: 'Account',
+            entityId: account.id,
+            meta: { name: account.name },
+          });
+        }
+      }
+
       await this.accountsCache.invalidate();
     }
 
-    return { totalRows: records.length, imported: validRows.length, errors };
+    return {
+      totalRows: records.length,
+      imported: created + updated,
+      created,
+      updated,
+      errors,
+    };
   }
 
   async importContacts(
@@ -243,10 +359,11 @@ export class ImportsService {
     const { headers, rows } = await this.readRows(filePath, type);
     const records = rowsToRecords(headers, rows);
     const errors: ImportRowError[] = [];
-    const validRows: Record<string, unknown>[] = [];
+    const validRows: ValidImportRow[] = [];
 
     for (const [index, record] of records.entries()) {
       const mapped = applyMapping(record, mapping);
+      const providedFields = Object.keys(mapped);
       const result = CreateContactSchema.safeParse(mapped);
       if (!result.success) {
         errors.push({
@@ -271,16 +388,137 @@ export class ImportsService {
           continue;
         }
       }
-      validRows.push(result.data);
-    }
-
-    if (validRows.length > 0) {
-      await this.prisma.contact.createMany({
-        data: validRows.map((row) => ({ ...row, createdById })) as never,
+      validRows.push({
+        data: result.data as Record<string, unknown>,
+        providedFields,
+        customFields: {},
       });
     }
 
-    return { totalRows: records.length, imported: validRows.length, errors };
+    let created = 0;
+    let updated = 0;
+
+    if (validRows.length > 0) {
+      // Ayni dosya iki kez yuklenirse eslesen kisiler tekrar eklenmez, mevcut
+      // kaydin uzerine yazilir - eslestirme oncelikle e-postaya (doluysa,
+      // kucuk/buyuk harf yok sayilarak), yoksa ad+soyad+firma kombinasyonuna
+      // gore yapilir. Ne e-posta ne firma varsa (sadece ad-soyad) satir
+      // guvenilir sekilde eslestirilemez - farkli iki kisinin yanlislikla
+      // birlestirilmesini onlemek icin boyle satirlar her zaman yeni kayit
+      // olarak eklenir. Bkz. docs/VARSAYIMLAR.md V50.
+      const existingContacts = await this.prisma.contact.findMany();
+      const byEmail = new Map<string, Contact>();
+      const byNameAccount = new Map<string, Contact>();
+      const nameAccountKey = (
+        firstName: string,
+        lastName: string,
+        accountId: string,
+      ) =>
+        `${firstName.trim().toLowerCase()}|${lastName.trim().toLowerCase()}|${accountId}`;
+      for (const contact of existingContacts) {
+        if (contact.email) {
+          byEmail.set(normalizeEmail(contact.email), contact);
+        }
+        if (contact.accountId) {
+          byNameAccount.set(
+            nameAccountKey(
+              contact.firstName,
+              contact.lastName,
+              contact.accountId,
+            ),
+            contact,
+          );
+        }
+      }
+
+      for (const row of validRows) {
+        const email =
+          typeof row.data.email === 'string' && row.data.email
+            ? normalizeEmail(row.data.email)
+            : undefined;
+        const accountId =
+          typeof row.data.accountId === 'string'
+            ? row.data.accountId
+            : undefined;
+        const firstName = row.data.firstName as string;
+        const lastName = row.data.lastName as string;
+
+        let existing: Contact | undefined;
+        if (email) {
+          existing = byEmail.get(email);
+        } else if (accountId) {
+          existing = byNameAccount.get(
+            nameAccountKey(firstName, lastName, accountId),
+          );
+        }
+
+        if (existing) {
+          const updateData: Record<string, unknown> = {};
+          for (const field of row.providedFields) {
+            updateData[field] = row.data[field];
+          }
+          const contact = await this.prisma.contact.update({
+            where: { id: existing.id },
+            data: updateData as never,
+          });
+          if (contact.email) {
+            byEmail.set(normalizeEmail(contact.email), contact);
+          }
+          if (contact.accountId) {
+            byNameAccount.set(
+              nameAccountKey(
+                contact.firstName,
+                contact.lastName,
+                contact.accountId,
+              ),
+              contact,
+            );
+          }
+          updated++;
+
+          await this.audit.log({
+            action: 'UPDATE',
+            entity: 'Contact',
+            entityId: contact.id,
+          });
+        } else {
+          const contact = await this.prisma.contact.create({
+            data: { ...row.data, createdById } as never,
+          });
+          if (contact.email) {
+            byEmail.set(normalizeEmail(contact.email), contact);
+          }
+          if (contact.accountId) {
+            byNameAccount.set(
+              nameAccountKey(
+                contact.firstName,
+                contact.lastName,
+                contact.accountId,
+              ),
+              contact,
+            );
+          }
+          created++;
+
+          await this.audit.log({
+            action: 'CREATE',
+            entity: 'Contact',
+            entityId: contact.id,
+            meta: { firstName: contact.firstName, lastName: contact.lastName },
+          });
+        }
+      }
+
+      await this.contactsCache.invalidate();
+    }
+
+    return {
+      totalRows: records.length,
+      imported: created + updated,
+      created,
+      updated,
+      errors,
+    };
   }
 
   async exportAccounts(): Promise<Buffer> {

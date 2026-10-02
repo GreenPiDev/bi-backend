@@ -2,6 +2,11 @@ import { AppException } from '../../core/errors/app.exception';
 import { ContactsService } from './contacts.service';
 
 const fakeAudit = { log: vi.fn() } as never;
+const fakeCache = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 const CONTACT_ID = '22222222-2222-2222-2222-222222222222';
 const ACCOUNT_ID = '11111111-1111-1111-1111-111111111111';
@@ -43,7 +48,7 @@ function createPrisma(contactRow: unknown = createContactRow()) {
 describe('ContactsService', () => {
   it('getById: bulunamayan kisi icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     } satisfies Partial<AppException>);
@@ -52,7 +57,7 @@ describe('ContactsService', () => {
   it('create: var olmayan firmaya baglanmaya calisirsa INVALID_REFERENCE firlatir', async () => {
     const prisma = createPrisma();
     prisma.account.findFirst.mockResolvedValue(null);
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create(CREATED_BY_ID, {
         firstName: 'Ayse',
@@ -67,7 +72,7 @@ describe('ContactsService', () => {
 
   it('create: gecerli firma ile kisi olusturur', async () => {
     const prisma = createPrisma();
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await service.create(CREATED_BY_ID, {
       firstName: 'Ayse',
       lastName: 'Yilmaz',
@@ -87,7 +92,7 @@ describe('ContactsService', () => {
 
   it('remove: mevcut kisiyi siler', async () => {
     const prisma = createPrisma();
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await service.remove(CONTACT_ID);
     expect(prisma.contact.delete).toHaveBeenCalledWith({
       where: { id: CONTACT_ID },
@@ -96,7 +101,7 @@ describe('ContactsService', () => {
 
   it('update: lastContactedAt gonderilirse inactivityNotifiedAt sifirlanir', async () => {
     const prisma = createPrisma();
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     const date = new Date('2026-08-28T00:00:00.000Z');
     await service.update(CONTACT_ID, { lastContactedAt: date } as never);
     expect(prisma.contact.update).toHaveBeenCalledWith({
@@ -107,7 +112,7 @@ describe('ContactsService', () => {
 
   it('update: lastContactedAt gonderilmezse inactivityNotifiedAt dokunulmaz', async () => {
     const prisma = createPrisma();
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await service.update(CONTACT_ID, { title: 'Satis Muduru' } as never);
     expect(prisma.contact.update).toHaveBeenCalledWith({
       where: { id: CONTACT_ID },
@@ -120,7 +125,7 @@ describe('ContactsService', () => {
     prisma.titleOption.findMany.mockResolvedValue([
       { id: 't1', label: 'Satis Muduru' },
     ]);
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create(CREATED_BY_ID, {
         firstName: 'Ayse',
@@ -137,7 +142,7 @@ describe('ContactsService', () => {
     prisma.departmentOption.findMany.mockResolvedValue([
       { id: 'd1', label: 'Muhasebe' },
     ]);
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await expect(
       service.create(CREATED_BY_ID, {
         firstName: 'Ayse',
@@ -151,7 +156,7 @@ describe('ContactsService', () => {
 
   it('list: q filtresi bagli firma adina gore de arar', async () => {
     const prisma = createPrisma();
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await service.list({
       page: 1,
       pageSize: 25,
@@ -175,7 +180,7 @@ describe('ContactsService', () => {
 
   it('list: status filtresi where kosuluna eklenir', async () => {
     const prisma = createPrisma();
-    const service = new ContactsService(prisma as never, fakeAudit);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
     await service.list({
       page: 1,
       pageSize: 25,
