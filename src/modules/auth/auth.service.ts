@@ -153,10 +153,13 @@ export class AuthService {
       );
     }
     if (requiredTenantSlug && user.tenant.slug !== requiredTenantSlug) {
+      // Kasten INVALID_CREDENTIALS ile ayni mesaj/status - yanlis sifre ile yanlis
+      // subdomain birbirinden ayirt edilemesin (subdomain kisitlamasinin varligini
+      // disariya sizdirmamak icin, bkz. docs/VARSAYIMLAR.md).
       throw new AppException(
-        'TENANT_SUBDOMAIN_MISMATCH',
-        'Bu hesap bu adresten giris yapamaz. Lutfen kendi sirketinizin adresini kullanin.',
-        HttpStatus.FORBIDDEN,
+        'INVALID_CREDENTIALS',
+        'E-posta veya sifre hatali.',
+        HttpStatus.UNAUTHORIZED,
       );
     }
 
