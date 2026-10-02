@@ -47,6 +47,14 @@ export class PlatformAdminService {
     return this.tenants.resetAdminPassword(tenantId);
   }
 
+  async updateTenantSlug(
+    tenantId: string,
+    slug: string,
+  ): Promise<TenantSummary> {
+    await this.requireTenant(tenantId);
+    return this.tenants.updateSlug(tenantId, slug);
+  }
+
   async listTenantModules(tenantId: string): Promise<TenantModuleStatus[]> {
     await this.requireTenant(tenantId);
     return this.tenants.listModules(tenantId);

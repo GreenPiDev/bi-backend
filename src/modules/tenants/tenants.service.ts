@@ -221,6 +221,50 @@ export class TenantsService {
     return { temporaryPassword };
   }
 
+  /** Superadmin, tenant'in subdomain'ini (orn. greenpi.pilens.com.tr) ayarlar - bkz.
+   * core/http/tenant-subdomain.ts. `slug` zaten login kisitlamasinda kullanilan tek alan,
+   * ayri bir `subdomain` kolonu acilmadi. */
+  async updateSlug(tenantId: string, slug: string): Promise<TenantSummary> {
+    let updated;
+    try {
+      updated = await this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { slug },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          plan: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new AppException(
+          'SLUG_TAKEN',
+          'Bu subdomain zaten kullaniliyor.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+    const admin = await this.prisma.user.findFirst({
+      where: { tenantId, roles: { some: { role: { isCompanyAdmin: true } } } },
+      orderBy: { createdAt: 'asc' },
+      select: { email: true },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Tenant',
+      entityId: tenantId,
+      meta: { slugUpdated: slug },
+    });
+    return { ...updated, adminEmail: admin?.email ?? null };
+  }
+
   async listModules(tenantId: string): Promise<TenantModuleStatus[]> {
     const rows = await this.prisma.tenantModule.findMany({
       where: { tenantId, disabledAt: null },

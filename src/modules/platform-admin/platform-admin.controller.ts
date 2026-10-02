@@ -17,6 +17,10 @@ import {
   SetPageModuleSchema,
 } from './dto/set-page-module.dto';
 import { ToggleModuleDto, ToggleModuleSchema } from './dto/toggle-module.dto';
+import {
+  UpdateTenantSlugDto,
+  UpdateTenantSlugSchema,
+} from './dto/update-tenant-slug.dto';
 import { PlatformAdminService } from './platform-admin.service';
 import type { TenantModuleStatus } from '../tenants/tenants.service';
 import type { TenantSummary } from './platform-admin.service';
@@ -43,6 +47,15 @@ export class PlatformAdminController {
     @Param('id') id: string,
   ): Promise<{ temporaryPassword: string }> {
     return this.platformAdmin.resetAdminPassword(id);
+  }
+
+  @Patch('tenants/:id/slug')
+  updateTenantSlug(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateTenantSlugSchema))
+    dto: UpdateTenantSlugDto,
+  ): Promise<TenantSummary> {
+    return this.platformAdmin.updateTenantSlug(id, dto.slug);
   }
 
   @Get('tenants/:id/modules')
