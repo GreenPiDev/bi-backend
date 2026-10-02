@@ -9,6 +9,7 @@ import {
 } from '../../core/permissions/system-role-names';
 import type { EffectivePermissionSet } from '../../core/permissions/permission.types';
 import { PermissionsService } from '../../core/permissions/permissions.service';
+import type { LoginOriginClassification } from '../../core/http/tenant-subdomain';
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { TenantsService } from '../tenants/tenants.service';
 import type { LoginDto } from './dto/login.dto';
@@ -132,7 +133,7 @@ export class AuthService {
 
   async login(
     dto: LoginDto,
-    requiredTenantSlug?: string | null,
+    originClassification: LoginOriginClassification = { kind: 'unrestricted' },
   ): Promise<AuthResult> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -152,10 +153,14 @@ export class AuthService {
         HttpStatus.UNAUTHORIZED,
       );
     }
-    if (requiredTenantSlug && user.tenant.slug !== requiredTenantSlug) {
-      // Kasten INVALID_CREDENTIALS ile ayni mesaj/status - yanlis sifre ile yanlis
-      // subdomain birbirinden ayirt edilemesin (subdomain kisitlamasinin varligini
-      // disariya sizdirmamak icin, bkz. docs/VARSAYIMLAR.md).
+    // Kasten INVALID_CREDENTIALS ile ayni mesaj/status - yanlis sifre ile yanlis
+    // subdomain/kok-domain birbirinden ayirt edilemesin (bu kisitlamalarin varligini
+    // disariya sizdirmamak icin, bkz. docs/VARSAYIMLAR.md).
+    if (
+      (originClassification.kind === 'tenant' &&
+        user.tenant.slug !== originClassification.slug) ||
+      (originClassification.kind === 'root' && !user.isPlatformAdmin)
+    ) {
       throw new AppException(
         'INVALID_CREDENTIALS',
         'E-posta veya sifre hatali.',

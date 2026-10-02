@@ -17,7 +17,7 @@ import {
 import { Public } from '../../core/decorators/public.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { setAuthCookies } from '../../core/http/set-auth-cookies';
-import { extractTenantSlugFromOrigin } from '../../core/http/tenant-subdomain';
+import { classifyLoginOrigin } from '../../core/http/tenant-subdomain';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { AuthService, type AuthenticatedUser } from './auth.service';
 import { LoginDto, LoginSchema } from './dto/login.dto';
@@ -49,11 +49,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ user: AuthenticatedUser }> {
-    const tenantSlug = extractTenantSlugFromOrigin(
+    const originClassification = classifyLoginOrigin(
       req.headers.origin,
       process.env.TENANT_ROOT_DOMAIN,
     );
-    const result = await this.auth.login(dto, tenantSlug);
+    const result = await this.auth.login(dto, originClassification);
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user };
   }

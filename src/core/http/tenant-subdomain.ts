@@ -1,27 +1,35 @@
 /**
  * Tenant basina subdomain (greenpi.pilens.com.tr, demo.pilens.com.tr...) destegi icin:
- * login istegindeki Origin header'indan tenant slug'ini cikarir. `www` ve kok domain
- * (`pilens.com.tr`) kisitlamadan muaftir (platform-admin/superadmin, henuz subdomain'i
- * olmayan tenant'lar ve yerel gelistirme icin). `TENANT_ROOT_DOMAIN` env'i tanimli
- * degilse (yerel/preview ortam) kisitlama hic uygulanmaz - bkz. docs/VARSAYIMLAR.md.
+ * login istegindeki Origin header'ini siniflandirir.
+ * - 'tenant': gercek bir tenant subdomain'i, login o tenant'in kullanicisiyla sinirlanir.
+ * - 'root': kok domain veya `www` (orn. www.pilens.com.tr) - sadece superadmin
+ *   (isPlatformAdmin) buradan giris yapabilir, sirket kullanicilari kendi subdomain'ini
+ *   kullanmak zorunda.
+ * - 'unrestricted': pilens disi origin (Vercel preview, localhost...) veya
+ *   `TENANT_ROOT_DOMAIN` tanimsiz (yerel gelistirme) - hic kisitlama uygulanmaz.
+ * bkz. docs/VARSAYIMLAR.md.
  */
-const EXEMPT_LABELS = new Set(['www']);
+export type LoginOriginClassification =
+  | { kind: 'tenant'; slug: string }
+  | { kind: 'root' }
+  | { kind: 'unrestricted' };
 
-export function extractTenantSlugFromOrigin(
+export function classifyLoginOrigin(
   originHeader: string | undefined,
   rootDomain: string | undefined,
-): string | null {
-  if (!originHeader || !rootDomain) return null;
+): LoginOriginClassification {
+  if (!originHeader || !rootDomain) return { kind: 'unrestricted' };
   let hostname: string;
   try {
     hostname = new URL(originHeader).hostname;
   } catch {
-    return null;
+    return { kind: 'unrestricted' };
   }
-  if (hostname === rootDomain) return null;
+  if (hostname === rootDomain) return { kind: 'root' };
   const suffix = `.${rootDomain}`;
-  if (!hostname.endsWith(suffix)) return null;
+  if (!hostname.endsWith(suffix)) return { kind: 'unrestricted' };
   const label = hostname.slice(0, -suffix.length);
-  if (!label || label.includes('.') || EXEMPT_LABELS.has(label)) return null;
-  return label;
+  if (!label || label.includes('.')) return { kind: 'unrestricted' };
+  if (label === 'www') return { kind: 'root' };
+  return { kind: 'tenant', slug: label };
 }
