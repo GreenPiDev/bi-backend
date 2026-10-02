@@ -17,6 +17,7 @@ import {
 import { Public } from '../../core/decorators/public.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { setAuthCookies } from '../../core/http/set-auth-cookies';
+import { extractTenantSlugFromOrigin } from '../../core/http/tenant-subdomain';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { AuthService, type AuthenticatedUser } from './auth.service';
 import { LoginDto, LoginSchema } from './dto/login.dto';
@@ -45,9 +46,14 @@ export class AuthController {
   @Post('login')
   async login(
     @Body(new ZodValidationPipe(LoginSchema)) dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ user: AuthenticatedUser }> {
-    const result = await this.auth.login(dto);
+    const tenantSlug = extractTenantSlugFromOrigin(
+      req.headers.origin,
+      process.env.TENANT_ROOT_DOMAIN,
+    );
+    const result = await this.auth.login(dto, tenantSlug);
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user };
   }

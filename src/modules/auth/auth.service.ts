@@ -130,10 +130,16 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<AuthResult> {
+  async login(
+    dto: LoginDto,
+    requiredTenantSlug?: string | null,
+  ): Promise<AuthResult> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: USER_WITH_ROLES_INCLUDE,
+      include: {
+        ...USER_WITH_ROLES_INCLUDE,
+        tenant: { select: { slug: true } },
+      },
     });
     if (
       !user ||
@@ -144,6 +150,13 @@ export class AuthService {
         'INVALID_CREDENTIALS',
         'E-posta veya sifre hatali.',
         HttpStatus.UNAUTHORIZED,
+      );
+    }
+    if (requiredTenantSlug && user.tenant.slug !== requiredTenantSlug) {
+      throw new AppException(
+        'TENANT_SUBDOMAIN_MISMATCH',
+        'Bu hesap bu adresten giris yapamaz. Lutfen kendi sirketinizin adresini kullanin.',
+        HttpStatus.FORBIDDEN,
       );
     }
 

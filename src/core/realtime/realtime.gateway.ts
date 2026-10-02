@@ -3,6 +3,7 @@ import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { TokenService } from '../../modules/auth/token.service';
 import { ACCESS_TOKEN_COOKIE } from '../../modules/auth/token.types';
+import { createCorsOriginChecker } from '../http/cors-origin';
 import { tenantRoom } from './tenant-room';
 
 /** cookie-parser'in kullandigi `cookie` paketi ESM-only oldugu icin CJS build'de
@@ -34,7 +35,7 @@ function readCookieValue(
  */
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:5173'],
+    origin: createCorsOriginChecker(process.env.CORS_ORIGIN),
     credentials: true,
   },
 })
