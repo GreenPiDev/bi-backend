@@ -23,6 +23,8 @@ export type PurchaseOrderItemInputDto = z.infer<
 export const UpdatePurchaseOrderSchema = z.object({
   status: PurchaseOrderStatusSchema.optional(),
   quoteId: z.string().uuid().nullable().optional(),
+  /** null verilirse baslik temizlenir, hic verilmezse mevcut deger korunur. */
+  title: z.string().trim().max(200).nullable().optional(),
   items: z.array(PurchaseOrderItemInputSchema).min(1).max(200).optional(),
 });
 export type UpdatePurchaseOrderDto = z.infer<typeof UpdatePurchaseOrderSchema>;
@@ -36,6 +38,7 @@ const CreatePurchaseOrderItemSchema = z.object({
 });
 export const CreatePurchaseOrderSchema = z.object({
   quoteId: z.string().uuid().optional(),
+  title: z.string().trim().max(200).optional(),
   items: z.array(CreatePurchaseOrderItemSchema).min(1).max(200),
 });
 export type CreatePurchaseOrderDto = z.infer<typeof CreatePurchaseOrderSchema>;

@@ -485,16 +485,52 @@ export class QuotesService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status, createdById } = query;
+    const { page, pageSize, accountId, status, createdById, q, from, to } =
+      query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
     });
 
+    // createdById iliskisel bir FK degil (bkz. attachCreatedByNames yorumu), bu yuzden
+    // "olusturan" adina gore arama icin once eslesen kullanici id'leri ayrica cozulur.
+    let matchingCreatedByIds: string[] = [];
+    if (q) {
+      const matchingUsers = await this.prisma.user.findMany({
+        where: { name: { contains: q, mode: 'insensitive' as const } },
+        select: { id: true },
+      });
+      matchingCreatedByIds = matchingUsers.map((u) => u.id);
+    }
+
     const where = {
       ...(accountId ? { accountId } : {}),
       ...(status ? { status } : {}),
       ...(createdById ? { createdById } : {}),
+      ...(from || to
+        ? {
+            quoteDate: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: 'insensitive' as const } },
+              { quoteNumber: { contains: q, mode: 'insensitive' as const } },
+              {
+                account: {
+                  name: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              ...(matchingCreatedByIds.length > 0
+                ? [{ createdById: { in: matchingCreatedByIds } }]
+                : []),
+            ],
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([

@@ -57,7 +57,7 @@ export class PurchaseOrdersService {
       return cached;
     }
 
-    const { page, pageSize, quoteId, projectId, status } = query;
+    const { page, pageSize, quoteId, projectId, status, q } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -67,6 +67,33 @@ export class PurchaseOrdersService {
       ...(quoteId ? { quoteId } : {}),
       ...(projectId ? { quote: { projectId } } : {}),
       ...(status ? { status } : {}),
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: 'insensitive' as const } },
+              { orderNumber: { contains: q, mode: 'insensitive' as const } },
+              {
+                quote: {
+                  quoteNumber: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              {
+                quote: {
+                  account: {
+                    name: { contains: q, mode: 'insensitive' as const },
+                  },
+                },
+              },
+              {
+                quote: {
+                  project: {
+                    name: { contains: q, mode: 'insensitive' as const },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([
@@ -147,6 +174,7 @@ export class PurchaseOrdersService {
     const created = await this.prisma.$transaction(async (tx) => {
       const order = await this.createWithGeneratedNumber(tx, {
         quoteId: dto.quoteId ?? null,
+        title: dto.title ?? null,
         createdById,
         items: dto.items.map((item) => ({
           productId: item.productId ?? null,
@@ -172,6 +200,7 @@ export class PurchaseOrdersService {
     tx: Pick<TenantPrismaClient, 'purchaseOrder'>,
     data: {
       quoteId: string | null;
+      title?: string | null;
       createdById: string;
       items: {
         productId: string | null;
@@ -195,6 +224,7 @@ export class PurchaseOrdersService {
         return await tx.purchaseOrder.create({
           data: {
             quoteId: data.quoteId,
+            title: data.title ?? null,
             orderNumber,
             createdById: data.createdById,
             items: { create: data.items },
@@ -320,6 +350,12 @@ export class PurchaseOrdersService {
         await tx.purchaseOrder.update({
           where: { id },
           data: { quoteId: dto.quoteId },
+        });
+      }
+      if (dto.title !== undefined) {
+        await tx.purchaseOrder.update({
+          where: { id },
+          data: { title: dto.title },
         });
       }
       if (dto.items) {

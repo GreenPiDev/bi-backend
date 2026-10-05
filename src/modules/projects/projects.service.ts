@@ -50,6 +50,7 @@ export type ProjectWithQuotes = Project & {
 
 export type ProjectListItem = Project & {
   responsibleUsers: ProjectResponsibleUser[];
+  accountName: string;
 };
 
 function projectNumberPrefix(date: Date): string {
@@ -195,14 +196,48 @@ export class ProjectsService {
       return cached;
     }
 
-    const { page, pageSize, accountId } = query;
+    const { page, pageSize, accountId, q } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
     });
 
+    // ProjectResponsible'da kullanici adi tutulmuyor (sadece userId), bu yuzden
+    // "bizden ilgili" adina gore arama icin once eslesen kullanici id'leri cozulur -
+    // QuotesService.list'teki createdById arama deseniyle ayni mantik.
+    let matchingResponsibleUserIds: string[] = [];
+    if (q) {
+      const matchingUsers = await this.prisma.user.findMany({
+        where: { name: { contains: q, mode: 'insensitive' as const } },
+        select: { id: true },
+      });
+      matchingResponsibleUserIds = matchingUsers.map((u) => u.id);
+    }
+
     const where = {
       ...(accountId ? { accountId } : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' as const } },
+              { projectNumber: { contains: q, mode: 'insensitive' as const } },
+              {
+                account: {
+                  name: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              ...(matchingResponsibleUserIds.length > 0
+                ? [
+                    {
+                      responsibles: {
+                        some: { userId: { in: matchingResponsibleUserIds } },
+                      },
+                    },
+                  ]
+                : []),
+            ],
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([
@@ -247,10 +282,28 @@ export class ProjectsService {
       });
       byProject.set(row.projectId, list);
     }
+    const accountNameById = await this.resolveAccountNames(
+      projects.map((p) => p.accountId),
+    );
     return projects.map((project) => ({
       ...project,
       responsibleUsers: byProject.get(project.id) ?? [],
+      accountName: accountNameById.get(project.accountId) ?? 'Bir firma',
     }));
+  }
+
+  private async resolveAccountNames(
+    accountIds: string[],
+  ): Promise<Map<string, string>> {
+    const uniqueIds = [...new Set(accountIds)];
+    if (uniqueIds.length === 0) {
+      return new Map();
+    }
+    const accounts = await this.prisma.account.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, name: true },
+    });
+    return new Map(accounts.map((account) => [account.id, account.name]));
   }
 
   private async resolveUserNames(

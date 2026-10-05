@@ -10,6 +10,8 @@ export const PostSaleCaseStatusSchema = z.enum([
 ]);
 export type PostSaleCaseStatus = z.infer<typeof PostSaleCaseStatusSchema>;
 
+/** `q` (ListQuerySchema'dan miras) - serbest metin arama: teklif no, firma adi,
+ * kisi adi/soyadi (bkz. PostSaleCasesService.list). */
 export const PostSaleCaseQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: PostSaleCaseStatusSchema.optional(),

@@ -139,5 +139,12 @@ export const QuoteQuerySchema = ListQuerySchema.extend({
   status: QuoteStatusSchema.optional(),
   /** Kaydi olusturan kullaniciya gore filtre (liste sayfasi filtre penceresi). */
   createdById: z.string().optional(),
+  /** Teklif tarihi filtresi (liste sayfasi filtre penceresi) - hem tek tarih ("su
+   * tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de bu ayni
+   * from/to ciftine cevrilir - bkz. opportunity.dto.ts'teki ayni desen. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
+/** `q` (ListQuerySchema'dan miras) - serbest metin arama: baslik, teklif no, firma adi,
+ * olusturan kullanici adi (bkz. QuotesService.list). */
 export type QuoteQueryDto = z.infer<typeof QuoteQuerySchema>;

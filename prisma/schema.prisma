@@ -1395,6 +1395,10 @@ model PurchaseOrder {
   id          String              @id @default(uuid())
   tenantId    String
   orderNumber String
+  /** Ad-hoc (2026-10-05, kullanici istegiyle): opsiyonel, nullable baslik -
+   * /siparisler listesinde ve arama kutusunda kullanilir (Quote.title ile ayni
+   * desen). */
+  title       String?
   quoteId     String?
   status      PurchaseOrderStatus @default(DRAFT)
   createdById String

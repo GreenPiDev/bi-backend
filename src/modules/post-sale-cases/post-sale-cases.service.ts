@@ -81,7 +81,7 @@ export class PostSaleCasesService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status } = query;
+    const { page, pageSize, accountId, status, q } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -90,6 +90,32 @@ export class PostSaleCasesService {
     const where = {
       ...(accountId ? { accountId } : {}),
       ...(status ? STATUS_WHERE[status] : {}),
+      ...(q
+        ? {
+            OR: [
+              {
+                quote: {
+                  quoteNumber: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              {
+                account: {
+                  name: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              {
+                contact: {
+                  firstName: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              {
+                contact: {
+                  lastName: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+            ],
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([
