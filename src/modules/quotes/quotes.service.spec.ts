@@ -153,6 +153,7 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'DRAFT' }),
       products: [createProduct({ maxDiscountPct: 10 })],
+      actingUser: { id: 'user-1', name: 'Test User' },
     });
     const service = new QuotesService(
       prisma as never,
@@ -193,6 +194,7 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct({ price: 250 })],
+      actingUser: { id: 'user-1', name: 'Test User' },
     });
     const service = new QuotesService(
       prisma as never,
@@ -229,6 +231,7 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct()],
+      actingUser: { id: 'user-1', name: 'Test User' },
     });
     const service = new QuotesService(
       prisma as never,
@@ -254,7 +257,11 @@ describe('QuotesService', () => {
   });
 
   it('create: bulunamayan urun icin PRODUCT_NOT_FOUND firlatir', async () => {
-    const prisma = createPrisma({ quoteRow: createQuoteRow(), products: [] });
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow(),
+      products: [],
+      actingUser: { id: 'user-1', name: 'Test User' },
+    });
     const service = new QuotesService(
       prisma as never,
       fakeAudit,
@@ -288,6 +295,7 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow(),
       products: [createProduct()],
+      actingUser: { id: 'user-1', name: 'Test User' },
     });
     const service = new QuotesService(
       prisma as never,
@@ -333,6 +341,7 @@ describe('QuotesService', () => {
       quoteRow: createQuoteRow(),
       products: [createProduct()],
       contact: { id: 'contact-1', accountId: 'baska-firma' },
+      actingUser: { id: 'user-1', name: 'Test User' },
     });
     const service = new QuotesService(
       prisma as never,
@@ -368,6 +377,7 @@ describe('QuotesService', () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'DRAFT', contactId: 'contact-1' }),
       products: [createProduct()],
+      actingUser: { id: 'user-1', name: 'Test User' },
     });
     const service = new QuotesService(
       prisma as never,

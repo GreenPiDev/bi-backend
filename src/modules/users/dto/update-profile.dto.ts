@@ -4,6 +4,9 @@ export const UpdateProfileSchema = z
   .object({
     name: z.string().min(1).max(120).optional(),
     email: z.string().email().max(255).optional(),
+    /** G3-genislemesi: teklif "gonderen" bilgisinde gosterilen unvan/telefon. */
+    title: z.string().trim().max(200).nullable().optional(),
+    phone: z.string().trim().max(50).nullable().optional(),
     /** Liste sayfalarinda bir seferde kac kayit cekilecegi - profil sayfasindan
      * secilir, sadece 10/25/50 desteklenir (bkz. docs/VARSAYIMLAR.md). */
     defaultPageSize: z
@@ -18,6 +21,8 @@ export const UpdateProfileSchema = z
     (data) =>
       data.name !== undefined ||
       data.email !== undefined ||
+      data.title !== undefined ||
+      data.phone !== undefined ||
       data.defaultPageSize !== undefined ||
       data.columnPreferences !== undefined,
     { message: 'En az bir alan gonderilmeli.' },

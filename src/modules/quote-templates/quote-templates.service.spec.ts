@@ -69,7 +69,6 @@ describe('QuoteTemplatesService', () => {
         name: 'GreenPi Kurumsal',
         isDefault: false,
         companyDisplayName: 'Green Pi Enerji',
-        companyAddressLines: [],
       }),
     );
     expect(prisma.quoteTemplate.create).toHaveBeenCalledWith(
@@ -91,7 +90,6 @@ describe('QuoteTemplatesService', () => {
         name: 'GreenPi Kurumsal',
         isDefault: true,
         companyDisplayName: 'Green Pi Enerji',
-        companyAddressLines: [],
       }),
     );
     expect(prisma.quoteTemplate.updateMany).toHaveBeenCalledWith({

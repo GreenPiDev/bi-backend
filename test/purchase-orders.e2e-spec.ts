@@ -157,13 +157,13 @@ describe('Purchase Orders & Stock (e2e)', () => {
     draftQuoteId = quote.id;
 
     const res = await request(app.getHttpServer())
-      .post(`/api/v1/quotes/${draftQuoteId}/create-purchase-order`)
+      .get(`/api/v1/quotes/${draftQuoteId}/purchase-order-draft`)
       .set('Cookie', cookiesA);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('QUOTE_NOT_APPROVED');
   });
 
-  it('POST /quotes/:id/create-purchase-order: onayli teklifden siparis olusturur, stoktan dusulmus miktarla (SP1/SP2)', async () => {
+  it('GET /quotes/:id/purchase-order-draft: onayli teklif icin stoktan dusulmus onerilen kalemleri dondurur (SP1/SP2), kayit olusturmaz', async () => {
     const quoteRes = await request(app.getHttpServer())
       .post('/api/v1/quotes')
       .set('Cookie', cookiesA)
@@ -188,34 +188,61 @@ describe('Purchase Orders & Stock (e2e)', () => {
     expect(quoteRes.body.status).toBe('APPROVED');
     approvedQuoteId = quoteRes.body.id as string;
 
-    const res = await request(app.getHttpServer())
-      .post(`/api/v1/quotes/${approvedQuoteId}/create-purchase-order`)
+    const draftRes = await request(app.getHttpServer())
+      .get(`/api/v1/quotes/${approvedQuoteId}/purchase-order-draft`)
       .set('Cookie', cookiesA);
-    expect(res.status).toBe(201);
-    expect(res.body.orderNumber).toMatch(/^SIP-\d{4}-\d{2}-\d{2}-\d{3}$/);
-    expect(res.body.quoteId).toBe(approvedQuoteId);
+    expect(draftRes.status).toBe(200);
+    expect(draftRes.body.accountId).toBe(accountIdA);
+    expect(draftRes.body.quoteId).toBe(approvedQuoteId);
 
-    const items = res.body.items as {
+    const draftItems = draftRes.body.items as {
       productId: string;
-      quantity: string;
-      source: string;
+      quantity: number;
     }[];
-    const stockedItem = items.find((i) => i.productId === productWithStockId)!;
-    const unstockedItem = items.find(
+    const stockedItem = draftItems.find(
+      (i) => i.productId === productWithStockId,
+    )!;
+    const unstockedItem = draftItems.find(
       (i) => i.productId === productWithoutStockId,
     )!;
-    // teklif 10 adet, stokta 3 var -> 7 adet siparis edilmeli
-    expect(stockedItem.quantity).toBe('7');
-    expect(stockedItem.source).toBe('QUOTE');
-    // stok hic yok -> teklif miktarinin tamami
-    expect(unstockedItem.quantity).toBe('4');
-    purchaseOrderId = res.body.id as string;
+    // teklif 10 adet, stokta 3 var -> 7 adet onerilmeli
+    expect(stockedItem.quantity).toBe(7);
+    // stok hic yok -> teklif miktarinin tamami onerilmeli
+    expect(unstockedItem.quantity).toBe(4);
+
+    // Kullanici bu oneriyi /siparisler/yeni formunda gorup kendisi kaydeder -
+    // draft istegi hicbir siparis olusturmamis olmali.
+    const listAfterDraft = await request(app.getHttpServer())
+      .get('/api/v1/purchase-orders')
+      .query({ quoteId: approvedQuoteId })
+      .set('Cookie', cookiesA);
+    expect(listAfterDraft.body.meta.total).toBe(0);
+
+    const createRes = await request(app.getHttpServer())
+      .post('/api/v1/purchase-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        quoteId: approvedQuoteId,
+        items: draftItems.map((item) => ({
+          productId: item.productId,
+          description: '',
+          quantity: item.quantity,
+        })),
+      });
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.orderNumber).toMatch(/^SIP-\d{4}-\d{2}-\d{2}-\d{3}$/);
+    expect(createRes.body.quoteId).toBe(approvedQuoteId);
+    purchaseOrderId = createRes.body.id as string;
   });
 
   it('ayni teklife tekrar siparis olusturulabilir (kisitlanmadi, ikinci SIP numarasi uretir)', async () => {
     const res = await request(app.getHttpServer())
-      .post(`/api/v1/quotes/${approvedQuoteId}/create-purchase-order`)
-      .set('Cookie', cookiesA);
+      .post('/api/v1/purchase-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        quoteId: approvedQuoteId,
+        items: [{ description: 'Ek kalem', quantity: 1 }],
+      });
     expect(res.status).toBe(201);
     expect(res.body.id).not.toBe(purchaseOrderId);
   });

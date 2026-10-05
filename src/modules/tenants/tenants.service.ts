@@ -18,6 +18,7 @@ import { FileUrlService } from '../../core/storage/file-url.service';
 import { R2StorageService } from '../../core/storage/r2-storage.service';
 import { detectImageExtension } from '../../core/validators/image-upload-validation';
 import { AuditService } from '../audit/audit.service';
+import type { UpdateCompanyInfoDto } from './dto/update-company-info.dto';
 import { slugify } from './slugify';
 
 export interface CreateTenantWithAdminInput {
@@ -52,6 +53,9 @@ export interface TenantProfile {
   id: string;
   name: string;
   logoUrl: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
 }
 
 @Injectable()
@@ -318,12 +322,41 @@ export class TenantsService {
     name: string;
     logoKey: string | null;
     updatedAt: Date;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
   }): TenantProfile {
     return {
       id: tenant.id,
       name: tenant.name,
       logoUrl: this.fileUrl.build(tenant.logoKey, tenant.updatedAt),
+      address: tenant.address,
+      phone: tenant.phone,
+      email: tenant.email,
     };
+  }
+
+  /** /settings?tab=crm "Sirket Bilgileri" bolumu - CompanyLogoSection'in
+   * (resim yukleme) yaninda, metin alanlarini anlik kaydeder. */
+  async updateCompanyInfo(
+    tenantId: string,
+    dto: UpdateCompanyInfoDto,
+  ): Promise<TenantProfile> {
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        ...(dto.address !== undefined ? { address: dto.address } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.email !== undefined ? { email: dto.email } : {}),
+      },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Tenant',
+      entityId: tenantId,
+      meta: { companyInfoUpdated: true },
+    });
+    return this.toProfile(updated);
   }
 
   async getProfile(tenantId: string): Promise<TenantProfile> {

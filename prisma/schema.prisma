@@ -183,6 +183,17 @@ model Tenant {
    * (bkz. R2StorageService doc comment'i), /settings?tab=crm'de yonetilir.
    */
   logoKey   String?
+  /**
+   * Sirket bilgileri (adres/telefon/eposta) - /settings?tab=crm'deki "Sirket
+   * Bilgileri" bolumunden (eski "Sirket Logosu") yonetilir. Markali teklif
+   * sablonunun (QuoteTemplate) eskiden sablon basina tuttugu companyPhone/
+   * companyEmail/companyAddressLines alanlarinin yerini aldi - tek bir tenant
+   * sadece tek bir sirket adresine/telefonuna/epostasina sahip olabilir,
+   * sablon basina tekrar tanimlanmasi gereksizdi.
+   */
+  address   String?
+  phone     String?
+  email     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -241,6 +252,13 @@ model User {
   isActive          Boolean   @default(true)
   isPlatformAdmin   Boolean   @default(false)
   avatarKey         String?
+  /**
+   * G3-genislemesi: teklif "gonderen" bilgisinde (Quote.senderId) gosterilen
+   * unvan/telefon - /profile?tab=general'deki "Bilgilerini Duzenle" bolumunden
+   * kullanicinin kendisi tarafindan setlenir.
+   */
+  title             String?
+  phone             String?
   defaultPageSize   Int       @default(25)
   /**
    * Sayfa anahtari (pageKey) -> gorunur kolon anahtarlari. Liste sayfalarindaki
@@ -1145,6 +1163,14 @@ model Quote {
   revisionSnapshot      Json?
   revisionCount         Int         @default(0)
   lastRevisedAt         DateTime?
+  /**
+   * Teklifin "gonderen"i (PDF'te gosterilen temsilci) - /teklifler/yeni'de
+   * kullanici tarafindan secilir, varsayilan olarak teklifi olusturan kullanici
+   * onceden secili gelir ama degistirilebilir. createdById gibi iliskisel bir
+   * FK degil (bkz. createdById doc comment'i) - User.title/phone/email ile
+   * birlikte QuotesService.getPrintData'da ayri bir sorguyla cozulur.
+   */
+  senderId              String?
   createdById           String
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
@@ -1182,26 +1208,28 @@ model Quote {
  * Bir tenant'ta en fazla bir isDefault=true kaydi olur (QuoteTemplatesService
  * transaction ile garanti eder).
  */
+/**
+ * Ad-hoc (bkz. CLAUDE.md, teklif sablonu alan paritesi): companyPhone/
+ * companyEmail/companyAddressLines ve senderName/senderTitle/senderPhone/
+ * senderEmail alanlari KALDIRILDI - sirket adres/telefon/eposta artik
+ * Tenant.address/phone/email'den (tek, tenant-genel kaynak), gonderen bilgisi
+ * artik Quote.senderId -> User'dan (teklif bazinda, her teklifte degisebilir)
+ * geliyor. Sablon basina sabit tutulmalari ikisi icin de yanlisti (bkz.
+ * docs/VARSAYIMLAR.md).
+ */
 model QuoteTemplate {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  name                String
-  isDefault           Boolean  @default(false)
-  logoKey             String?
-  coverImageKey       String?
-  closingImageKey     String?
-  companyDisplayName  String
-  companyTagline      String?
-  companyPhone        String?
-  companyEmail        String?
-  companyAddressLines String[] @default([])
-  senderName          String?
-  senderTitle         String?
-  senderPhone         String?
-  senderEmail         String?
-  createdById         String
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  tenantId           String
+  name               String
+  isDefault          Boolean  @default(false)
+  logoKey            String?
+  coverImageKey      String?
+  closingImageKey    String?
+  companyDisplayName String
+  companyTagline     String?
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   quotes Quote[]
@@ -1395,9 +1423,11 @@ model PurchaseOrder {
   id          String              @id @default(uuid())
   tenantId    String
   orderNumber String
-  /** Ad-hoc (2026-10-05, kullanici istegiyle): opsiyonel, nullable baslik -
+  /**
+   * Ad-hoc (2026-10-05, kullanici istegiyle): opsiyonel, nullable baslik -
    * /siparisler listesinde ve arama kutusunda kullanilir (Quote.title ile ayni
-   * desen). */
+   * desen).
+   */
   title       String?
   quoteId     String?
   status      PurchaseOrderStatus @default(DRAFT)

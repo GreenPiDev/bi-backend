@@ -87,6 +87,10 @@ export const CreateQuoteSchema = z.object({
   /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Verilmezse
    * tenant'in varsayilan sablonu otomatik atanir (varsa) - bkz. QuotesService.create. */
   templateId: z.string().uuid().nullable().optional(),
+  /** Teklifin "gonderen"i (PDF'te gosterilen temsilci) - frontend varsayilan
+   * olarak isteği yapan kullaniciyi onceden secili gosterir ama degistirilebilir,
+   * bu yuzden zorunlu (createdById'den bagimsiz, bkz. Quote.senderId doc comment'i). */
+  senderId: z.string().uuid(),
 });
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
@@ -120,6 +124,8 @@ export const UpdateQuoteSchema = z
     /** null verilirse sablon kaldirilir (sade export'a doner), hic verilmezse mevcut
      * deger korunur. */
     templateId: z.string().uuid().nullable().optional(),
+    /** Verilirse gonderen degistirilir, hic verilmezse mevcut deger korunur. */
+    senderId: z.string().uuid().optional(),
   })
   .refine((dto) => dto.status !== 'APPROVED' || dto.warehouseId !== undefined, {
     message: 'Onaylamak icin depo secimi gerekli.',

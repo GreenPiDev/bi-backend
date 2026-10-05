@@ -19,7 +19,7 @@ import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   PurchaseOrdersService,
-  type PurchaseOrderWithItems,
+  type PurchaseOrderDraft,
 } from '../purchase-orders/purchase-orders.service';
 import {
   ApproveQuoteSchema,
@@ -76,6 +76,22 @@ export class QuotesController {
     @Query('accountId') accountId: string,
   ): Promise<{ count: number }> {
     return this.quotes.getRevisionSummaryForAccount(accountId);
+  }
+
+  /** /teklifler/yeni ve /teklifler/duzenle/:id'deki "Gonderen" secicisi - `:id`
+   * route'undan once tanimlanmali, ayni desen (bkz. fx-rates/revision-summary). */
+  @Get('assignable-users')
+  @RequiresPermission('quotes', 'VIEW')
+  listAssignableUsers(): Promise<
+    {
+      id: string;
+      name: string;
+      title: string | null;
+      phone: string | null;
+      email: string;
+    }[]
+  > {
+    return this.quotes.listAssignableUsers();
   }
 
   @Get(':id')
@@ -137,13 +153,14 @@ export class QuotesController {
     return this.quotes.reject(id, user.id);
   }
 
-  /** SP1: onayli bir teklifden satin alma siparisi olusturur (bkz. PurchaseOrdersService). */
-  @Post(':id/create-purchase-order')
+  /** SP1-SP2: onayli bir teklif icin onerilen satin alma siparisi kalemlerini
+   * (urun + stoktan dusulmus miktar) dondurur - herhangi bir kayit OLUSTURMAZ.
+   * Kullanici /siparisler/yeni formunu bu onerilerle doldurup, basligi/kalemleri
+   * duzenleyip kendisi POST /purchase-orders ile kaydeder (bkz. PurchaseOrdersService,
+   * eskiden otomatik olusturan POST ucu buraya tasindi). */
+  @Get(':id/purchase-order-draft')
   @RequiresPermission('purchase-orders', 'CREATE')
-  createPurchaseOrder(
-    @Param('id') id: string,
-    @CurrentUser() user: RequestUser,
-  ): Promise<PurchaseOrderWithItems> {
-    return this.purchaseOrders.createFromQuote(user.id, id);
+  getPurchaseOrderDraft(@Param('id') id: string): Promise<PurchaseOrderDraft> {
+    return this.purchaseOrders.getDraftFromQuote(id);
   }
 }

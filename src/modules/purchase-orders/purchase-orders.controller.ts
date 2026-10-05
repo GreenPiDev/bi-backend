@@ -31,11 +31,12 @@ import {
 } from './purchase-orders.service';
 
 /**
- * SP1: teklif onaylandiginda QuotesController'daki
- * POST /quotes/:id/create-purchase-order de siparis olusturur (bkz.
- * PurchaseOrdersService.createFromQuote). Buradaki POST /purchase-orders ise
- * /siparisler/yeni sayfasindan dogrudan, teklife bagli olmadan siparis
- * olusturmak icin (ad-hoc, 2026-09-28) - PurchaseOrdersService.create.
+ * SP1-SP2: onayli bir teklif icin QuotesController'daki
+ * GET /quotes/:id/purchase-order-draft onerilen kalemleri dondurur (bkz.
+ * PurchaseOrdersService.getDraftFromQuote) - herhangi bir kayit olusturmaz.
+ * Kullanici bu oneriyle doldurulmus /siparisler/yeni formunu duzenleyip
+ * buradaki POST /purchase-orders ile siparisi kendisi olusturur (teklife bagli
+ * ya da bagsiz, PurchaseOrdersService.create).
  */
 @ModulePage('purchase-orders')
 @Controller('purchase-orders')

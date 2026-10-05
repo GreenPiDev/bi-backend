@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   HttpStatus,
+  Patch,
   Post,
   UploadedFile,
   UseInterceptors,
@@ -14,6 +16,11 @@ import {
 } from '../../core/decorators/current-user.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
+import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
+import {
+  UpdateCompanyInfoSchema,
+  type UpdateCompanyInfoDto,
+} from './dto/update-company-info.dto';
 import { MAX_LOGO_IMAGE_SIZE_BYTES } from './logo-image-validation';
 import {
   TenantsService,
@@ -70,5 +77,15 @@ export class TenantsController {
   @RequiresPermission('settings', 'UPDATE')
   removeLogo(@CurrentUser() user: RequestUser): Promise<TenantProfile> {
     return this.tenants.removeLogo(user.tenantId);
+  }
+
+  @Patch('me/company-info')
+  @RequiresPermission('settings', 'UPDATE')
+  updateCompanyInfo(
+    @CurrentUser() user: RequestUser,
+    @Body(new ZodValidationPipe(UpdateCompanyInfoSchema))
+    dto: UpdateCompanyInfoDto,
+  ): Promise<TenantProfile> {
+    return this.tenants.updateCompanyInfo(user.tenantId, dto);
   }
 }

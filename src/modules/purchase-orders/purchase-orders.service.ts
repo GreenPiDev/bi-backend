@@ -34,6 +34,18 @@ export type PurchaseOrderWithItems = PurchaseOrder & {
   quote: (Quote & { project: Project | null }) | null;
 };
 
+export interface PurchaseOrderDraft {
+  accountId: string;
+  quoteId: string;
+  quoteNumber: string;
+  items: {
+    productId: string;
+    productListId: string | null;
+    productName: string;
+    quantity: number;
+  }[];
+}
+
 function purchaseOrderNumberPrefix(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -131,8 +143,9 @@ export class PurchaseOrdersService {
   }
 
   /** /siparisler/yeni: teklif zorunlu degil, quoteId opsiyonel bir baglantidir.
-   * Kalemler her zaman EXTRA kaynaklidir (SP1'deki QUOTE kaynagi sadece
-   * createFromQuote akisina ozgudur). */
+   * Kalemler her zaman EXTRA kaynaklidir (kaynak artik PATCH disinda hic
+   * olusturulmuyor - teklif onerisiyle gelen kalemler de kullanici burada
+   * manuel kaydettigi icin EXTRA sayilir). */
   async create(
     createdById: string,
     dto: CreatePurchaseOrderDto,
@@ -250,12 +263,12 @@ export class PurchaseOrdersService {
   }
 
   /**
-   * SP1-SP3: onayli bir teklifden siparis olusturur.
+   * SP1-SP2: onayli bir teklif icin onerilen siparis kalemlerini (urun +
+   * stoktan dusulmus miktar) dondurur - herhangi bir kayit olusturmaz. Kullanici
+   * bu oneriyi /siparisler/yeni formunda gorup duzenler, kaydi `create()` ile
+   * kendisi olusturur (bkz. QuotesController.getPurchaseOrderDraft).
    */
-  async createFromQuote(
-    createdById: string,
-    quoteId: string,
-  ): Promise<PurchaseOrderWithItems> {
+  async getDraftFromQuote(quoteId: string): Promise<PurchaseOrderDraft> {
     const quote = await this.prisma.quote.findFirst({
       where: { id: quoteId },
       include: { items: { include: { product: true } } },
@@ -293,37 +306,25 @@ export class PurchaseOrdersService {
       );
     }
 
-    const itemsData = quote.items.map((quoteItem) => {
-      const stockQuantity =
-        stockQuantityByProduct.get(quoteItem.productId) ?? 0;
-      const neededQuantity = Math.max(
-        Number(quoteItem.quantity) - stockQuantity,
-        0,
-      );
-      return {
-        productId: quoteItem.productId,
-        description: '',
-        quantity: neededQuantity,
-        source: 'QUOTE' as const,
-      };
-    });
-
-    const created = await this.prisma.$transaction((tx) =>
-      this.createWithGeneratedNumber(tx, {
-        quoteId: quote.id,
-        createdById,
-        items: itemsData,
+    return {
+      accountId: quote.accountId,
+      quoteId: quote.id,
+      quoteNumber: quote.quoteNumber,
+      items: quote.items.map((quoteItem) => {
+        const stockQuantity =
+          stockQuantityByProduct.get(quoteItem.productId) ?? 0;
+        const neededQuantity = Math.max(
+          Number(quoteItem.quantity) - stockQuantity,
+          0,
+        );
+        return {
+          productId: quoteItem.productId,
+          productListId: quoteItem.product.productListId,
+          productName: quoteItem.product.name,
+          quantity: neededQuantity,
+        };
       }),
-    );
-
-    await this.audit.log({
-      action: 'CREATE',
-      entity: 'PurchaseOrder',
-      entityId: created.id,
-      meta: { orderNumber: created.orderNumber },
-    });
-    await this.cache.invalidate();
-    return this.getById(created.id);
+    };
   }
 
   async update(

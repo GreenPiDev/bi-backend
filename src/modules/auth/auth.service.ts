@@ -30,6 +30,8 @@ export interface SafeUser {
   isPlatformAdmin: boolean;
   isActive: boolean;
   avatarUrl: string | null;
+  title: string | null;
+  phone: string | null;
   defaultPageSize: number;
   columnPreferences: Record<string, string[]> | null;
 }
@@ -261,6 +263,8 @@ export function toSafeUser(
     isPlatformAdmin: user.isPlatformAdmin,
     isActive: user.isActive,
     avatarUrl: fileUrl.build(user.avatarKey, user.updatedAt),
+    title: user.title,
+    phone: user.phone,
     defaultPageSize: user.defaultPageSize,
     columnPreferences:
       (user.columnPreferences as Record<string, string[]> | null) ?? null,

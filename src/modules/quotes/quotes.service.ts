@@ -76,17 +76,30 @@ export interface QuotePrintTemplateData {
   closingImageUrl: string | null;
   companyDisplayName: string;
   companyTagline: string | null;
-  companyPhone: string | null;
-  companyEmail: string | null;
-  companyAddressLines: string[];
-  senderName: string | null;
-  senderTitle: string | null;
-  senderPhone: string | null;
-  senderEmail: string | null;
+}
+
+/** Tenant.address/phone/email (bkz. docs/VARSAYIMLAR.md, "sirket bilgileri") - sablonlu
+ * ve sablonsuz PDF'in ikisi de aynI tek, tenant-genel kaynaktan okur. */
+export interface QuotePrintCompanyData {
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+/** Quote.senderId -> User (bkz. doc comment'i) - teklifin "gonderen"i, PDF'te
+ * gosterilen temsilci bilgisi. */
+export interface QuotePrintSenderData {
+  name: string;
+  title: string | null;
+  phone: string | null;
+  email: string;
 }
 
 export type QuotePrintData = Omit<QuoteWithDetails, 'template'> & {
   template: QuotePrintTemplateData | null;
+  company: QuotePrintCompanyData;
+  sender: QuotePrintSenderData | null;
 };
 
 type QuoteRow = Quote & {
@@ -577,12 +590,31 @@ export class QuotesService {
    * `template: null` doner. */
   async getPrintData(id: string): Promise<QuotePrintData> {
     const quote = await this.getById(id);
+    const { tenantId } = TenantContext.getOrThrow();
+    const [tenant, sender] = await Promise.all([
+      this.prisma.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { name: true, address: true, phone: true, email: true },
+      }),
+      this.prisma.user.findFirst({
+        where: { id: quote.senderId ?? quote.createdById },
+        select: { name: true, title: true, phone: true, email: true },
+      }),
+    ]);
+    const company: QuotePrintCompanyData = {
+      name: tenant.name,
+      address: tenant.address,
+      phone: tenant.phone,
+      email: tenant.email,
+    };
     const template = quote.template;
     if (!template) {
-      return { ...quote, template: null };
+      return { ...quote, template: null, company, sender };
     }
     return {
       ...quote,
+      company,
+      sender,
       template: {
         id: template.id,
         name: template.name,
@@ -597,15 +629,30 @@ export class QuotesService {
         ),
         companyDisplayName: template.companyDisplayName,
         companyTagline: template.companyTagline,
-        companyPhone: template.companyPhone,
-        companyEmail: template.companyEmail,
-        companyAddressLines: template.companyAddressLines,
-        senderName: template.senderName,
-        senderTitle: template.senderTitle,
-        senderPhone: template.senderPhone,
-        senderEmail: template.senderEmail,
       },
     };
+  }
+
+  /**
+   * /teklifler/yeni ve /teklifler/duzenle/:id'deki "Gonderen" secicisi icin
+   * secilebilir kullanici listesi - ProjectsService.listAssignableUsers ile
+   * ayni filtre (aktif, platform admin olmayan kullanicilar), ama PDF'te
+   * gosterilecek unvan/telefon/eposta de dahil.
+   */
+  async listAssignableUsers(): Promise<
+    {
+      id: string;
+      name: string;
+      title: string | null;
+      phone: string | null;
+      email: string;
+    }[]
+  > {
+    return this.prisma.user.findMany({
+      where: { isActive: true, isPlatformAdmin: false },
+      select: { id: true, name: true, title: true, phone: true, email: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   /**
@@ -638,6 +685,16 @@ export class QuotesService {
   ): Promise<QuoteWithDetails> {
     await this.assertValidPaymentMethod(dto.paymentMethod);
     const ibanSnapshot = await this.resolveIbanSnapshot(dto.ibanOptionId);
+    const sender = await this.prisma.user.findFirst({
+      where: { id: dto.senderId },
+    });
+    if (!sender) {
+      throw new AppException(
+        'SENDER_NOT_FOUND',
+        'Secilen gonderen bulunamadi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     /**
      * `P2002` (quoteNumber cakismasi) gercek bir Postgres hatasidir; ayni
@@ -702,6 +759,7 @@ export class QuotesService {
               ...ibanSnapshot,
               templateId,
               status: 'DRAFT',
+              senderId: dto.senderId,
               createdById,
               quoteCurrency: dto.quoteCurrency,
               exchangeRates: dto.exchangeRates ?? undefined,
@@ -827,6 +885,18 @@ export class QuotesService {
       );
     }
     await this.assertValidPaymentMethod(dto.paymentMethod ?? undefined);
+    if (dto.senderId !== undefined) {
+      const sender = await this.prisma.user.findFirst({
+        where: { id: dto.senderId },
+      });
+      if (!sender) {
+        throw new AppException(
+          'SENDER_NOT_FOUND',
+          'Secilen gonderen bulunamadi.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
     const ibanOptionIdProvided = dto.ibanOptionId !== undefined;
     const ibanSnapshot = ibanOptionIdProvided
       ? await this.resolveIbanSnapshot(dto.ibanOptionId)
@@ -860,6 +930,7 @@ export class QuotesService {
       ...(dto.exchangeRates !== undefined
         ? { exchangeRates: dto.exchangeRates }
         : {}),
+      ...(dto.senderId !== undefined ? { senderId: dto.senderId } : {}),
       ...(isRevisionSave
         ? {
             revisionNote: dto.revisionNote,

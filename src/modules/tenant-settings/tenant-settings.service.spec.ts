@@ -1,4 +1,5 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import {
   CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY,
   DEFAULT_CONTACT_INACTIVITY_THRESHOLD_DAYS,
@@ -6,6 +7,11 @@ import {
 import { TenantSettingsService } from './tenant-settings.service';
 
 const fakeAudit = { log: vi.fn() };
+const fakeRealtime = { emitToTenant: vi.fn(), emitToAll: vi.fn() };
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
+}
 
 function createPrisma(rows: unknown[] = []) {
   return {
@@ -24,6 +30,7 @@ describe('TenantSettingsService', () => {
     const service = new TenantSettingsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
     const result = await service.list();
     expect(result).toContainEqual({
@@ -38,6 +45,7 @@ describe('TenantSettingsService', () => {
     const service = new TenantSettingsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
     await expect(service.get('bilinmeyen.anahtar')).rejects.toMatchObject({
       code: 'UNKNOWN_SETTING_KEY',
@@ -49,6 +57,7 @@ describe('TenantSettingsService', () => {
     const service = new TenantSettingsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
     await expect(
       service.upsert(CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY, -5),
@@ -57,21 +66,26 @@ describe('TenantSettingsService', () => {
     } satisfies Partial<AppException>);
   });
 
-  it('upsert: gecerli deger icin kayit olusturur ve audit loglar', async () => {
+  it('upsert: gecerli deger icin kayit olusturur ve audit loglar, realtime yayinlar', async () => {
     const prisma = createPrisma([]);
     const service = new TenantSettingsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    const result = await service.upsert(
-      CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY,
-      90,
+    const result = await runInTenant(() =>
+      service.upsert(CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY, 90),
     );
     expect(result.value).toBe(90);
     expect(prisma.tenantSetting.create).toHaveBeenCalledWith({
       data: { key: CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY, value: 90 },
     });
     expect(fakeAudit.log).toHaveBeenCalled();
+    expect(fakeRealtime.emitToTenant).toHaveBeenCalledWith(
+      't1',
+      'tenantSettings.updated',
+      { key: CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY, value: 90 },
+    );
   });
 
   it('upsert: mevcut kayit varsa gunceller', async () => {
@@ -81,8 +95,11 @@ describe('TenantSettingsService', () => {
     const service = new TenantSettingsService(
       prisma as never,
       fakeAudit as never,
+      fakeRealtime as never,
     );
-    await service.upsert(CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY, 60);
+    await runInTenant(() =>
+      service.upsert(CONTACT_INACTIVITY_THRESHOLD_DAYS_KEY, 60),
+    );
     expect(prisma.tenantSetting.update).toHaveBeenCalledWith({
       where: { id: 's1' },
       data: { value: 60 },

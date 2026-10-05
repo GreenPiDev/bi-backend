@@ -299,6 +299,8 @@ export class UsersService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
         ...(dto.defaultPageSize !== undefined
           ? { defaultPageSize: dto.defaultPageSize }
           : {}),

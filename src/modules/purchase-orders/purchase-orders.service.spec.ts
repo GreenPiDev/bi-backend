@@ -13,17 +13,18 @@ function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'quote-1',
     accountId: 'account-1',
+    quoteNumber: 'TEK-2026-09-07-001',
     status: 'APPROVED',
     items: [
       {
         productId: 'product-1',
         quantity: '5.000',
-        product: { id: 'product-1', name: 'Sunucu' },
+        product: { id: 'product-1', name: 'Sunucu', productListId: 'list-1' },
       },
       {
         productId: 'product-2',
         quantity: '2.000',
-        product: { id: 'product-2', name: 'Klavye' },
+        product: { id: 'product-2', name: 'Klavye', productListId: 'list-1' },
       },
     ],
     ...overrides,
@@ -106,7 +107,7 @@ describe('PurchaseOrdersService', () => {
     } satisfies Partial<AppException>);
   });
 
-  it('createFromQuote: onaylanmamis teklif icin QUOTE_NOT_APPROVED firlatir', async () => {
+  it('getDraftFromQuote: onaylanmamis teklif icin QUOTE_NOT_APPROVED firlatir', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({ status: 'PENDING_APPROVAL' }),
     });
@@ -115,64 +116,61 @@ describe('PurchaseOrdersService', () => {
       fakeAudit,
       fakeCache,
     );
-    await expect(
-      service.createFromQuote('user-1', 'quote-1'),
-    ).rejects.toMatchObject({ code: 'QUOTE_NOT_APPROVED' });
+    await expect(service.getDraftFromQuote('quote-1')).rejects.toMatchObject({
+      code: 'QUOTE_NOT_APPROVED',
+    });
   });
 
-  it('createFromQuote: teklif bulunamazsa NOT_FOUND firlatir', async () => {
+  it('getDraftFromQuote: teklif bulunamazsa NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ quoteRow: null });
     const service = new PurchaseOrdersService(
       prisma as never,
       fakeAudit,
       fakeCache,
     );
-    await expect(
-      service.createFromQuote('user-1', 'yok'),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(service.getDraftFromQuote('yok')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
   });
 
-  it('createFromQuote: stok yoksa teklif miktari kadar kalem miktari uretir (SP2)', async () => {
+  it('getDraftFromQuote: stok yoksa teklif miktari kadar onerilen kalem miktari dondurur (SP2), hicbir kayit olusturmaz', async () => {
     const prisma = createPrisma({ stockItems: [] });
     const service = new PurchaseOrdersService(
       prisma as never,
       fakeAudit,
       fakeCache,
     );
-    await service.createFromQuote('user-1', 'quote-1');
+    const draft = await service.getDraftFromQuote('quote-1');
 
+    expect(draft).toEqual({
+      accountId: 'account-1',
+      quoteId: 'quote-1',
+      quoteNumber: 'TEK-2026-09-07-001',
+      items: [
+        {
+          productId: 'product-1',
+          productListId: 'list-1',
+          productName: 'Sunucu',
+          quantity: 5,
+        },
+        {
+          productId: 'product-2',
+          productListId: 'list-1',
+          productName: 'Klavye',
+          quantity: 2,
+        },
+      ],
+    });
     const tx = (
       prisma as unknown as {
         __tx: { purchaseOrder: { create: ReturnType<typeof vi.fn> } };
       }
     ).__tx;
-    expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          quoteId: 'quote-1',
-          items: {
-            create: [
-              {
-                productId: 'product-1',
-                description: '',
-                quantity: 5,
-                source: 'QUOTE',
-              },
-              {
-                productId: 'product-2',
-                description: '',
-                quantity: 2,
-                source: 'QUOTE',
-              },
-            ],
-          },
-        }),
-      }),
-    );
-    expect(auditLog).toHaveBeenCalled();
+    expect(tx.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(auditLog).not.toHaveBeenCalled();
   });
 
-  it('createFromQuote: stok mevcut urun icin miktari 0a dusurur, taban sifirin altina inmez (SP2)', async () => {
+  it('getDraftFromQuote: stok mevcut urun icin miktari 0a dusurur, taban sifirin altina inmez (SP2)', async () => {
     const prisma = createPrisma({
       stockItems: [
         { productId: 'product-1', quantity: '100.000' },
@@ -184,69 +182,12 @@ describe('PurchaseOrdersService', () => {
       fakeAudit,
       fakeCache,
     );
-    await service.createFromQuote('user-1', 'quote-1');
+    const draft = await service.getDraftFromQuote('quote-1');
 
-    const tx = (
-      prisma as unknown as {
-        __tx: { purchaseOrder: { create: ReturnType<typeof vi.fn> } };
-      }
-    ).__tx;
-    expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          items: {
-            create: [
-              expect.objectContaining({ productId: 'product-1', quantity: 0 }),
-              expect.objectContaining({ productId: 'product-2', quantity: 1 }),
-            ],
-          },
-        }),
-      }),
-    );
-  });
-
-  it('createFromQuote: kendi projectId alanini setlemez, proje iliskisi quote.project uzerinden turetilir (SP1 akis notu)', async () => {
-    const prisma = createPrisma();
-    const service = new PurchaseOrdersService(
-      prisma as never,
-      fakeAudit,
-      fakeCache,
-    );
-    await service.createFromQuote('user-1', 'quote-1');
-
-    const tx = (
-      prisma as unknown as {
-        __tx: { purchaseOrder: { create: ReturnType<typeof vi.fn> } };
-      }
-    ).__tx;
-    expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.not.objectContaining({ projectId: expect.anything() }),
-      }),
-    );
-  });
-
-  it('createFromQuote: SIP-YYYY-AA-GG-NNN formatinda numara uretir', async () => {
-    const prisma = createPrisma();
-    const service = new PurchaseOrdersService(
-      prisma as never,
-      fakeAudit,
-      fakeCache,
-    );
-    await service.createFromQuote('user-1', 'quote-1');
-
-    const tx = (
-      prisma as unknown as {
-        __tx: { purchaseOrder: { create: ReturnType<typeof vi.fn> } };
-      }
-    ).__tx;
-    expect(tx.purchaseOrder.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          orderNumber: expect.stringMatching(/^SIP-\d{4}-\d{2}-\d{2}-\d{3}$/),
-        }),
-      }),
-    );
+    expect(draft.items).toEqual([
+      expect.objectContaining({ productId: 'product-1', quantity: 0 }),
+      expect.objectContaining({ productId: 'product-2', quantity: 1 }),
+    ]);
   });
 
   it('create: teklif verilmeden (quoteId olmadan) manuel siparis olusturur', async () => {

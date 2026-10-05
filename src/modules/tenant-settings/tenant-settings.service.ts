@@ -4,6 +4,8 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { RealtimeService } from '../../core/realtime/realtime.service';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import type { TenantSettingResponse } from './dto/tenant-setting.dto';
 import {
@@ -16,6 +18,7 @@ export class TenantSettingsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async list(): Promise<TenantSettingResponse[]> {
@@ -83,6 +86,14 @@ export class TenantSettingsService {
       entity: 'TenantSetting',
       entityId: key,
       meta: { value: parsed.data },
+    });
+
+    // Baska bir sekmede acik olan /teklifler/yeni gibi ekranlar sayfa yenilenmeden
+    // guncellensin diye (bkz. WarehousesService.emitUpdated ile ayni desen).
+    const { tenantId } = TenantContext.getOrThrow();
+    this.realtime.emitToTenant(tenantId, 'tenantSettings.updated', {
+      key,
+      value: parsed.data,
     });
 
     return { key, value: parsed.data, isDefault: false };
