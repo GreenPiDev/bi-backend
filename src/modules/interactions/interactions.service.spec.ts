@@ -16,6 +16,7 @@ const fakeOpportunitiesCache = {
   set: vi.fn(),
   invalidate: vi.fn(),
 } as never;
+const fakeListPdf = { render: vi.fn() } as never;
 
 const TENANT_ID = 'tenant-1';
 const USER_ID = '22222222-2222-2222-2222-222222222222';
@@ -107,6 +108,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -123,6 +125,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -151,6 +154,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountName: 'Yeni Firma',
@@ -178,6 +182,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -206,6 +211,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       contactId: 'contact-1',
@@ -236,6 +242,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       contactName: 'Ahmet Yilmaz',
@@ -268,6 +275,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(
       service.create(TENANT_ID, USER_ID, {
@@ -291,6 +299,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -319,6 +328,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(
       service.create(TENANT_ID, USER_ID, {
@@ -345,6 +355,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     const startAt = new Date(Date.now() + 60 * 60_000);
     const result = await service.create(TENANT_ID, USER_ID, {
@@ -387,6 +398,7 @@ describe('InteractionsService', () => {
       calendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     const OTHER_USER_ID = '44444444-4444-4444-4444-444444444444';
     const startAt = new Date(Date.now() + 60 * 60_000);
@@ -432,6 +444,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     const startAt = new Date(Date.now() + 60 * 60_000);
     const result = await service.create(TENANT_ID, USER_ID, {
@@ -457,6 +470,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(
       service.create(TENANT_ID, USER_ID, {
@@ -482,6 +496,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -508,6 +523,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(
       service.create(TENANT_ID, USER_ID, {
@@ -534,6 +550,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.create(TENANT_ID, USER_ID, {
       accountId: ACCOUNT_ID,
@@ -559,6 +576,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.list({ page: 1, pageSize: 20 } as never);
     expect(prisma.interaction.findMany).toHaveBeenCalledWith(
@@ -578,6 +596,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.list({
       page: 1,
@@ -604,6 +623,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(
       service.update('interaction-1', { contactId: 'yok-kisi' } as never),
@@ -624,6 +644,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await expect(
       service.update('interaction-1', {
@@ -645,6 +666,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.update('interaction-1', {
       contactId: 'contact-1',
@@ -666,6 +688,7 @@ describe('InteractionsService', () => {
       fakeCalendarEvents,
       fakeInteractionsCache,
       fakeOpportunitiesCache,
+      fakeListPdf,
     );
     await service.remove('interaction-1');
     expect(prisma.interaction.delete).toHaveBeenCalledWith({

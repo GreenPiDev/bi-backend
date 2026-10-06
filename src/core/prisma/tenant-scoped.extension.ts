@@ -47,6 +47,9 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'MessageStar',
   'MessageAttachment',
   'Notification',
+  'DrawingLibraryComponent',
+  'DrawingPanelTemplate',
+  'Drawing',
 ]);
 
 /**
@@ -64,6 +67,7 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   'Quote',
   'Project',
   'PurchaseOrder',
+  'Drawing',
 ]);
 
 const READ_OPERATIONS = new Set([

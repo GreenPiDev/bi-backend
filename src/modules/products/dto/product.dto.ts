@@ -1,6 +1,27 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 
+/**
+ * "Teknik Ozellikler / Pano Cizim Bilgileri" - urunun pano cizim motorunda (bkz.
+ * docs/VARSAYIMLAR.md V52) kullanilabilmesi icin gereken opsiyonel geometrik alanlar.
+ * Hicbir alan zorunlu degil - doldurulmamissa o urun cizim motorunda kullanilamaz,
+ * bu normal bir durumdur. Tum alanlar null kabul eder (UPDATE'te tek tek alan
+ * temizlenebilsin diye - formun "Teknik Ozellikler" bolumu her submit'te kendi
+ * gorunur alanlarinin tam halini gonderir).
+ */
+export const ProductDrawingSpecInputSchema = z.object({
+  widthMm: z.number().positive().max(10_000).nullable().optional(),
+  heightMm: z.number().positive().max(10_000).nullable().optional(),
+  depthMm: z.number().positive().max(10_000).nullable().optional(),
+  libraryComponentKey: z.string().trim().min(1).max(100).nullable().optional(),
+  bandOrder: z.number().int().min(0).max(1000).nullable().optional(),
+  /** Hangi banda ait (DrawingPanelTemplate.layout.bands[].key) - bkz. docs/VARSAYIMLAR.md V54. */
+  bandKey: z.string().trim().min(1).max(100).nullable().optional(),
+});
+export type ProductDrawingSpecInputDto = z.infer<
+  typeof ProductDrawingSpecInputSchema
+>;
+
 export const CreateProductSchema = z.object({
   productListId: z.string().uuid('Gecerli bir urun listesi seciniz.'),
   name: z.string().trim().min(2, 'Urun adi en az 2 karakter olmalidir.'),
@@ -19,6 +40,7 @@ export const CreateProductSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   category: z.string().trim().max(100).optional(),
   brand: z.string().trim().max(100).optional(),
+  drawingSpec: ProductDrawingSpecInputSchema.optional(),
 });
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 
@@ -44,6 +66,7 @@ export const UpdateProductSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
   category: z.string().trim().max(100).nullable().optional(),
   brand: z.string().trim().max(100).nullable().optional(),
+  drawingSpec: ProductDrawingSpecInputSchema.optional(),
 });
 export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;
 

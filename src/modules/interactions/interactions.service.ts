@@ -7,7 +7,10 @@ import type {
   Opportunity,
 } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import type { ExportFormat } from '../../core/export-format';
+import { ListPdfService } from '../../core/pdf/list-pdf.service';
 import { isPastCalendarDay } from '../../core/validators/date';
+import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -91,6 +94,7 @@ export class InteractionsService {
     private readonly calendarEvents: CalendarEventsService,
     private readonly interactionsCache: InteractionsCacheService,
     private readonly opportunitiesCache: OpportunitiesCacheService,
+    private readonly listPdf: ListPdfService,
   ) {}
 
   /** createdById/performedByUserId iliskisel bir FK degil (bkz. schema); isimler
@@ -226,6 +230,35 @@ export class InteractionsService {
     }
     const [withName] = await this.attachCreatedByNames([interaction]);
     return withName;
+  }
+
+  /**
+   * Kullanici istegiyle eklendi (accounts/contacts export'uyla ayni desen, bkz.
+   * imports.service.ts) - ana listede uygulanan filtreleri degil, parent kaydi
+   * olmayan (bagli gorusme degil) TUM gorusmeleri disa aktarir. Alanlar kullanicinin
+   * istedigi 6 sutunla sinirli: firma, gorusulen kisi, bizden goruseni yapan kisi,
+   * gorusme sekli, konu, tarih.
+   */
+  async exportInteractions(format: ExportFormat): Promise<Buffer> {
+    const rows = await this.prisma.interaction.findMany({
+      where: { parentInteractionId: null },
+      orderBy: { occurredAt: 'desc' },
+      include: INTERACTION_INCLUDE,
+    });
+    const withNames = await this.attachCreatedByNames(rows);
+    const exportRows = withNames.map((row) => ({
+      Firma: row.account?.name ?? '',
+      'Görüşülen Kişi': row.contact
+        ? `${row.contact.firstName} ${row.contact.lastName}`.trim()
+        : '',
+      'Görüşmeyi Yapan': row.performedByName ?? row.createdByName ?? '',
+      'Görüşme Şekli': row.type,
+      Konu: row.subject ?? '',
+      Tarih: row.occurredAt.toLocaleDateString('tr-TR'),
+    }));
+    return format === 'pdf'
+      ? this.listPdf.render('Görüşmeler', exportRows)
+      : rowsToXlsxBuffer(exportRows, 'Görüşmeler');
   }
 
   /**

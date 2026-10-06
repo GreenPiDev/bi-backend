@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { Product, ProductList } from '@prisma/client';
+import type { Product, ProductDrawingSpec, ProductList } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import { PrismaService } from '../../core/prisma/prisma.service';
@@ -20,13 +20,17 @@ import type {
   BulkDeleteProductsDto,
   BulkMoveProductsDto,
   CreateProductDto,
+  ProductDrawingSpecInputDto,
   ProductQueryDto,
   UpdateProductDto,
 } from './dto/product.dto';
 
 const SORTABLE_FIELDS = ['name', 'sku', 'createdAt'] as const;
 
-type ProductWithProductList = Product & { productList: ProductList };
+type ProductWithProductList = Product & {
+  productList: ProductList;
+  drawingSpec: ProductDrawingSpec | null;
+};
 
 export type ProductView = ProductWithProductList;
 
@@ -222,7 +226,7 @@ export class ProductsService {
   private async findOrThrow(id: string): Promise<ProductWithProductList> {
     const product = await this.prisma.product.findFirst({
       where: { id },
-      include: { productList: true },
+      include: { productList: true, drawingSpec: true },
     });
     if (!product) {
       throw new AppException(
@@ -234,10 +238,38 @@ export class ProductsService {
     return product;
   }
 
+  /**
+   * ProductDrawingSpec, Product'tan ayri bir 1:1 tablo (tenantId tasimaz, bkz. schema
+   * doc comment) - bu yuzden Product.create/update'in `data` payload'ina dogrudan nested
+   * yazilmaz, urun kaydi olustuktan/guncellendikten sonra ayrica upsert/delete edilir.
+   * `input` tum alanlari bos/null ise (kullanici "Teknik Ozellikler" bolumunu hic
+   * doldurmadiysa ya da hepsini temizlediyse) spec satiri hic yaratilmaz/silinir.
+   */
+  private async upsertDrawingSpec(
+    productId: string,
+    input: ProductDrawingSpecInputDto,
+  ): Promise<ProductDrawingSpec | null> {
+    const hasValue = Object.values(input).some(
+      (value) => value !== null && value !== undefined,
+    );
+    if (!hasValue) {
+      await this.prisma.productDrawingSpec.deleteMany({
+        where: { productId },
+      });
+      return null;
+    }
+    return this.prisma.productDrawingSpec.upsert({
+      where: { productId },
+      create: { productId, ...input },
+      update: { ...input },
+    });
+  }
+
   async create(dto: CreateProductDto): Promise<ProductView> {
+    const { drawingSpec, ...productData } = dto;
     const product = await this.prisma.product.create({
       // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
-      data: { ...dto } as never,
+      data: { ...productData } as never,
       include: { productList: true },
     });
     await this.audit.log({
@@ -257,15 +289,20 @@ export class ProductsService {
         product.currency,
       );
     }
+    const spec =
+      drawingSpec !== undefined
+        ? await this.upsertDrawingSpec(product.id, drawingSpec)
+        : null;
     await this.cache.invalidate();
-    return product;
+    return { ...product, drawingSpec: spec };
   }
 
   async update(id: string, dto: UpdateProductDto): Promise<ProductView> {
     const existing = await this.findOrThrow(id);
+    const { drawingSpec, ...productData } = dto;
     const product = await this.prisma.product.update({
       where: { id },
-      data: dto,
+      data: productData,
       include: { productList: true },
     });
     await this.audit.log({ action: 'UPDATE', entity: 'Product', entityId: id });
@@ -283,8 +320,12 @@ export class ProductsService {
         dto.currency ?? product.currency,
       );
     }
+    const spec =
+      drawingSpec !== undefined
+        ? await this.upsertDrawingSpec(id, drawingSpec)
+        : existing.drawingSpec;
     await this.cache.invalidate();
-    return product;
+    return { ...product, drawingSpec: spec };
   }
 
   /** Urunun fiyati olusturulurken/guncellenirken degistiginde 'ProductPrice' adinda

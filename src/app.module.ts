@@ -25,6 +25,10 @@ import { DashboardsModule } from './modules/dashboards/dashboards.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { DepartmentOptionsModule } from './modules/department-options/department-options.module';
+import { DrawingLibraryModule } from './modules/drawing-library/drawing-library.module';
+import { DrawingTemplatesModule } from './modules/drawing-templates/drawing-templates.module';
+import { DrawingsModule } from './modules/drawings/drawings.module';
+import { DrawingImportsModule } from './modules/drawing-imports/drawing-imports.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
 import { IbanOptionsModule } from './modules/iban-options/iban-options.module';
@@ -123,6 +127,10 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     WarehousesModule,
     MessagesModule,
     NotificationsModule,
+    DrawingsModule,
+    DrawingImportsModule,
+    DrawingLibraryModule,
+    DrawingTemplatesModule,
     JobsModule,
   ],
   providers: [

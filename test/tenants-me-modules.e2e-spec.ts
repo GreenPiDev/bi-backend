@@ -62,6 +62,12 @@ describe('GET /tenants/me/modules (e2e)', () => {
         enabled: false,
       },
       { key: 'crm', label: 'Satis (CRM)', alwaysOn: false, enabled: false },
+      {
+        key: 'drawings',
+        label: 'Teknik Cizim',
+        alwaysOn: false,
+        enabled: false,
+      },
     ]);
   });
 

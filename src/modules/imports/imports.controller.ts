@@ -4,6 +4,7 @@ import {
   Get,
   HttpStatus,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseInterceptors,
@@ -21,6 +22,10 @@ import {
 } from '../../core/decorators/current-user.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  parseExportFormat,
+  sendExportFile,
+} from '../../core/http/export-response.util';
 import { MAX_UPLOAD_SIZE_BYTES } from '../datasources/datasources.constants';
 import { detectDataSourceType } from '../datasources/file-signature';
 import type {
@@ -192,28 +197,24 @@ export class ImportsController {
 
   @Get('accounts/export')
   @RequiresPermission('accounts', 'EXPORT')
-  async exportAccounts(@Res() res: Response): Promise<void> {
-    const buffer = await this.imports.exportAccounts();
-    res
-      .header(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      )
-      .header('Content-Disposition', 'attachment; filename="firmalar.xlsx"')
-      .send(buffer);
+  async exportAccounts(
+    @Query('format') formatRaw: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const format = parseExportFormat(formatRaw);
+    const buffer = await this.imports.exportAccounts(format);
+    sendExportFile(res, buffer, format, 'firmalar');
   }
 
   @Get('contacts/export')
   @RequiresPermission('contacts', 'EXPORT')
-  async exportContacts(@Res() res: Response): Promise<void> {
-    const buffer = await this.imports.exportContacts();
-    res
-      .header(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      )
-      .header('Content-Disposition', 'attachment; filename="kisiler.xlsx"')
-      .send(buffer);
+  async exportContacts(
+    @Query('format') formatRaw: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const format = parseExportFormat(formatRaw);
+    const buffer = await this.imports.exportContacts(format);
+    sendExportFile(res, buffer, format, 'kisiler');
   }
 
   private async withUploadedFile<T>(

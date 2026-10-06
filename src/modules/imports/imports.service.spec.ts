@@ -12,6 +12,7 @@ async function* toAsyncIterable<T>(items: T[]): AsyncIterable<T> {
 }
 
 const fakeAudit = { log: vi.fn() } as never;
+const fakeListPdf = { render: vi.fn() } as never;
 const fakeAccountsCache = { invalidate: vi.fn() } as never;
 const fakeContactsCache = { invalidate: vi.fn() } as never;
 
@@ -112,6 +113,7 @@ describe('ImportsService.importAccounts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>
@@ -139,6 +141,7 @@ describe('ImportsService.importAccounts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>
@@ -164,6 +167,7 @@ describe('ImportsService.importAccounts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>
@@ -201,6 +205,7 @@ describe('ImportsService.importAccounts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     await runInTenant(() =>
@@ -238,6 +243,7 @@ describe('ImportsService.importAccounts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     await runInTenant(() =>
@@ -286,6 +292,7 @@ describe('ImportsService.importContacts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>
@@ -323,6 +330,7 @@ describe('ImportsService.importContacts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>
@@ -348,6 +356,7 @@ describe('ImportsService.importContacts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>
@@ -382,6 +391,7 @@ describe('ImportsService.importContacts', () => {
       fakeAccountsCache,
       fakeContactsCache,
       fakeAudit,
+      fakeListPdf,
     );
 
     const result = await runInTenant(() =>

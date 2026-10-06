@@ -13,6 +13,7 @@ export const MODULE_REGISTRY: readonly ModuleDefinition[] = [
   { key: 'core', label: 'Cekirdek', alwaysOn: true },
   { key: 'analytics', label: 'Veri Analitigi', alwaysOn: false },
   { key: 'crm', label: 'Satis (CRM)', alwaysOn: false },
+  { key: 'drawings', label: 'Teknik Cizim', alwaysOn: false },
 ];
 
 export function findModuleDefinition(

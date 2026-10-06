@@ -1,7 +1,9 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Account, Contact, DataSourceType } from '@prisma/client';
-import * as ExcelJS from 'exceljs';
 import { AppException } from '../../core/errors/app.exception';
+import type { ExportFormat } from '../../core/export-format';
+import { ListPdfService } from '../../core/pdf/list-pdf.service';
+import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
@@ -123,6 +125,7 @@ export class ImportsService {
     private readonly accountsCache: AccountsCacheService,
     private readonly contactsCache: ContactsCacheService,
     private readonly audit: AuditService,
+    private readonly listPdf: ListPdfService,
   ) {}
 
   private async readRows(
@@ -521,7 +524,7 @@ export class ImportsService {
     };
   }
 
-  async exportAccounts(): Promise<Buffer> {
+  async exportAccounts(format: ExportFormat): Promise<Buffer> {
     const accounts = await this.prisma.account.findMany({
       orderBy: { name: 'asc' },
     });
@@ -536,10 +539,12 @@ export class ImportsService {
       Adres: account.address ?? '',
       Sehir: account.city ?? '',
     }));
-    return this.toXlsxBuffer(rows, 'Firmalar');
+    return format === 'pdf'
+      ? this.listPdf.render('Firmalar', rows)
+      : rowsToXlsxBuffer(rows, 'Firmalar');
   }
 
-  async exportContacts(): Promise<Buffer> {
+  async exportContacts(format: ExportFormat): Promise<Buffer> {
     const contacts = await this.prisma.contact.findMany({
       orderBy: { lastName: 'asc' },
       include: { account: { select: { name: true } } },
@@ -548,27 +553,13 @@ export class ImportsService {
       Ad: contact.firstName,
       Soyad: contact.lastName,
       Unvan: contact.title ?? '',
+      Departman: contact.department ?? '',
       'E-posta': contact.email ?? '',
       Telefon: contact.phone ?? '',
       Firma: contact.account?.name ?? '',
     }));
-    return this.toXlsxBuffer(rows, 'Kisiler');
-  }
-
-  private async toXlsxBuffer(
-    rows: Record<string, string>[],
-    sheetName: string,
-  ): Promise<Buffer> {
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet(sheetName);
-    if (rows.length > 0) {
-      worksheet.columns = Object.keys(rows[0]).map((key) => ({
-        header: key,
-        key,
-      }));
-      worksheet.addRows(rows);
-    }
-    const buffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(buffer);
+    return format === 'pdf'
+      ? this.listPdf.render('Kisiler', rows)
+      : rowsToXlsxBuffer(rows, 'Kisiler');
   }
 }

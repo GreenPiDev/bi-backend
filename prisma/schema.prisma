@@ -197,48 +197,51 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                  User[]
-  dataSources            DataSource[]
-  datasets               Dataset[]
-  dashboards             Dashboard[]
-  scheduledReports       ScheduledReport[]
-  alerts                 Alert[]
-  auditLogs              AuditLog[]
-  modules                TenantModule[]
-  accounts               Account[]
-  contacts               Contact[]
-  sectorOptions          SectorOption[]
-  departmentOptions      DepartmentOption[]
-  titleOptions           TitleOption[]
-  productCategoryOptions ProductCategoryOption[]
-  brandOptions           BrandOption[]
-  unitOptions            UnitOption[]
-  paymentMethodOptions   PaymentMethodOption[]
-  ibanOptions            IbanOption[]
-  settings               TenantSetting[]
-  roles                  Role[]
-  calendarEvents         CalendarEvent[]
-  calendarShares         CalendarShare[]
-  reminderTypeOptions    ReminderTypeOption[]
-  interactions           Interaction[]
-  interactionTypeOptions InteractionTypeOption[]
-  opportunities          Opportunity[]
-  products               Product[]
-  productLists           ProductList[]
-  quotes                 Quote[]
-  quoteTemplates         QuoteTemplate[]
-  postSaleCases          PostSaleCase[]
-  feedbackSurveys        FeedbackSurvey[]
-  projects               Project[]
-  projectAttachments     ProjectAttachment[]
-  purchaseOrders         PurchaseOrder[]
-  stockItems             StockItem[]
-  stockMovements         StockMovement[]
-  warehouses             Warehouse[]
-  messages               Message[]
-  messageStars           MessageStar[]
-  messageAttachments     MessageAttachment[]
-  notifications          Notification[]
+  users                    User[]
+  dataSources              DataSource[]
+  datasets                 Dataset[]
+  dashboards               Dashboard[]
+  scheduledReports         ScheduledReport[]
+  alerts                   Alert[]
+  auditLogs                AuditLog[]
+  modules                  TenantModule[]
+  accounts                 Account[]
+  contacts                 Contact[]
+  sectorOptions            SectorOption[]
+  departmentOptions        DepartmentOption[]
+  titleOptions             TitleOption[]
+  productCategoryOptions   ProductCategoryOption[]
+  brandOptions             BrandOption[]
+  unitOptions              UnitOption[]
+  paymentMethodOptions     PaymentMethodOption[]
+  ibanOptions              IbanOption[]
+  settings                 TenantSetting[]
+  roles                    Role[]
+  calendarEvents           CalendarEvent[]
+  calendarShares           CalendarShare[]
+  reminderTypeOptions      ReminderTypeOption[]
+  interactions             Interaction[]
+  interactionTypeOptions   InteractionTypeOption[]
+  opportunities            Opportunity[]
+  products                 Product[]
+  productLists             ProductList[]
+  quotes                   Quote[]
+  quoteTemplates           QuoteTemplate[]
+  postSaleCases            PostSaleCase[]
+  feedbackSurveys          FeedbackSurvey[]
+  projects                 Project[]
+  projectAttachments       ProjectAttachment[]
+  purchaseOrders           PurchaseOrder[]
+  stockItems               StockItem[]
+  stockMovements           StockMovement[]
+  warehouses               Warehouse[]
+  messages                 Message[]
+  messageStars             MessageStar[]
+  messageAttachments       MessageAttachment[]
+  notifications            Notification[]
+  drawingLibraryComponents DrawingLibraryComponent[]
+  drawingPanelTemplates    DrawingPanelTemplate[]
+  drawings                 Drawing[]
 
   @@map("tenants")
 }
@@ -1047,6 +1050,7 @@ model Product {
   purchaseOrderItems PurchaseOrderItem[]
   stockItems         StockItem[]
   stockMovements     StockMovement[]
+  drawingSpec        ProductDrawingSpec?
 
   @@index([tenantId, name])
   @@index([tenantId, deletedAt])
@@ -1186,6 +1190,7 @@ model Quote {
   postSaleCase   PostSaleCase?
   purchaseOrders PurchaseOrder[]
   stockMovements StockMovement[]
+  drawings       Drawing[]
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, accountId])
@@ -1699,4 +1704,180 @@ model Notification {
 
   @@index([tenantId, recipientUserId, readAt, createdAt])
   @@map("notifications")
+}
+
+/**
+ * Tekliften Otomatik Teknik Cizim modulu (bkz. docs/VARSAYIMLAR.md V52,
+ * docs/YOL_HARITASI.md "Yeni Modul: Tekliften Otomatik Teknik Cizim", Faz D1).
+ * `drawings` modulu (MODULE_REGISTRY) altinda, tenant bazinda acilir/kapanir.
+ */
+
+/**
+ * Urunun pano cizim motorunda kullanilabilmesi icin gereken teknik/geometrik
+ * bilgiler. Product'a 1:1, tum alanlar opsiyonel - doldurulmamissa o urun cizim
+ * motorunda kullanilamaz, bu normal bir durumdur (bkz. V52). tenantId tasimaz -
+ * QuoteItem ile ayni desen, izolasyon parent Product uzerinden saglanir.
+ */
+model ProductDrawingSpec {
+  id                  String   @id @default(uuid())
+  productId           String   @unique
+  widthMm             Decimal? @db.Decimal(10, 2)
+  heightMm            Decimal? @db.Decimal(10, 2)
+  depthMm             Decimal? @db.Decimal(10, 2)
+  /**
+   * Proje-1'deki lib_key deseniyle ayni - DrawingLibraryComponent.key'e serbest
+   * (FK olmayan) referans. FK olmamasinin nedeni: kutuphane tenant bazinda farkli
+   * olabilir, urun olusturuldugu anda henuz o tenant'a kopyalanmamis olabilir.
+   */
+  libraryComponentKey String?
+  /**
+   * Baglanti noktalari - serbest JSON dizi ({label, x, y}[] gibi), render motoru
+   * (D4) tarafindan yorumlanir. Analitik sorgulanmaz, EAV kisidi (CLAUDE.md §16)
+   * bu alana uygulanmaz (domain-ozel cizim verisi, dataset/query motoruna hic
+   * girmez).
+   */
+  connectionPoints    Json?
+  /**
+   * Pano tipindeki varsayilan sira (bant/yerlesim sirasi) - auto-pack
+   * algoritmasinin soldan saga/bant ici siralama ipucu.
+   */
+  bandOrder           Int?
+  /**
+   * Urunun otomatik yerlesimde HANGI banda (DrawingPanelTemplate.layout.bands[].key)
+   * ait oldugu - D4'te kesfedilen bir sema boslugu, D6'da (Quote->Drawing otomasyonu)
+   * cozuldu (bkz. docs/VARSAYIMLAR.md V53/V54). bandOrder bant ICI sira, bandKey ise
+   * HANGI bant sorusunu cevaplar - category tek basina yetmiyordu (ayni kategorideki
+   * ana kesici ile cikis kesicileri farkli bantta olabiliyor).
+   */
+  bandKey             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("crm_product_drawing_specs")
+}
+
+/**
+ * Tenant bazinda pano cizim kutuphanesi elemani (role, kontaktor, PLC/IO modulu,
+ * klemens, kablo kanali/duct, bara vb.) - bkz. docs/VARSAYIMLAR.md V52. Built-in
+ * (isBuiltIn=true) satirlar seed'den gelir, bir provisioning servisi (Faz D3) ile
+ * her tenant'a KOPYALANIR - global mutasyona ugramazlar, tenant kendi kopyasini
+ * serbestce duzenleyebilir ("built-in ama duzenlenebilir" ilkesi).
+ */
+model DrawingLibraryComponent {
+  id              String   @id @default(uuid())
+  tenantId        String
+  /**
+   * Tenant icinde benzersiz, insan-okunur anahtar (proje-1'deki lib_key deseni).
+   */
+  key             String
+  name            String
+  category        String
+  defaultWidthMm  Decimal  @db.Decimal(10, 2)
+  defaultHeightMm Decimal  @db.Decimal(10, 2)
+  /**
+   * Render motorunun (D4) kullanacagi sembol tanimi - ilk surumde serbest JSON
+   * (sekil/renk/etiket), sembol kutuphanesi buyudukce genisleyebilir.
+   */
+  symbol          Json?
+  isBuiltIn       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("crm_drawing_library_components")
+}
+
+/**
+ * OG_CELL (orta gerilim hucresi) Faz D8'de eklendi - bkz. docs/VARSAYIMLAR.md V56.
+ * Render motoru (render-svg.ts) tipten habersiz, sadece layout bantlarini/elemanlarini
+ * okur - bu yuzden yeni tip icin motor kodunda degisiklik gerekmedi, sadece yeni bir
+ * built-in sablon/kutuphane seed'i eklendi.
+ */
+enum DrawingTemplateType {
+  AG_BACKPLATE
+  OG_CELL
+}
+
+/**
+ * Tenant bazinda pano sablonu - bkz. docs/VARSAYIMLAR.md V52. Built-in satirlar
+ * seed'den gelir, DrawingLibraryComponent ile ayni provisioning deseniyle (Faz D3)
+ * tenant'a kopyalanir.
+ */
+model DrawingPanelTemplate {
+  id        String              @id @default(uuid())
+  tenantId  String
+  name      String
+  type      DrawingTemplateType @default(AG_BACKPLATE)
+  widthMm   Decimal             @db.Decimal(10, 2)
+  heightMm  Decimal             @db.Decimal(10, 2)
+  /**
+   * Varsayilan bant/yerlesim tanimi (band sirasi, bosluk/clearance kurallari) -
+   * auto-pack algoritmasinin (D4) baslangic noktasi. Serbest JSON, EAV kisidi
+   * (analitik veri degil, cizim domain verisi) bu alana uygulanmaz.
+   */
+  layout    Json
+  isBuiltIn Boolean             @default(false)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  drawings Drawing[]
+
+  @@index([tenantId])
+  @@map("crm_drawing_panel_templates")
+}
+
+enum DrawingStatus {
+  DRAFT
+  FINALIZED
+}
+
+/**
+ * Tek bir pano/hucre cizimi - bkz. docs/VARSAYIMLAR.md V52. Bir teklif (Quote)
+ * birden fazla pano/hucre icerebilir, bu yuzden 1 Quote -> N Drawing (karar 6).
+ * `model` alani uc gorusu birden tutar (model.views.{internal,coverPlate,external})
+ * + model.busbars (karar 2-3) - export (PDF/SVG, Faz D7) HER ZAMAN bu alandan
+ * uretilir, canvas/ekran goruntusunden degil (proje-1'in "tek dogruluk kaynagi"
+ * ilkesi).
+ */
+model Drawing {
+  id              String        @id @default(uuid())
+  tenantId        String
+  quoteId         String
+  templateId      String?
+  /**
+   * PDF pre-processing'in (Faz D6) "hangi pano/hucreye ait" ayristirmasindan gelen
+   * serbest etiket (orn. "Pano-1", "Giris Hucresi") - FK degil, sadece kullaniciya
+   * gosterilen bir grup adi.
+   */
+  panelGroupLabel String?
+  name            String
+  status          DrawingStatus @default(DRAFT)
+  /**
+   * Tum cizim verisi (3 gorunum + bara dahil). Serbest JSON, EAV kisidi bu alana
+   * uygulanmaz - analitik sorgulanmaz, sadece render motoru tarafindan okunur/yazilir.
+   */
+  model           Json
+  exportedAt      DateTime?
+  /**
+   * Son uretilen PDF/SVG export dosyasinin R2 anahtari (urun gorseli/avatar ile ayni depolama deseni).
+   */
+  exportFileKey   String?
+  createdById     String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id])
+  quote    Quote                 @relation(fields: [quoteId], references: [id])
+  template DrawingPanelTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, quoteId])
+  @@index([tenantId, deletedAt])
+  @@map("crm_drawings")
 }

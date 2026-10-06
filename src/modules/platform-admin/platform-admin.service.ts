@@ -11,6 +11,8 @@ import {
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import { CrmReportProvisioningService } from '../datasets/crm-report-provisioning.service';
+import { DrawingLibraryProvisioningService } from '../drawing-library/drawing-library-provisioning.service';
+import { DrawingTemplatesProvisioningService } from '../drawing-templates/drawing-templates-provisioning.service';
 import {
   TenantsService,
   type TenantModuleStatus,
@@ -28,6 +30,8 @@ export class PlatformAdminService {
     private readonly pageModules: PageModulesService,
     private readonly realtime: RealtimeService,
     private readonly crmReports: CrmReportProvisioningService,
+    private readonly drawingLibrary: DrawingLibraryProvisioningService,
+    private readonly drawingTemplates: DrawingTemplatesProvisioningService,
   ) {}
 
   listTenants(): Promise<TenantSummary[]> {
@@ -79,6 +83,15 @@ export class PlatformAdminService {
       } else {
         await this.crmReports.deprovisionForTenant(tenantId);
       }
+    }
+    // Faz D3 (bkz. docs/VARSAYIMLAR.md V52): built-in kutuphane komponentleri/pano
+    // sablonlari sadece ACILISTA kopyalanir - CRM rapor dataset'lerinin aksine
+    // (sentetik/yeniden-uretilebilir), bunlar tenant'in SERBESTCE duzenleyebildigi
+    // gercek verilerdir; modul kapatilinca SILINMEZ ki tenant yeniden actiginda
+    // kendi ozellestirmeleri kaybolmasin.
+    if (moduleKey === 'drawings' && enabled) {
+      await this.drawingLibrary.provisionForTenant(tenantId);
+      await this.drawingTemplates.provisionForTenant(tenantId);
     }
     const modules = await this.tenants.listModules(tenantId);
     this.realtime.emitToTenant(tenantId, 'tenant.modules.updated', modules);

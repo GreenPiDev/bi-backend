@@ -50,6 +50,10 @@ function createPrisma(
     productList: {
       findFirst: vi.fn().mockResolvedValue(targetProductList),
     },
+    productDrawingSpec: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      upsert: vi.fn().mockImplementation(({ create }) => create),
+    },
     $queryRaw: vi.fn().mockResolvedValue([]),
   };
 }
@@ -322,5 +326,81 @@ describe('ProductsService', () => {
     );
     const result = await service.list({ page: 1, pageSize: 25 } as never);
     expect(String(result.data[0].stockQuantity)).toBe('0');
+  });
+
+  it('create: drawingSpec verilmezse ProductDrawingSpec hic yaratilmaz', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.create({
+      name: 'Kesici 2500A',
+      unit: 'adet',
+    } as never);
+    expect(prisma.productDrawingSpec.upsert).not.toHaveBeenCalled();
+    expect(result.drawingSpec).toBeNull();
+  });
+
+  it('create: drawingSpec dolu gelirse ProductDrawingSpec upsert edilir', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    await service.create({
+      name: 'Kesici 2500A',
+      unit: 'adet',
+      drawingSpec: { widthMm: 400, heightMm: 300 },
+    } as never);
+    expect(prisma.productDrawingSpec.upsert).toHaveBeenCalledWith({
+      where: { productId: 'product-1' },
+      create: { productId: 'product-1', widthMm: 400, heightMm: 300 },
+      update: { widthMm: 400, heightMm: 300 },
+    });
+  });
+
+  it('update: drawingSpec gonderilmezse mevcut deger degismeden doner', async () => {
+    const rowWithSpec = createProductRow({
+      drawingSpec: { id: 'spec-1', productId: 'product-1', widthMm: '400' },
+    });
+    const prisma = createPrisma(rowWithSpec);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.update('product-1', { name: 'x' } as never);
+    expect(prisma.productDrawingSpec.upsert).not.toHaveBeenCalled();
+    expect(prisma.productDrawingSpec.deleteMany).not.toHaveBeenCalled();
+    expect(result.drawingSpec).toEqual(
+      (rowWithSpec as Record<string, unknown>).drawingSpec,
+    );
+  });
+
+  it('update: drawingSpec tum alanlari bos/null gelirse spec silinir', async () => {
+    const prisma = createPrisma();
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.update('product-1', {
+      drawingSpec: { widthMm: null, heightMm: null },
+    } as never);
+    expect(prisma.productDrawingSpec.deleteMany).toHaveBeenCalledWith({
+      where: { productId: 'product-1' },
+    });
+    expect(result.drawingSpec).toBeNull();
   });
 });

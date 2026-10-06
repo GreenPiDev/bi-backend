@@ -8,7 +8,9 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   CurrentUser,
   type RequestUser,
@@ -16,6 +18,10 @@ import {
 import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import type { PagedResult } from '../../core/dto/list-query.dto';
+import {
+  parseExportFormat,
+  sendExportFile,
+} from '../../core/http/export-response.util';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateInteractionSchema,
@@ -49,6 +55,17 @@ export class InteractionsController {
   @RequiresPermission('interactions', 'VIEW')
   listCreators(): Promise<{ id: string; name: string }[]> {
     return this.interactions.listCreators();
+  }
+
+  @Get('export')
+  @RequiresPermission('interactions', 'EXPORT')
+  async export(
+    @Query('format') formatRaw: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const format = parseExportFormat(formatRaw);
+    const buffer = await this.interactions.exportInteractions(format);
+    sendExportFile(res, buffer, format, 'gorusmeler');
   }
 
   @Get(':id')

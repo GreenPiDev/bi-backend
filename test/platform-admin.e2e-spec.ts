@@ -219,6 +219,12 @@ describe('Platform admin (e2e)', () => {
         enabled: false,
       },
       { key: 'crm', label: 'Satis (CRM)', alwaysOn: false, enabled: false },
+      {
+        key: 'drawings',
+        label: 'Teknik Cizim',
+        alwaysOn: false,
+        enabled: false,
+      },
     ]);
   });
 
@@ -261,6 +267,7 @@ describe('Platform admin (e2e)', () => {
       { key: 'core', label: 'Cekirdek', alwaysOn: true },
       { key: 'analytics', label: 'Veri Analitigi', alwaysOn: false },
       { key: 'crm', label: 'Satis (CRM)', alwaysOn: false },
+      { key: 'drawings', label: 'Teknik Cizim', alwaysOn: false },
     ]);
   });
 

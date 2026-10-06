@@ -55,7 +55,7 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'interactions',
     label: 'Gorusmeler',
-    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT'],
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT', 'EXPORT'],
   },
   {
     key: 'opportunities',
@@ -111,6 +111,21 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     key: 'messages',
     label: 'Mesajlar',
     supportedActions: ['CREATE'],
+  },
+  {
+    key: 'drawings',
+    label: 'Teknik Cizimler',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'EXPORT'],
+  },
+  {
+    key: 'drawing-library',
+    label: 'Cizim Kutuphanesi',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
+    key: 'drawing-templates',
+    label: 'Pano Sablonlari',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
