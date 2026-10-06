@@ -36,6 +36,12 @@ function createPrisma(accountRow: unknown = createAccountRow()) {
     contact: {
       create: vi.fn(),
     },
+    interaction: {
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
+    quote: {
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
     sectorOption: {
       findMany: vi.fn().mockResolvedValue([]),
     },
