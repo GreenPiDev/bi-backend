@@ -16,7 +16,7 @@ import { ContactsCacheService } from '../contacts/contacts-cache.service';
 import { CreateContactSchema } from '../contacts/dto/contact.dto';
 import { FileParserService } from '../datasources/file-parser.service';
 import type {
-  AccountImportAttributeColumnsDto,
+  ImportAttributeColumnsDto,
   ImportMappingDto,
 } from './dto/import-mapping.dto';
 
@@ -199,7 +199,7 @@ export class ImportsService {
     type: DataSourceType,
     headerRowIndex: number,
     mapping: ImportMappingDto,
-    attributeColumns: AccountImportAttributeColumnsDto,
+    attributeColumns: ImportAttributeColumnsDto,
   ): Promise<ImportResult> {
     if (!mapping.name) {
       throw mappingIncompleteError("'name' alani bir sutuna eslenmelidir.");
@@ -348,29 +348,118 @@ export class ImportsService {
     };
   }
 
+  /**
+   * headerRowIndex verilmemisse ham satirlar doner (kullanici baslik satirini
+   * secer); verilmisse o satir baslik kabul edilip eslesme onizlemesi doner -
+   * previewAccountsRaw/Mapped ile birebir ayni desen.
+   */
+  async previewContactsRaw(
+    filePath: string,
+    type: DataSourceType,
+  ): Promise<ImportRawPreview> {
+    const parsed = await this.fileParser.parse(filePath, type, 0);
+    const rows: string[][] = [parsed.headers];
+    let count = 0;
+    for await (const row of parsed.rows) {
+      if (count >= RAW_PREVIEW_ROW_COUNT) {
+        break;
+      }
+      rows.push(row);
+      count++;
+    }
+    return { rows };
+  }
+
+  async previewContactsMapped(
+    filePath: string,
+    type: DataSourceType,
+    headerRowIndex: number,
+  ): Promise<ImportPreview> {
+    const { headers, rows } = await this.readRows(
+      filePath,
+      type,
+      headerRowIndex,
+    );
+    const records = rowsToRecords(headers, rows);
+    return {
+      headers,
+      sampleRows: records.slice(0, PREVIEW_SAMPLE_SIZE),
+      totalRows: records.length,
+    };
+  }
+
   async importContacts(
     createdById: string,
     filePath: string,
     type: DataSourceType,
+    headerRowIndex: number,
     mapping: ImportMappingDto,
+    attributeColumns: ImportAttributeColumnsDto,
   ): Promise<ImportResult> {
     if (!mapping.firstName || !mapping.lastName) {
       throw mappingIncompleteError(
         "'firstName' ve 'lastName' alanlari bir sutuna eslenmelidir.",
       );
     }
-    const { headers, rows } = await this.readRows(filePath, type);
+    const { headers, rows } = await this.readRows(
+      filePath,
+      type,
+      headerRowIndex,
+    );
     const records = rowsToRecords(headers, rows);
     const errors: ImportRowError[] = [];
     const validRows: ValidImportRow[] = [];
+    // 'Firma' sutunu isimle eslestirip var olan Account'u bulur, yoksa minimal
+    // bir Account kaydi (sadece isim) olusturur - interaction-imports.service.ts'teki
+    // accountIdByName ile birebir ayni desen (bkz. docs/VARSAYIMLAR.md V58).
+    const accountIdByName = new Map<string, string>();
+    let anyAccountCreated = false;
 
     for (const [index, record] of records.entries()) {
       const mapped = applyMapping(record, mapping);
+      const accountNameRaw =
+        typeof mapped.accountName === 'string' ? mapped.accountName : undefined;
+      delete mapped.accountName;
+
+      if (accountNameRaw) {
+        const normalizedName = normalizeAccountName(accountNameRaw);
+        let accountId = accountIdByName.get(normalizedName);
+        if (!accountId) {
+          const existing = await this.prisma.account.findFirst({
+            where: { name: normalizedName },
+          });
+          if (existing) {
+            accountId = existing.id;
+          } else {
+            const created = await this.prisma.account.create({
+              data: { name: normalizedName, createdById } as never,
+            });
+            accountId = created.id;
+            anyAccountCreated = true;
+          }
+          accountIdByName.set(normalizedName, accountId);
+        }
+        mapped.accountId = accountId;
+      }
+
       const providedFields = Object.keys(mapped);
+
+      const customFields: Record<string, string> = {};
+      for (const column of attributeColumns) {
+        const value = record[column]?.trim();
+        if (value) {
+          customFields[column] = value;
+        }
+      }
+      if (Object.keys(customFields).length > 0) {
+        mapped.customFields = customFields;
+      }
+
       const result = CreateContactSchema.safeParse(mapped);
+      const fileRow = headerRowIndex + 2 + index;
       if (!result.success) {
         errors.push({
-          row: index + 2,
+          row: fileRow,
           messages: result.error.issues.map(
             (issue) => `${issue.path.join('.')}: ${issue.message}`,
           ),
@@ -383,7 +472,7 @@ export class ImportsService {
         });
         if (!account) {
           errors.push({
-            row: index + 2,
+            row: fileRow,
             messages: [
               `accountId: firma bulunamadi (${result.data.accountId})`,
             ],
@@ -394,7 +483,7 @@ export class ImportsService {
       validRows.push({
         data: result.data as Record<string, unknown>,
         providedFields,
-        customFields: {},
+        customFields,
       });
     }
 
@@ -458,7 +547,18 @@ export class ImportsService {
         if (existing) {
           const updateData: Record<string, unknown> = {};
           for (const field of row.providedFields) {
+            if (field === 'customFields') {
+              continue;
+            }
             updateData[field] = row.data[field];
+          }
+          if (Object.keys(row.customFields).length > 0) {
+            const existingCustomFields =
+              (existing.customFields as Record<string, string> | null) ?? {};
+            updateData.customFields = {
+              ...existingCustomFields,
+              ...row.customFields,
+            };
           }
           const contact = await this.prisma.contact.update({
             where: { id: existing.id },
@@ -513,6 +613,10 @@ export class ImportsService {
       }
 
       await this.contactsCache.invalidate();
+    }
+
+    if (anyAccountCreated) {
+      await this.accountsCache.invalidate();
     }
 
     return {

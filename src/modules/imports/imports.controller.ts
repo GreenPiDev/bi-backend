@@ -35,7 +35,7 @@ import type {
 } from './imports.service';
 import { ImportsService } from './imports.service';
 import {
-  AccountImportAttributeColumnsSchema,
+  ImportAttributeColumnsSchema,
   HeaderRowIndexSchema,
   ImportMappingSchema,
 } from './dto/import-mapping.dto';
@@ -165,7 +165,7 @@ export class ImportsController {
     const attributeColumns = attributeColumnsRaw
       ? parseJsonBody(
           attributeColumnsRaw,
-          AccountImportAttributeColumnsSchema,
+          ImportAttributeColumnsSchema,
           'attributeColumns',
         )
       : [];
@@ -181,17 +181,55 @@ export class ImportsController {
     );
   }
 
+  /**
+   * headerRowIndex verilmemisse ham satirlar doner (kullanici baslik satirini secer);
+   * verilmisse o satir baslik kabul edilip eslesme onizlemesi doner - previewAccounts
+   * ucuyla birebir ayni desen (bkz. docs/VARSAYIMLAR.md V50).
+   */
+  @Post('contacts/preview')
+  @RequiresPermission('contacts', 'IMPORT')
+  @UseInterceptors(UPLOAD_INTERCEPTOR)
+  async previewContacts(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('headerRowIndex') headerRowIndexRaw: string | undefined,
+  ): Promise<ImportRawPreview | ImportPreview> {
+    return this.withUploadedFile(file, async (filePath, type) => {
+      if (headerRowIndexRaw === undefined || headerRowIndexRaw === '') {
+        return this.imports.previewContactsRaw(filePath, type);
+      }
+      const headerRowIndex = HeaderRowIndexSchema.parse(headerRowIndexRaw);
+      return this.imports.previewContactsMapped(filePath, type, headerRowIndex);
+    });
+  }
+
   @Post('contacts')
   @RequiresPermission('contacts', 'IMPORT')
   @UseInterceptors(UPLOAD_INTERCEPTOR)
   async importContacts(
     @CurrentUser() user: RequestUser,
     @UploadedFile() file: Express.Multer.File,
+    @Body('headerRowIndex') headerRowIndexRaw: string | undefined,
     @Body('mapping') mappingRaw: string | undefined,
+    @Body('attributeColumns') attributeColumnsRaw: string | undefined,
   ): Promise<ImportResult> {
+    const headerRowIndex = HeaderRowIndexSchema.parse(headerRowIndexRaw ?? '0');
     const mapping = parseMapping(mappingRaw);
+    const attributeColumns = attributeColumnsRaw
+      ? parseJsonBody(
+          attributeColumnsRaw,
+          ImportAttributeColumnsSchema,
+          'attributeColumns',
+        )
+      : [];
     return this.withUploadedFile(file, (filePath, type) =>
-      this.imports.importContacts(user.id, filePath, type, mapping),
+      this.imports.importContacts(
+        user.id,
+        filePath,
+        type,
+        headerRowIndex,
+        mapping,
+        attributeColumns,
+      ),
     );
   }
 

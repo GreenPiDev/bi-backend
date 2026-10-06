@@ -135,6 +135,23 @@ enum QuoteStatus {
   APPROVED
   REJECTED
   REVIZE
+  /** Ad-hoc /teklifler Excel ice aktarma (bkz. docs/VARSAYIMLAR.md) - import'tan
+   * gelen tekliflerin baslangic durumu. Normal /teklifler/yeni akisi hic uretmez. */
+  UNSPECIFIED
+}
+
+/**
+ * Ad-hoc: /teklifler Excel ice aktarma (bkz. docs/VARSAYIMLAR.md). Kaynak dosyalarda
+ * cogu zaman satir bazli urun/miktar/birim fiyat kolonu olmuyor, sadece teklifin
+ * toplam tutari var - bu yuzden Quote icin "kalemsiz, toplam tutari elle/import ile
+ * girilen" ikinci bir mod eklendi. ITEMIZED (varsayilan) mevcut QuoteItem tabanli
+ * akisin tamami (QuotesService.create/update/approve, indirim-onay, stok dusumu,
+ * PO olusturma) - hic degismedi. MANUAL_TOTAL sadece quote-imports modulunun yazdigi
+ * kayitlarda kullanilir, normal /teklifler/yeni formu bu modu uretmez.
+ */
+enum QuoteItemsEntryMode {
+  ITEMIZED
+  MANUAL_TOTAL
 }
 
 enum DataSourceType {
@@ -1085,7 +1102,7 @@ model ProductList {
  * basina benzersiz, gun icinde sirali (Q1).
  */
 model Quote {
-  id                    String      @id @default(uuid())
+  id                    String              @id @default(uuid())
   tenantId              String
   accountId             String
   /**
@@ -1099,7 +1116,7 @@ model Quote {
    * (sistemin "simdi"si) ile karistirilmamali, teklif belgesinde gorunen tarih
    * kullanici tarafindan gecmis/gelecek bir gune ayarlanabilir.
    */
-  quoteDate             DateTime    @default(now())
+  quoteDate             DateTime            @default(now())
   /**
    * Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta".
    */
@@ -1122,15 +1139,31 @@ model Quote {
   ibanAccountHolderName String?
   ibanAccountNumber     String?
   ibanNumber            String?
-  status                QuoteStatus @default(DRAFT)
+  status                QuoteStatus         @default(DRAFT)
   approvedAt            DateTime?
   approvedById          String?
+  /**
+   * Ad-hoc /teklifler ice aktarma (bkz. QuoteItemsEntryMode doc comment'i).
+   * MANUAL_TOTAL oldugunda items bos olabilir, PDF/toplam hesaplayicilari
+   * manualSubtotal/manualVatAmount/manualCurrency'den okur (bkz. bi-frontend
+   * lib/quote-totals.ts getQuoteCurrencyTotals).
+   */
+  itemsEntryMode        QuoteItemsEntryMode @default(ITEMIZED)
+  manualSubtotal        Decimal?            @db.Decimal(14, 2)
+  manualVatAmount       Decimal?            @db.Decimal(14, 2)
+  manualCurrency        String?
+  /**
+   * Ad-hoc /teklifler ice aktarma - Product.attributes ile ayni "bilinen alana
+   * eslenmeyen ama kaybedilmek istenmeyen kolon" catch-all deseni (bkz.
+   * ProductImportsService). quote-imports disinda hic yazilmaz.
+   */
+  attributes            Json?
   /**
    * Kalemler farkli para birimlerinde olabilir (Product.currency) - teklifin TEK bir
    * genel toplamini gosterebilmek icin kullanicinin sectigi hedef para birimi. Item
    * para birimlerinden biriyle ayni olmak zorunda degil.
    */
-  quoteCurrency         String      @default("TRY")
+  quoteCurrency         String              @default("TRY")
   /**
    * quoteCurrency disindaki her item para biriminin quoteCurrency'ye cevrim kuru
    * snapshot'i - `{ asOf: string, rates: { [currency]: number } }`. Kullanici FxService'ten
@@ -1165,7 +1198,7 @@ model Quote {
    */
   revisionNote          String?
   revisionSnapshot      Json?
-  revisionCount         Int         @default(0)
+  revisionCount         Int                 @default(0)
   lastRevisedAt         DateTime?
   /**
    * Teklifin "gonderen"i (PDF'te gosterilen temsilci) - /teklifler/yeni'de
@@ -1176,8 +1209,8 @@ model Quote {
    */
   senderId              String?
   createdById           String
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
   deletedAt             DateTime?
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id])

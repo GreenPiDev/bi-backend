@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { ImportsService } from './imports.service';
 
@@ -32,23 +33,28 @@ function createPrisma(
   const contacts = new Map(
     existingContacts.map((c) => [c.id as string, { ...c }]),
   );
-  let nextAccountId = accounts.size + 1;
   let nextContactId = contacts.size + 1;
   return {
     account: {
       findMany: vi.fn().mockResolvedValue(Array.from(accounts.values())),
       findFirst: vi
         .fn()
-        .mockImplementation(({ where }: { where: { id: string } }) =>
-          Promise.resolve(
-            Array.from(accounts.values()).find((a) => a.id === where.id) ??
-              null,
-          ),
+        .mockImplementation(
+          ({ where }: { where: { id?: string; name?: string } }) =>
+            Promise.resolve(
+              Array.from(accounts.values()).find((a) =>
+                where.id !== undefined
+                  ? a.id === where.id
+                  : a.name === where.name,
+              ) ?? null,
+            ),
         ),
       create: vi
         .fn()
         .mockImplementation(({ data }: { data: Record<string, unknown> }) => {
-          const account = { id: `acc-${nextAccountId++}`, ...data };
+          // CreateContactSchema'nin accountId'si z.string().uuid() ile dogrulandigi
+          // icin mock id'ler de gecerli bir UUID formatinda olmali.
+          const account = { id: randomUUID(), ...data };
           accounts.set(account.id, account);
           return Promise.resolve(account);
         }),
@@ -296,11 +302,18 @@ describe('ImportsService.importContacts', () => {
     );
 
     const result = await runInTenant(() =>
-      service.importContacts('u1', '/tmp/f.xlsx', 'XLSX' as never, {
-        firstName: 'Ad',
-        lastName: 'Soyad',
-        email: 'Eposta',
-      }),
+      service.importContacts(
+        'u1',
+        '/tmp/f.xlsx',
+        'XLSX' as never,
+        0,
+        {
+          firstName: 'Ad',
+          lastName: 'Soyad',
+          email: 'Eposta',
+        },
+        [],
+      ),
     );
 
     expect(result.created).toBe(0);
@@ -334,11 +347,18 @@ describe('ImportsService.importContacts', () => {
     );
 
     const result = await runInTenant(() =>
-      service.importContacts('u1', '/tmp/f.xlsx', 'XLSX' as never, {
-        firstName: 'Ad',
-        lastName: 'Soyad',
-        accountId: 'FirmaId',
-      }),
+      service.importContacts(
+        'u1',
+        '/tmp/f.xlsx',
+        'XLSX' as never,
+        0,
+        {
+          firstName: 'Ad',
+          lastName: 'Soyad',
+          accountId: 'FirmaId',
+        },
+        [],
+      ),
     );
 
     expect(result.created).toBe(0);
@@ -360,10 +380,17 @@ describe('ImportsService.importContacts', () => {
     );
 
     const result = await runInTenant(() =>
-      service.importContacts('u1', '/tmp/f.xlsx', 'XLSX' as never, {
-        firstName: 'Ad',
-        lastName: 'Soyad',
-      }),
+      service.importContacts(
+        'u1',
+        '/tmp/f.xlsx',
+        'XLSX' as never,
+        0,
+        {
+          firstName: 'Ad',
+          lastName: 'Soyad',
+        },
+        [],
+      ),
     );
 
     expect(result.created).toBe(1);
@@ -395,14 +422,83 @@ describe('ImportsService.importContacts', () => {
     );
 
     const result = await runInTenant(() =>
-      service.importContacts('u1', '/tmp/f.xlsx', 'XLSX' as never, {
-        firstName: 'Ad',
-        lastName: 'Soyad',
-        email: 'Eposta',
-      }),
+      service.importContacts(
+        'u1',
+        '/tmp/f.xlsx',
+        'XLSX' as never,
+        0,
+        {
+          firstName: 'Ad',
+          lastName: 'Soyad',
+          email: 'Eposta',
+        },
+        [],
+      ),
     );
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(2);
+  });
+
+  it("'Firma' sutunu eslenip dosyadaki ad mevcut bir firmayla eslesirse o firmaya baglanir", async () => {
+    const accountId = '22222222-2222-4222-8222-222222222222';
+    const prisma = createPrisma([{ id: accountId, name: 'ACME' }], []);
+    const service = new ImportsService(
+      prisma as never,
+      createFileParser(['Ad', 'Soyad', 'Firma'], [['Ayse', 'Yilmaz', 'acme']]),
+      fakeAccountsCache,
+      fakeContactsCache,
+      fakeAudit,
+      fakeListPdf,
+    );
+
+    const result = await runInTenant(() =>
+      service.importContacts(
+        'u1',
+        '/tmp/f.xlsx',
+        'XLSX' as never,
+        0,
+        { firstName: 'Ad', lastName: 'Soyad', accountName: 'Firma' },
+        [],
+      ),
+    );
+
+    expect(result.created).toBe(1);
+    expect(prisma.account.create).not.toHaveBeenCalled();
+    const [[createCall]] = prisma.contact.create.mock.calls;
+    expect(createCall.data.accountId).toBe(accountId);
+  });
+
+  it("'Firma' sutunu eslenip dosyadaki ad hicbir firmayla eslesmezse minimal yeni firma olusturur", async () => {
+    const prisma = createPrisma([], []);
+    const service = new ImportsService(
+      prisma as never,
+      createFileParser(
+        ['Ad', 'Soyad', 'Firma'],
+        [['Ayse', 'Yilmaz', 'Yeni Firma']],
+      ),
+      fakeAccountsCache,
+      fakeContactsCache,
+      fakeAudit,
+      fakeListPdf,
+    );
+
+    const result = await runInTenant(() =>
+      service.importContacts(
+        'u1',
+        '/tmp/f.xlsx',
+        'XLSX' as never,
+        0,
+        { firstName: 'Ad', lastName: 'Soyad', accountName: 'Firma' },
+        [],
+      ),
+    );
+
+    expect(result.created).toBe(1);
+    expect(prisma.account.create).toHaveBeenCalledTimes(1);
+    const [[accountCreateCall]] = prisma.account.create.mock.calls;
+    expect(accountCreateCall.data.name).toBe('YENİ FİRMA');
+    const [[contactCreateCall]] = prisma.contact.create.mock.calls;
+    expect(contactCreateCall.data.accountId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

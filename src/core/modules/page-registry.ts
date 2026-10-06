@@ -75,7 +75,14 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'quotes',
     label: 'Teklifler',
-    supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'EXPORT'],
+    supportedActions: [
+      'CREATE',
+      'UPDATE',
+      'DELETE',
+      'APPROVE',
+      'EXPORT',
+      'IMPORT',
+    ],
   },
   {
     key: 'quote-templates',

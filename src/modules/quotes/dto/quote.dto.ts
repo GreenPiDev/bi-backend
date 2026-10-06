@@ -27,6 +27,7 @@ export const QuoteStatusSchema = z.enum([
   'APPROVED',
   'REJECTED',
   'REVIZE',
+  'UNSPECIFIED',
 ]);
 
 const QuoteItemInputSchema = z.object({

@@ -164,11 +164,96 @@ export class FileParserService {
    * streamed pass) — exceljs's WorkbookReader does not support reliably
    * re-opening the same file for a second pass immediately after the
    * first, which caused intermittent empty reads in testing.
+   *
+   * Once-measured failure rate of the streaming reader for a small (~20
+   * satir) dosyada SIKI dongude ~%90'a kadar cikiyordu (bkz. asagidaki
+   * isExceljsWorkbookReaderRaceError yorumu) - buyuk BI dataset'lerinde
+   * (100k satir) ise 0/15 - demek ki risk esasen kucuk/orta boy ice aktarma
+   * dosyalarinda (accounts/contacts/interactions/products) yogunlasiyor.
+   * Bu yuzden once birkac kez hizli/dusuk-bellekli streaming reader denenir
+   * (buyuk dosyalarda zaten ilk denemede basarili olur), basarisiz olursa
+   * exceljs'in sirayla-bagimsiz (yani bu race'e kapali) buffered
+   * `Workbook().xlsx.readFile()` API'sine dusulur - bu dal 300+ tekrarlı
+   * torture testinde hic basarisiz olmadi, sadece buyuk dosyalarda daha
+   * fazla bellek/zaman kullaniyor (bkz. docs/YOL_HARITASI.md ilgili kayit).
    */
   private async parseXlsx(
     filePath: string,
     headerRowIndex: number,
   ): Promise<ParsedFile> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < XLSX_STREAMING_RETRY_COUNT; attempt++) {
+      try {
+        const result = await this.readXlsxStreaming(filePath, headerRowIndex);
+        if (!isSuspiciouslyEmptyResult(result)) {
+          return toParsedFile(result);
+        }
+        lastError = undefined;
+      } catch (error) {
+        if (!isExceljsWorkbookReaderRaceError(error)) {
+          throw error;
+        }
+        lastError = error;
+      }
+    }
+    try {
+      return toParsedFile(
+        await this.readXlsxBuffered(filePath, headerRowIndex),
+      );
+    } catch {
+      if (lastError) {
+        throw lastError;
+      }
+      throw new AppException(
+        'XLSX_PARSE_FAILED',
+        'Dosya okunamadi, lutfen tekrar deneyin.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * exceljs'in standart (streaming olmayan) Workbook API'si - tum zip'i
+   * acip rastgele erisimle parse ediyor, bu yuzden entry sirasina bagli
+   * degil ve yukaridaki race'den tamamen bagisik. Buyuk dosyalarda
+   * streaming'den daha yavas/bellek-yogun oldugu icin yalnizca streaming
+   * basarisiz olunca (hata firlatarak ya da asagidaki isSuspiciouslyEmptyResult
+   * ile sessizce) devreye giriyor.
+   */
+  private async readXlsxBuffered(
+    filePath: string,
+    headerRowIndex: number,
+  ): Promise<RawXlsxResult> {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw emptyFileError();
+    }
+    const headerLineNumber = headerRowIndex + 1;
+    let headers: string[] | null = null;
+    const rows: string[][] = [];
+    worksheet.eachRow((row, rowIndex) => {
+      const values = row.values as ExcelJS.CellValue[];
+      if (rowIndex < headerLineNumber) {
+        return;
+      }
+      if (rowIndex === headerLineNumber) {
+        headers = rowToStrings(row, values.length - 1);
+        return;
+      }
+      rows.push(rowToStrings(row, values.length - 1));
+    });
+    if (!headers) {
+      throw emptyFileError();
+    }
+    return { headers, rows };
+  }
+
+  private async readXlsxStreaming(
+    filePath: string,
+    headerRowIndex: number,
+  ): Promise<RawXlsxResult> {
     /**
      * styles: 'cache' olmadan exceljs styles.xml'i hic okumaz (varsayilan 'ignore') -
      * bu durumda hicbir hucrenin numFmt'i cozulemez ve Excel'de gercek tarih olarak
@@ -208,9 +293,60 @@ export class FileParserService {
     if (!headers) {
       throw emptyFileError();
     }
-    return { headers, rows: arrayToAsyncIterable(rows) };
+    return { headers, rows };
   }
 }
+
+interface RawXlsxResult {
+  headers: string[];
+  rows: string[][];
+}
+
+function toParsedFile(result: RawXlsxResult): ParsedFile {
+  return { headers: result.headers, rows: arrayToAsyncIterable(result.rows) };
+}
+
+/**
+ * exceljs'in ayni race'i bazen TypeError firlatmadan, sessizce TUM hucreleri
+ * bos string olarak donerek de gosterebiliyor (kullanicinin gercek tarayicida
+ * bildirdigi "|||||" belirtisi - bkz. docs/YOL_HARITASI.md ilgili kayit).
+ * Bu durumda bariz bir hata olmadigindan retry mantigi tetiklenmiyordu; burada
+ * sonucun kendisi "suspiciously empty" olup olmadigina bakip streaming
+ * denemesini basarisiz sayiyoruz. Baslik satirinin TAMAMEN bos gelmesi (veya
+ * tum veri satirlarinin tamamen bos gelmesi) gercek bir dosyada neredeyse hic
+ * rastlanmayan bir durum, bu yuzden guvenli bir sinyal.
+ */
+function isSuspiciouslyEmptyResult(result: RawXlsxResult): boolean {
+  const allEmpty = (cells: string[]): boolean =>
+    cells.length > 0 && cells.every((cell) => cell === '');
+  if (allEmpty(result.headers)) {
+    return true;
+  }
+  return result.rows.length > 0 && result.rows.every((row) => allEmpty(row));
+}
+
+/**
+ * exceljs'in streaming WorkbookReader'inda bilinen, upstream bir race condition:
+ * zip'teki "xl/worksheets/sheet1.xml" girdisi "xl/workbook.xml"'den once gelir (her
+ * zaman, dosya icerigiyle degismeyen sabit bir siralama); normalde bu durum
+ * WorkbookReader'in "deferred" (temp dosyaya yazip sonra okuma) dalina dusup
+ * zararsiz oluyor, ama unzip/zlib'in ic zamanlamasina bagli olarak bazen (ayni
+ * dosyada bile, ~4 denemeden 1'inde) "immediate" dala yanlislikla girilip
+ * `this.model` henuz set edilmeden `this.model.sheets` okunmaya calisiliyor ve
+ * TypeError firliyor (bkz. node_modules/exceljs/lib/stream/xlsx/workbook-reader.js
+ * _parseWorksheet). Kullanicinin gercek tarayicida gozlemledigi "ilk denemede hata,
+ * tekrar deneyince calisiyor" davranisi buydu. Olcumlerde kucuk dosyalarda bu hata
+ * oranı tek basina retry'i guvenilmez kilacak kadar yuksek cikabiliyor (sıkı
+ * dongude %90'a varan basarisizlik) - bu yuzden birkac streaming denemesinden sonra
+ * readXlsxBuffered()'a (bu race'e kapali) dusuluyor, exceljs'e patch uygulanmiyor.
+ */
+function isExceljsWorkbookReaderRaceError(error: unknown): boolean {
+  return (
+    error instanceof TypeError && error.message.includes("reading 'sheets'")
+  );
+}
+
+const XLSX_STREAMING_RETRY_COUNT = 3;
 
 async function* arrayToAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) {
