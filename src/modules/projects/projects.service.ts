@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { Project, ProjectAttachment, Quote } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  findIdsBySql,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -202,42 +207,33 @@ export class ProjectsService {
       direction: 'desc',
     });
 
-    // ProjectResponsible'da kullanici adi tutulmuyor (sadece userId), bu yuzden
-    // "bizden ilgili" adina gore arama icin once eslesen kullanici id'leri cozulur -
-    // QuotesService.list'teki createdById arama deseniyle ayni mantik.
-    let matchingResponsibleUserIds: string[] = [];
-    if (q) {
-      const matchingUsers = await this.prisma.user.findMany({
-        where: { name: { contains: q, mode: 'insensitive' as const } },
-        select: { id: true },
-      });
-      matchingResponsibleUserIds = matchingUsers.map((u) => u.id);
-    }
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts. "Bizden ilgili" (responsible) adi icin ProjectResponsible
+    // uzerinden User'a JOIN yapiliyor.
+    const matchingIds = q
+      ? await findIdsBySql(
+          this.prisma,
+          Prisma.sql`
+            SELECT DISTINCT p."id" FROM "crm_projects" p
+            LEFT JOIN "crm_accounts" a ON a."id" = p."accountId"
+            LEFT JOIN "crm_project_responsibles" pr ON pr."projectId" = p."id"
+            LEFT JOIN "users" u ON u."id" = pr."userId"
+            WHERE p."tenantId" = ${TenantContext.getOrThrow().tenantId}
+              AND p."deletedAt" IS NULL
+              AND (
+                ${turkishContains(qualifiedColumn('p', 'name'), q)}
+                OR ${turkishContains(qualifiedColumn('p', 'projectNumber'), q)}
+                OR ${turkishContains(qualifiedColumn('a', 'name'), q)}
+                OR ${turkishContains(qualifiedColumn('u', 'name'), q)}
+              )
+          `,
+        )
+      : null;
 
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' as const } },
-              { projectNumber: { contains: q, mode: 'insensitive' as const } },
-              {
-                account: {
-                  name: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-              ...(matchingResponsibleUserIds.length > 0
-                ? [
-                    {
-                      responsibles: {
-                        some: { userId: { in: matchingResponsibleUserIds } },
-                      },
-                    },
-                  ]
-                : []),
-            ],
-          }
-        : {}),
     };
 
     const [data, total] = await Promise.all([

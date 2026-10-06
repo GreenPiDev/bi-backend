@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type {
   Account,
   Contact,
@@ -7,8 +8,14 @@ import type {
   Opportunity,
 } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  findIdsBySql,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import type { ExportFormat } from '../../core/export-format';
 import { ListPdfService } from '../../core/pdf/list-pdf.service';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { isPastCalendarDay } from '../../core/validators/date';
 import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
@@ -163,6 +170,7 @@ export class InteractionsService {
     const {
       page,
       pageSize,
+      q,
       accountId,
       contactId,
       createdById,
@@ -177,11 +185,34 @@ export class InteractionsService {
       direction: 'desc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts. Firma/kisi adi bir iliski uzerinden arandigindan JOIN'li
+    // ham sorgu kuruluyor.
+    const matchingIds = q
+      ? await findIdsBySql(
+          this.prisma,
+          Prisma.sql`
+            SELECT i."id" FROM "crm_interactions" i
+            LEFT JOIN "crm_accounts" a ON a."id" = i."accountId"
+            LEFT JOIN "crm_contacts" c ON c."id" = i."contactId"
+            WHERE i."tenantId" = ${TenantContext.getOrThrow().tenantId}
+              AND i."deletedAt" IS NULL
+              AND (
+                ${turkishContains(qualifiedColumn('a', 'name'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'firstName'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'lastName'), q)}
+              )
+          `,
+        )
+      : null;
+
     const where = {
       // "Bagli Gorusme Ekle" ile olusturulan ek kayitlar varsayilan olarak ana listede
       // gorunmez; sadece parentInteractionId acikca istendiginde (detay sayfasindaki
       // kartlar) gosterilir - bkz. schema.prisma Interaction.parentInteractionId yorumu.
       parentInteractionId: parentInteractionId ?? null,
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(contactId ? { contactId } : {}),
       ...(createdById ? { createdById } : {}),

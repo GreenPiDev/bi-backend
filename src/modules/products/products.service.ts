@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Product, ProductDrawingSpec, ProductList } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import {
@@ -137,18 +138,27 @@ export class ProductsService {
         }))
       : [];
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts. includeDeleted acikken softDelete filtresi devre disi
+    // birakilir, yoksa silinmis bir urun ismiyle arama sonuc vermez.
+    const matchingIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_products',
+          ['name', 'sku'],
+          q,
+          {
+            softDelete: !includeDeleted,
+          },
+        )
+      : null;
+
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(productListId ? { productListId } : {}),
       ...(brand ? { brand } : {}),
       ...(category ? { category } : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' as const } },
-              { sku: { contains: q, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
       ...(attrConditions.length > 0 ? { AND: attrConditions } : {}),
     };
 

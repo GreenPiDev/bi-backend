@@ -15,8 +15,7 @@ interface BuiltinDrawingLibraryComponentSeed {
  * noktasi. Her tenant `drawings` modulunu actiginda bu satirlar KOPYALANIR
  * (provisionForTenant), tenant kendi kopyasini serbestce duzenleyebilir/silebilir -
  * bu liste daha sonra degismesi global olarak zaten provizyon edilmis tenant'lari
- * ETKILEMEZ (crm-report-provisioning.service.ts ile ayni "built-in ama duzenlenebilir"
- * deseni).
+ * ETKILEMEZ.
  */
 const BUILTIN_DRAWING_LIBRARY_COMPONENTS: readonly BuiltinDrawingLibraryComponentSeed[] =
   [
@@ -103,8 +102,7 @@ export class DrawingLibraryProvisioningService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Idempotent: zaten kopyalanmis (ayni key'e sahip) satirlar tekrar yaratilmaz -
-   * CrmReportProvisioningService.provisionForTenant ile ayni "existing check" deseni.
+   * Idempotent: zaten kopyalanmis (ayni key'e sahip) satirlar tekrar yaratilmaz.
    */
   async provisionForTenant(tenantId: string): Promise<void> {
     for (const seed of BUILTIN_DRAWING_LIBRARY_COMPONENTS) {

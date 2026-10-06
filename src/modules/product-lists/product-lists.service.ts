@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { ProductList } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -43,8 +44,21 @@ export class ProductListsService {
       direction: 'asc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts.
+    const matchingIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_product_lists',
+          ['name'],
+          q,
+          { softDelete: true },
+        )
+      : null;
+
     const where = {
-      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
     };
 
     const [data, total] = await Promise.all([
@@ -78,20 +92,9 @@ export class ProductListsService {
   }
 
   async create(dto: CreateProductListDto): Promise<ProductList> {
-    const isDefault = dto.isDefault ?? false;
-    const productList = await this.prisma.$transaction(async (tx) => {
-      if (isDefault) {
-        // Tek varsayilan liste garantisi: yeni liste varsayilan olarak
-        // isaretleniyorsa, digerlerinin varsayilan bayragi once kaldirilir.
-        await tx.productList.updateMany({
-          where: { isDefault: true },
-          data: { isDefault: false },
-        });
-      }
-      // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
-      return tx.productList.create({
-        data: { name: dto.name, isDefault } as never,
-      });
+    // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
+    const productList = await this.prisma.productList.create({
+      data: { name: dto.name } as never,
     });
     await this.audit.log({
       action: 'CREATE',
@@ -105,17 +108,9 @@ export class ProductListsService {
 
   async update(id: string, dto: UpdateProductListDto): Promise<ProductList> {
     await this.getById(id);
-    const productList = await this.prisma.$transaction(async (tx) => {
-      if (dto.isDefault) {
-        await tx.productList.updateMany({
-          where: { isDefault: true, id: { not: id } },
-          data: { isDefault: false },
-        });
-      }
-      return tx.productList.update({
-        where: { id },
-        data: dto,
-      });
+    const productList = await this.prisma.productList.update({
+      where: { id },
+      data: dto,
     });
     await this.audit.log({
       action: 'UPDATE',

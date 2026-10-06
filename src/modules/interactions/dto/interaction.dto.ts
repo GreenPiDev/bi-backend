@@ -117,6 +117,9 @@ export const UpdateInteractionSchema = z.object({
 export type UpdateInteractionDto = z.infer<typeof UpdateInteractionSchema>;
 
 export const InteractionQuerySchema = ListQuerySchema.extend({
+  /** Firma adi veya gorusulen kisi adina gore serbest metin arama - accounts.dto.ts'teki
+   * ayni desen (bkz. AccountsService.list). */
+  q: z.string().trim().min(1).optional(),
   accountId: z.string().uuid().optional(),
   contactId: z.string().uuid().optional(),
   createdById: z.string().uuid().optional(),

@@ -8,11 +8,17 @@ import type {
   Quote,
 } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  findIdsBySql,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import { PurchaseOrdersCacheService } from './purchase-orders-cache.service';
 import type {
@@ -75,37 +81,35 @@ export class PurchaseOrdersService {
       direction: 'desc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts.
+    const matchingIds = q
+      ? await findIdsBySql(
+          this.prisma,
+          Prisma.sql`
+            SELECT po."id" FROM "crm_purchase_orders" po
+            LEFT JOIN "crm_quotes" qt ON qt."id" = po."quoteId"
+            LEFT JOIN "crm_accounts" a ON a."id" = qt."accountId"
+            LEFT JOIN "crm_projects" pr ON pr."id" = qt."projectId"
+            WHERE po."tenantId" = ${TenantContext.getOrThrow().tenantId}
+              AND po."deletedAt" IS NULL
+              AND (
+                ${turkishContains(qualifiedColumn('po', 'title'), q)}
+                OR ${turkishContains(qualifiedColumn('po', 'orderNumber'), q)}
+                OR ${turkishContains(qualifiedColumn('qt', 'quoteNumber'), q)}
+                OR ${turkishContains(qualifiedColumn('a', 'name'), q)}
+                OR ${turkishContains(qualifiedColumn('pr', 'name'), q)}
+              )
+          `,
+        )
+      : null;
+
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(quoteId ? { quoteId } : {}),
       ...(projectId ? { quote: { projectId } } : {}),
       ...(status ? { status } : {}),
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: 'insensitive' as const } },
-              { orderNumber: { contains: q, mode: 'insensitive' as const } },
-              {
-                quote: {
-                  quoteNumber: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-              {
-                quote: {
-                  account: {
-                    name: { contains: q, mode: 'insensitive' as const },
-                  },
-                },
-              },
-              {
-                quote: {
-                  project: {
-                    name: { contains: q, mode: 'insensitive' as const },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
     };
 
     const [data, total] = await Promise.all([

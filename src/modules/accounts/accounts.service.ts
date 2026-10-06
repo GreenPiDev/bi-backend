@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Account } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -38,6 +39,8 @@ const CRITICAL_FIELDS = [
 export type AccountWithMeta = Account & {
   missingCriticalFields: string[];
   createdByName: string | null;
+  interactionCount: number;
+  quoteCount: number;
 };
 
 function withMissingCriticalFields<T extends Account>(
@@ -109,6 +112,46 @@ export class AccountsService {
     }));
   }
 
+  /** "GORUSME"/"TEKLIF" kolonlari (bkz. firmalar listesi) - account-level groupBy ile
+   * sayiliyor, deletedAt filtresi (soft-delete) tenant-scoped extension'in sadece
+   * top-level findMany/count'u kapsamasindan dolayi _count include'u yerine ayri
+   * sorgu olarak yazildi (nested include'da soft-delete otomatik filtrelenmez). */
+  private async attachCounts<T extends { id: string }>(
+    rows: T[],
+  ): Promise<(T & { interactionCount: number; quoteCount: number })[]> {
+    const ids = rows.map((row) => row.id);
+    if (ids.length === 0) {
+      return rows.map((row) => ({
+        ...row,
+        interactionCount: 0,
+        quoteCount: 0,
+      }));
+    }
+    const [interactionGroups, quoteGroups] = await Promise.all([
+      this.prisma.interaction.groupBy({
+        by: ['accountId'],
+        where: { accountId: { in: ids } },
+        _count: { _all: true },
+      }),
+      this.prisma.quote.groupBy({
+        by: ['accountId'],
+        where: { accountId: { in: ids } },
+        _count: { _all: true },
+      }),
+    ]);
+    const interactionCountByAccount = new Map(
+      interactionGroups.map((group) => [group.accountId, group._count._all]),
+    );
+    const quoteCountByAccount = new Map(
+      quoteGroups.map((group) => [group.accountId, group._count._all]),
+    );
+    return rows.map((row) => ({
+      ...row,
+      interactionCount: interactionCountByAccount.get(row.id) ?? 0,
+      quoteCount: quoteCountByAccount.get(row.id) ?? 0,
+    }));
+  }
+
   async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
     const cached = await this.cache.get(query);
     if (cached) {
@@ -132,7 +175,22 @@ export class AccountsService {
       direction: 'asc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts. Eslesen id'ler onceden cozulup asagida `id: { in: [...] }`
+    // olarak kullanilir.
+    const matchingIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_accounts',
+          ['name', 'email', 'phone'],
+          q,
+          { softDelete: true },
+        )
+      : null;
+
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(city ? { city } : {}),
       ...(sector ? { sector: { has: sector } } : {}),
       ...(ownerId ? { ownerId } : {}),
@@ -159,15 +217,6 @@ export class AccountsService {
             },
           }
         : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' as const } },
-              { email: { contains: q, mode: 'insensitive' as const } },
-              { phone: { contains: q, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
     };
 
     const [data, total] = await Promise.all([
@@ -181,8 +230,9 @@ export class AccountsService {
     ]);
 
     const withNames = await this.attachCreatedByNames(data);
+    const withCounts = await this.attachCounts(withNames);
     const result = {
-      data: withNames.map(withMissingCriticalFields),
+      data: withCounts.map(withMissingCriticalFields),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
     await this.cache.set(query, result);
@@ -202,7 +252,8 @@ export class AccountsService {
       );
     }
     const [withName] = await this.attachCreatedByNames([account]);
-    return withMissingCriticalFields(withName);
+    const [withCount] = await this.attachCounts([withName]);
+    return withMissingCriticalFields(withCount);
   }
 
   /** A2: sektor(ler), tenant'in tanimladigi listeye karsi dogrulanir; tenant henuz

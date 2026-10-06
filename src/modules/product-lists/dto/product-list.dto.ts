@@ -6,13 +6,11 @@ export const CreateProductListSchema = z.object({
     .string()
     .trim()
     .min(2, 'Urun listesi adi en az 2 karakter olmalidir.'),
-  isDefault: z.boolean().optional(),
 });
 export type CreateProductListDto = z.infer<typeof CreateProductListSchema>;
 
 export const UpdateProductListSchema = z.object({
   name: z.string().trim().min(2).optional(),
-  isDefault: z.boolean().optional(),
 });
 export type UpdateProductListDto = z.infer<typeof UpdateProductListSchema>;
 

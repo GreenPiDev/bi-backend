@@ -13,6 +13,11 @@ import type {
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  findIdsBySql,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import { FxService, type FxRatesResult } from '../../core/fx/fx.service';
 import {
@@ -505,18 +510,31 @@ export class QuotesService {
       direction: 'desc',
     });
 
-    // createdById iliskisel bir FK degil (bkz. attachCreatedByNames yorumu), bu yuzden
-    // "olusturan" adina gore arama icin once eslesen kullanici id'leri ayrica cozulur.
-    let matchingCreatedByIds: string[] = [];
-    if (q) {
-      const matchingUsers = await this.prisma.user.findMany({
-        where: { name: { contains: q, mode: 'insensitive' as const } },
-        select: { id: true },
-      });
-      matchingCreatedByIds = matchingUsers.map((u) => u.id);
-    }
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts. createdById iliskisel bir FK degil, bu yuzden
+    // "olusturan" adina gore arama icin users'a createdById uzerinden JOIN yapiliyor.
+    const matchingIds = q
+      ? await findIdsBySql(
+          this.prisma,
+          Prisma.sql`
+            SELECT qt."id" FROM "crm_quotes" qt
+            LEFT JOIN "crm_accounts" a ON a."id" = qt."accountId"
+            LEFT JOIN "users" u ON u."id" = qt."createdById"
+            WHERE qt."tenantId" = ${TenantContext.getOrThrow().tenantId}
+              AND qt."deletedAt" IS NULL
+              AND (
+                ${turkishContains(qualifiedColumn('qt', 'title'), q)}
+                OR ${turkishContains(qualifiedColumn('qt', 'quoteNumber'), q)}
+                OR ${turkishContains(qualifiedColumn('a', 'name'), q)}
+                OR ${turkishContains(qualifiedColumn('u', 'name'), q)}
+              )
+          `,
+        )
+      : null;
 
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(status ? { status } : {}),
       ...(createdById ? { createdById } : {}),
@@ -526,22 +544,6 @@ export class QuotesService {
               ...(from ? { gte: from } : {}),
               ...(to ? { lte: to } : {}),
             },
-          }
-        : {}),
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: 'insensitive' as const } },
-              { quoteNumber: { contains: q, mode: 'insensitive' as const } },
-              {
-                account: {
-                  name: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-              ...(matchingCreatedByIds.length > 0
-                ? [{ createdById: { in: matchingCreatedByIds } }]
-                : []),
-            ],
           }
         : {}),
     };

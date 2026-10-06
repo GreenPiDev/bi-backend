@@ -1,7 +1,13 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { Contact } from '@prisma/client';
+import { Prisma, type Contact } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  findIdsBySql,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
@@ -82,27 +88,36 @@ export class ContactsService {
       direction: 'asc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts. accountId'nin de bir iliski uzerinden (account.name)
+    // aranmasi gerektigi icin burada JOIN'li ham sorgu kuruluyor.
+    const matchingIds = q
+      ? await findIdsBySql(
+          this.prisma,
+          Prisma.sql`
+            SELECT c."id" FROM "crm_contacts" c
+            LEFT JOIN "crm_accounts" a
+              ON a."id" = c."accountId" AND a."deletedAt" IS NULL
+            WHERE c."tenantId" = ${TenantContext.getOrThrow().tenantId}
+              AND c."deletedAt" IS NULL
+              AND (
+                ${turkishContains(qualifiedColumn('c', 'firstName'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'lastName'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'email'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'phone'), q)}
+                OR ${turkishContains(qualifiedColumn('a', 'name'), q)}
+              )
+          `,
+        )
+      : null;
+
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(ownerId ? { ownerId } : {}),
       ...(status ? { status } : {}),
       ...(createdById ? { createdById } : {}),
-      ...(q
-        ? {
-            OR: [
-              { firstName: { contains: q, mode: 'insensitive' as const } },
-              { lastName: { contains: q, mode: 'insensitive' as const } },
-              { email: { contains: q, mode: 'insensitive' as const } },
-              { phone: { contains: q, mode: 'insensitive' as const } },
-              {
-                account: {
-                  deletedAt: null,
-                  name: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-            ],
-          }
-        : {}),
     };
 
     if (CASE_INSENSITIVE_SORT_FIELDS.has(field)) {

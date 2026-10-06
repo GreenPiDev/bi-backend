@@ -291,7 +291,7 @@ describe('DatasetsService', () => {
     );
   });
 
-  it('remove: CRM_TABLE dataset icin CRM_DATASET_READONLY firlatir', async () => {
+  it('remove: CRM_TABLE dataset icin de silinebilir, ama paylasimli view oldugu icin dropTable cagrilmaz', async () => {
     const prisma = createPrisma(createCrmDatasetRow());
     const rawSql = createRawSql();
     const service = new DatasetsService(
@@ -300,10 +300,11 @@ describe('DatasetsService', () => {
       createQueryCache() as never,
       fakeAudit,
     );
-    await expect(service.remove(DATASET_ID, TENANT_ID)).rejects.toMatchObject({
-      code: 'CRM_DATASET_READONLY',
-    } satisfies Partial<AppException>);
+    await service.remove(DATASET_ID, TENANT_ID);
     expect(rawSql.dropTable).not.toHaveBeenCalled();
+    expect(prisma.dataset.delete).toHaveBeenCalledWith({
+      where: { id: DATASET_ID },
+    });
   });
 
   it('remove: bir widget tarafindan kullaniliyorsa DATASET_IN_USE firlatir', async () => {

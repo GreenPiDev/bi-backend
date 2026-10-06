@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { QuoteTemplate } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -38,8 +39,8 @@ const IMAGE_SLOT_FOLDER: Record<ImageSlot, string> = {
 
 /**
  * Ad-hoc: markali teklif PDF sablonu yonetimi (bkz. docs/VARSAYIMLAR.md V41).
- * isDefault tekilligi ProductListsService ile ayni desen (transaction icinde
- * digerlerini once false yapar).
+ * isDefault tekilligi, transaction icinde digerlerini once false yapan desenle
+ * saglanir (WarehousesService ile ayni desen).
  */
 @Injectable()
 export class QuoteTemplatesService {
@@ -83,8 +84,20 @@ export class QuoteTemplatesService {
       direction: 'asc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts.
+    const matchingIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_quote_templates',
+          ['name'],
+          q,
+        )
+      : null;
+
     const where = {
-      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
     };
 
     const [data, total] = await Promise.all([

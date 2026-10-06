@@ -84,10 +84,9 @@ describe('ProductLists (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/product-lists')
       .set('Cookie', cookiesA)
-      .send({ name: '2026 Katalogu', isDefault: true });
+      .send({ name: '2026 Katalogu' });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('2026 Katalogu');
-    expect(res.body.isDefault).toBe(true);
     productListId = res.body.id as string;
   });
 

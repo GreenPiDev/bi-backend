@@ -8,6 +8,7 @@ import type {
   Prisma,
 } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
+import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -170,12 +171,15 @@ export class MessagesService {
     // q ayni zamanda kisiye gore de arar: gonderen/alici adi eslesirse o
     // konusma da sonuca girer (subject/body'ye ek olarak, tek bir OR icinde).
     const matchedUserIds = q
-      ? (
-          await this.prisma.user.findMany({
-            where: { name: { contains: q, mode: 'insensitive' } },
-            select: { id: true },
-          })
-        ).map((user) => user.id)
+      ? await findIdsByTurkishSearch(this.prisma, 'users', ['name'], q)
+      : [];
+    const matchedByTextIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_messages',
+          ['subject', 'body'],
+          q,
+        )
       : [];
 
     const boxCondition: Prisma.MessageWhereInput =
@@ -235,8 +239,7 @@ export class MessagesService {
           ? [
               {
                 OR: [
-                  { subject: { contains: q, mode: 'insensitive' as const } },
-                  { body: { contains: q, mode: 'insensitive' as const } },
+                  { id: { in: matchedByTextIds } },
                   ...(matchedUserIds.length
                     ? [
                         { senderId: { in: matchedUserIds } },

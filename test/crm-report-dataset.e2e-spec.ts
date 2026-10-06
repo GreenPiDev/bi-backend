@@ -6,7 +6,6 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
-import { CrmReportProvisioningService } from '../src/modules/datasets/crm-report-provisioning.service';
 import { cleanupTestTenants } from './support/cleanup-tenants';
 import { createTestProductList } from './support/product-lists';
 
@@ -19,7 +18,6 @@ import { createTestProductList } from './support/product-lists';
 describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let provisioning: CrmReportProvisioningService;
 
   const emailSuffix = `-${randomUUID()}@test.com`;
   const ownerEmailA = `owner-a${emailSuffix}`;
@@ -43,7 +41,6 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
     prisma = app.get(PrismaService);
-    provisioning = app.get(CrmReportProvisioningService);
 
     const registerA = await request(app.getHttpServer())
       .post('/api/v1/auth/register')
@@ -160,11 +157,103 @@ describe('CRM Rapor Dataset (e2e, Faz 11f)', () => {
       },
     });
 
-    await provisioning.provisionForTenant(tenantAId);
-    const dataset = await prisma.dataset.findFirst({
-      where: { tenantId: tenantAId, sourceKind: 'CRM_TABLE' },
+    // Faz 11f'teki saglama servisi kaldirildi (bkz. docs/VARSAYIMLAR.md) - sentetik
+    // CRM_TABLE dataset'i artik otomatik olusmuyor, burada test fixture'i olarak
+    // dogrudan Prisma ile ayni sekilde kuruluyor.
+    const crmDataset = await prisma.dataset.create({
+      data: {
+        tenantId: tenantAId,
+        name: 'Satış Raporu (CRM)',
+        physicalTable: 'crm_quote_line_report',
+        sourceKind: 'CRM_TABLE',
+        dataSourceId: null,
+        fields: {
+          create: [
+            {
+              sourceName: 'quoteNumber',
+              name: 'quoteNumber',
+              label: 'Teklif No',
+              type: 'STRING',
+              role: 'DIMENSION',
+              ordinal: 0,
+            },
+            {
+              sourceName: 'status',
+              name: 'status',
+              label: 'Durum',
+              type: 'STRING',
+              role: 'DIMENSION',
+              ordinal: 1,
+            },
+            {
+              sourceName: 'accountName',
+              name: 'accountName',
+              label: 'Firma',
+              type: 'STRING',
+              role: 'DIMENSION',
+              ordinal: 2,
+            },
+            {
+              sourceName: 'salesRepName',
+              name: 'salesRepName',
+              label: 'Satışçı',
+              type: 'STRING',
+              role: 'DIMENSION',
+              ordinal: 3,
+            },
+            {
+              sourceName: 'productName',
+              name: 'productName',
+              label: 'Ürün',
+              type: 'STRING',
+              role: 'DIMENSION',
+              ordinal: 4,
+            },
+            {
+              sourceName: 'createdAt',
+              name: 'createdAt',
+              label: 'Oluşturulma Tarihi',
+              type: 'DATE',
+              role: 'DATE',
+              ordinal: 5,
+            },
+            {
+              sourceName: 'approvedAt',
+              name: 'approvedAt',
+              label: 'Onay Tarihi',
+              type: 'DATE',
+              role: 'DATE',
+              ordinal: 6,
+            },
+            {
+              sourceName: 'quantity',
+              name: 'quantity',
+              label: 'Adet',
+              type: 'NUMBER',
+              role: 'MEASURE',
+              ordinal: 7,
+            },
+            {
+              sourceName: 'lineTotal',
+              name: 'lineTotal',
+              label: 'Satır Tutarı',
+              type: 'NUMBER',
+              role: 'MEASURE',
+              ordinal: 8,
+            },
+            {
+              sourceName: 'currency',
+              name: 'currency',
+              label: 'Para Birimi',
+              type: 'STRING',
+              role: 'DIMENSION',
+              ordinal: 9,
+            },
+          ],
+        },
+      },
     });
-    crmDatasetId = dataset!.id;
+    crmDatasetId = crmDataset.id;
   }, 30_000);
 
   afterAll(async () => {

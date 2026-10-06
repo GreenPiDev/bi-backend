@@ -10,7 +10,6 @@ import {
 } from '../../core/modules/page-modules.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { RealtimeService } from '../../core/realtime/realtime.service';
-import { CrmReportProvisioningService } from '../datasets/crm-report-provisioning.service';
 import { DrawingLibraryProvisioningService } from '../drawing-library/drawing-library-provisioning.service';
 import { DrawingTemplatesProvisioningService } from '../drawing-templates/drawing-templates-provisioning.service';
 import {
@@ -29,7 +28,6 @@ export class PlatformAdminService {
     private readonly tenants: TenantsService,
     private readonly pageModules: PageModulesService,
     private readonly realtime: RealtimeService,
-    private readonly crmReports: CrmReportProvisioningService,
     private readonly drawingLibrary: DrawingLibraryProvisioningService,
     private readonly drawingTemplates: DrawingTemplatesProvisioningService,
   ) {}
@@ -74,15 +72,6 @@ export class PlatformAdminService {
       await this.tenants.enableModule(tenantId, moduleKey);
     } else {
       await this.tenants.disableModule(tenantId, moduleKey);
-    }
-    // Faz 11f (bkz. docs/VARSAYIMLAR.md V29): CRM rapor dataset'lerinin yasam dongusu
-    // dogrudan crm modulunun ac/kapa durumuna baglidir, ayri bir modul kapisi yok.
-    if (moduleKey === 'crm') {
-      if (enabled) {
-        await this.crmReports.provisionForTenant(tenantId);
-      } else {
-        await this.crmReports.deprovisionForTenant(tenantId);
-      }
     }
     // Faz D3 (bkz. docs/VARSAYIMLAR.md V52): built-in kutuphane komponentleri/pano
     // sablonlari sadece ACILISTA kopyalanir - CRM rapor dataset'lerinin aksine

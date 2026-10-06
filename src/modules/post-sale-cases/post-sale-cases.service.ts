@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type {
   Account,
   Contact,
@@ -9,7 +10,13 @@ import type {
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
+import {
+  findIdsBySql,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
@@ -87,35 +94,32 @@ export class PostSaleCasesService {
       direction: 'desc',
     });
 
+    // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
+    // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
+    // core/db/turkish-search.ts.
+    const matchingIds = q
+      ? await findIdsBySql(
+          this.prisma,
+          Prisma.sql`
+            SELECT p."id" FROM "crm_post_sale_cases" p
+            LEFT JOIN "crm_quotes" qt ON qt."id" = p."quoteId"
+            LEFT JOIN "crm_accounts" a ON a."id" = p."accountId"
+            LEFT JOIN "crm_contacts" c ON c."id" = p."contactId"
+            WHERE p."tenantId" = ${TenantContext.getOrThrow().tenantId}
+              AND (
+                ${turkishContains(qualifiedColumn('qt', 'quoteNumber'), q)}
+                OR ${turkishContains(qualifiedColumn('a', 'name'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'firstName'), q)}
+                OR ${turkishContains(qualifiedColumn('c', 'lastName'), q)}
+              )
+          `,
+        )
+      : null;
+
     const where = {
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(status ? STATUS_WHERE[status] : {}),
-      ...(q
-        ? {
-            OR: [
-              {
-                quote: {
-                  quoteNumber: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-              {
-                account: {
-                  name: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-              {
-                contact: {
-                  firstName: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-              {
-                contact: {
-                  lastName: { contains: q, mode: 'insensitive' as const },
-                },
-              },
-            ],
-          }
-        : {}),
     };
 
     const [data, total] = await Promise.all([

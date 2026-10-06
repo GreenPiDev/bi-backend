@@ -1,5 +1,13 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { MessagesService } from './messages.service';
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run(
+    { tenantId: 'tenant-1', userId: 'user-1', roleIds: [] },
+    fn,
+  );
+}
 
 const auditLog = vi.fn();
 const fakeAudit = { log: auditLog } as never;
@@ -67,6 +75,11 @@ function createPrisma(messageRows: unknown[] = [createMessageRow()]) {
             (args.where?.id?.in ?? []).map((id) => ({ id })),
         ),
     },
+    // findIdsByTurkishSearch (bkz. core/db/turkish-search.ts) $queryRaw'i hem "users"
+    // (kisi adi arama) hem "crm_messages" (konu/govde arama) tablolari icin cagirir -
+    // varsayilan olarak hicbiri eslesmez, testler ihtiyaca gore mockImplementation'i
+    // sql metnine gore ozellestirir.
+    $queryRaw: vi.fn().mockResolvedValue([]),
     quote: {
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -207,7 +220,9 @@ describe('MessagesService', () => {
 
   it('list: q kisi adiyla eslesirse eslesen kullanicilarin gonderen/alici oldugu mesajlari da kapsar', async () => {
     const prisma = createPrisma();
-    prisma.user.findMany.mockResolvedValue([{ id: RECIPIENT_ID }]);
+    prisma.$queryRaw.mockImplementation(async (sql: { sql: string }) =>
+      sql.sql.includes('"users"') ? [{ id: RECIPIENT_ID }] : [],
+    );
     const service = new MessagesService(
       prisma as never,
       fakeAudit,
@@ -217,17 +232,15 @@ describe('MessagesService', () => {
       fakeMessagesCache,
       fakeNotifications,
     );
-    await service.list(SENDER_ID, {
-      page: 1,
-      pageSize: 25,
-      q: 'Ahmet',
-    } as never);
-
-    expect(prisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { name: { contains: 'Ahmet', mode: 'insensitive' } },
-      }),
+    await runInTenant(() =>
+      service.list(SENDER_ID, {
+        page: 1,
+        pageSize: 25,
+        q: 'Ahmet',
+      } as never),
     );
+
+    expect(prisma.$queryRaw).toHaveBeenCalled();
     expect(prisma.message.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -244,8 +257,11 @@ describe('MessagesService', () => {
     );
   });
 
-  it('list: q eslesen kullanici yoksa sadece subject/body OR kosulunu kullanir', async () => {
+  it('list: q eslesen kullanici yoksa sadece metin eslesen id listesini kullanir', async () => {
     const prisma = createPrisma();
+    prisma.$queryRaw.mockImplementation(async (sql: { sql: string }) =>
+      sql.sql.includes('"crm_messages"') ? [{ id: 'message-1' }] : [],
+    );
     const service = new MessagesService(
       prisma as never,
       fakeAudit,
@@ -255,21 +271,20 @@ describe('MessagesService', () => {
       fakeMessagesCache,
       fakeNotifications,
     );
-    await service.list(SENDER_ID, {
-      page: 1,
-      pageSize: 25,
-      q: 'fatura',
-    } as never);
+    await runInTenant(() =>
+      service.list(SENDER_ID, {
+        page: 1,
+        pageSize: 25,
+        q: 'fatura',
+      } as never),
+    );
 
     expect(prisma.message.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           AND: expect.arrayContaining([
             {
-              OR: [
-                { subject: { contains: 'fatura', mode: 'insensitive' } },
-                { body: { contains: 'fatura', mode: 'insensitive' } },
-              ],
+              OR: [{ id: { in: ['message-1'] } }],
             },
           ]),
         }),

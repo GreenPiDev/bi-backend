@@ -1,5 +1,13 @@
 import { AppException } from '../../core/errors/app.exception';
+import { TenantContext } from '../../core/tenant/tenant-context';
 import { ContactsService } from './contacts.service';
+
+function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
+  return TenantContext.run(
+    { tenantId: 'tenant-1', userId: 'user-1', roleIds: [] },
+    fn,
+  );
+}
 
 const fakeAudit = { log: vi.fn() } as never;
 const fakeCache = {
@@ -36,6 +44,7 @@ function createPrisma(contactRow: unknown = createContactRow()) {
     account: {
       findFirst: vi.fn().mockResolvedValue({ id: ACCOUNT_ID }),
     },
+    $queryRaw: vi.fn().mockResolvedValue([{ id: CONTACT_ID }]),
     departmentOption: {
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -154,25 +163,21 @@ describe('ContactsService', () => {
     } satisfies Partial<AppException>);
   });
 
-  it('list: q filtresi bagli firma adina gore de arar', async () => {
+  it('list: q filtresi bagli firma adi dahil Turkce karakterlerde de aramasi icin ham sorguyla eslesen id listesine daraltir', async () => {
     const prisma = createPrisma();
     const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
-    await service.list({
-      page: 1,
-      pageSize: 25,
-      q: 'Acme',
-    } as never);
+    await runInTenant(() =>
+      service.list({
+        page: 1,
+        pageSize: 25,
+        q: 'Acme',
+      } as never),
+    );
+    expect(prisma.$queryRaw).toHaveBeenCalled();
     expect(prisma.contact.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          OR: expect.arrayContaining([
-            {
-              account: {
-                deletedAt: null,
-                name: { contains: 'Acme', mode: 'insensitive' },
-              },
-            },
-          ]),
+          id: { in: [CONTACT_ID] },
         }),
       }),
     );
