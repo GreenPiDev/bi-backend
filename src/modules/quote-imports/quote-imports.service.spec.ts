@@ -138,6 +138,9 @@ function createPrisma(
           return Promise.resolve(contact);
         }),
     },
+    quoteStatusHistory: {
+      create: vi.fn().mockResolvedValue({ id: 'qsh-1' }),
+    },
   };
 
   return {
