@@ -233,6 +233,7 @@ model Tenant {
   brandOptions             BrandOption[]
   unitOptions              UnitOption[]
   paymentMethodOptions     PaymentMethodOption[]
+  quoteRejectionReasonOptions QuoteRejectionReasonOption[]
   ibanOptions              IbanOption[]
   settings                 TenantSetting[]
   roles                    Role[]
@@ -717,6 +718,25 @@ model PaymentMethodOption {
 
   @@unique([tenantId, label])
   @@map("crm_payment_method_options")
+}
+
+/**
+ * /settings?tab=crm "Reddedilen Teklifler" bolumu - Sektor/Departman/Birim ile ayni
+ * tenant-listesi deseni (bkz. OptionListManager), tek fark: her yeni tenant 8 built-in
+ * sebeple baslar (tenants.service.ts createTenantWithAdmin), mevcut tenant'lar da
+ * migration'da backfill edildi. Kullanici dilerse bu built-in satirlari da duzenleyebilir/
+ * silebilir - ayri bir "sistem kaydi, silinemez" kisiti yok.
+ */
+model QuoteRejectionReasonOption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, label])
+  @@map("crm_quote_rejection_reason_options")
 }
 
 /**
@@ -1254,7 +1274,13 @@ model QuoteStatusHistory {
   quoteId     String
   status      QuoteStatus
   /**
-   * REVIZE icin revisionNote, REJECTED icin varsa red gerekcesi. Cogu gecis icin null.
+   * REJECTED icin kullanicinin secilen built-in/tanimli red sebebi (bkz.
+   * QuoteRejectionReasonOption) - serbest metin degil, secim. Diger durumlar icin null.
+   */
+  reason      String?
+  /**
+   * REVIZE icin revisionNote, REJECTED icin varsa kullanicinin yazdigi ek (opsiyonel)
+   * aciklama. Cogu gecis icin null.
    */
   note        String?
   createdById String

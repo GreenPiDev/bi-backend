@@ -27,6 +27,21 @@ export interface CreateTenantWithAdminInput {
   adminEmail: string;
 }
 
+/** /settings?tab=crm "Reddedilen Teklifler" - her yeni tenant bu 8 built-in sebeple
+ * baslar (kullanici karari), ayni liste migration'da mevcut tenant'lar icin de
+ * backfill edildi (bkz. prisma/migrations, 20261007_add_quote_rejection_reason_options). */
+export const DEFAULT_QUOTE_REJECTION_REASONS = [
+  'Yüksek Fiyat',
+  'Daha Düşük Başka Teklif',
+  'Bütçe Yetersiz',
+  'Proje İptal Edildi',
+  'Proje Ertelendi',
+  'Ürün/Hizmet Uygun Bulunmadı',
+  'Ödeme Koşulları Uygun Değil',
+  'Başka Tedarikçi Tercih Edildi',
+  'Diğer',
+] as const;
+
 export interface TenantSummary {
   id: string;
   name: string;
@@ -172,6 +187,12 @@ export class TenantsService {
         // hicbir stok islemi yapamadan once elle depo olusturmak zorunda kalirdi.
         await tx.warehouse.create({
           data: { tenantId, name: 'Ana Depo', isDefault: true },
+        });
+        await tx.quoteRejectionReasonOption.createMany({
+          data: DEFAULT_QUOTE_REJECTION_REASONS.map((label) => ({
+            tenantId,
+            label,
+          })),
         });
         return createdTenant;
       });

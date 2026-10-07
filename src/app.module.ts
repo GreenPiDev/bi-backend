@@ -42,6 +42,7 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { PaymentMethodOptionsModule } from './modules/payment-method-options/payment-method-options.module';
+import { QuoteRejectionReasonOptionsModule } from './modules/quote-rejection-reason-options/quote-rejection-reason-options.module';
 import { PostSaleCasesModule } from './modules/post-sale-cases/post-sale-cases.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { BrandOptionsModule } from './modules/brand-options/brand-options.module';
@@ -107,6 +108,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     BrandOptionsModule,
     UnitOptionsModule,
     PaymentMethodOptionsModule,
+    QuoteRejectionReasonOptionsModule,
     IbanOptionsModule,
     TenantSettingsModule,
     CalendarEventsModule,

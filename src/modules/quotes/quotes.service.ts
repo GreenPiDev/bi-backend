@@ -50,6 +50,7 @@ import type {
   QuoteExchangeRatesDto,
   QuoteItemInputDto,
   QuoteQueryDto,
+  RejectQuoteDto,
   UpdateQuoteDto,
 } from './dto/quote.dto';
 
@@ -146,6 +147,7 @@ type StatusHistoryTx = Pick<TenantPrismaClient, 'quoteStatusHistory'>;
 export interface QuoteStatusHistoryEntry {
   id: string;
   status: Quote['status'];
+  reason: string | null;
   note: string | null;
   createdAt: Date;
   createdByName: string | null;
@@ -509,6 +511,7 @@ export class QuotesService {
       quoteId: string;
       status: Quote['status'];
       createdById: string;
+      reason?: string | null;
       note?: string | null;
     },
   ): Promise<void> {
@@ -516,6 +519,7 @@ export class QuotesService {
       data: {
         quoteId: params.quoteId,
         status: params.status,
+        reason: params.reason ?? null,
         note: params.note ?? null,
         createdById: params.createdById,
       } as never,
@@ -541,10 +545,45 @@ export class QuotesService {
     return rows.map((row) => ({
       id: row.id,
       status: row.status,
+      reason: row.reason,
       note: row.note,
       createdAt: row.createdAt,
       createdByName: nameById.get(row.createdById) ?? null,
     }));
+  }
+
+  /** /teklifler?tab=reports "Reddedilme Sebepleri" pasta grafigi: tenant'ta REJECTED
+   * durumundaki her teklif, en son REJECTED durum gecmisi satirinin secilen sebebine
+   * (bkz. QuoteStatusHistory.reason, reject()/update() akislarinda artik zorunlu secim)
+   * gruplanir. Sebebi olmayan (bu alan eklenmeden once reddedilmis) tekliflerin sayisi
+   * `reason: null` ile tek bir grupta doner, frontend bunu "Belirtilmemiş" olarak gosterir. */
+  async getRejectionReasonsSummary(): Promise<
+    { reason: string | null; count: number }[]
+  > {
+    const rejectedQuotes = await this.prisma.quote.findMany({
+      where: { status: 'REJECTED' },
+      select: { id: true },
+    });
+    if (rejectedQuotes.length === 0) {
+      return [];
+    }
+    const quoteIds = rejectedQuotes.map((quote) => quote.id);
+    const historyRows = await this.prisma.quoteStatusHistory.findMany({
+      where: { quoteId: { in: quoteIds }, status: 'REJECTED' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const latestReasonByQuoteId = new Map<string, string | null>();
+    for (const row of historyRows) {
+      latestReasonByQuoteId.set(row.quoteId, row.reason);
+    }
+    const countByReason = new Map<string | null, number>();
+    for (const quoteId of quoteIds) {
+      const reason = latestReasonByQuoteId.get(quoteId) ?? null;
+      countByReason.set(reason, (countByReason.get(reason) ?? 0) + 1);
+    }
+    return [...countByReason.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
   }
 
   /** /teklifler/:id "Stok Kontrolu" sekmesi: teklifteki her urun icin tenant'in tum
@@ -1182,6 +1221,11 @@ export class QuotesService {
           quoteId: id,
           status: 'REJECTED',
           createdById: actingUserId,
+          // dto.rejectionReason burada kesinlikle dolu: UpdateQuoteSchema.refine
+          // status==='REJECTED' oldugunda bunu zorunlu kilar (bkz. ApproveQuoteSchema/
+          // warehouseId ile ayni desen).
+          reason: dto.rejectionReason as string,
+          note: dto.rejectionNote ?? null,
         });
         return null;
       }
@@ -1281,7 +1325,11 @@ export class QuotesService {
     return this.getById(id);
   }
 
-  async reject(id: string, approvedById: string): Promise<QuoteWithDetails> {
+  async reject(
+    id: string,
+    approvedById: string,
+    dto: RejectQuoteDto,
+  ): Promise<QuoteWithDetails> {
     await this.assertPendingApproval(id);
     await this.prisma.quote.update({
       where: { id },
@@ -1291,6 +1339,8 @@ export class QuotesService {
       quoteId: id,
       status: 'REJECTED',
       createdById: approvedById,
+      reason: dto.reason,
+      note: dto.note ?? null,
     });
     await this.audit.log({ action: 'REJECT', entity: 'Quote', entityId: id });
     await this.quotesCache.invalidate();

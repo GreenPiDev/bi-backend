@@ -22,6 +22,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'BrandOption',
   'UnitOption',
   'PaymentMethodOption',
+  'QuoteRejectionReasonOption',
   'IbanOption',
   'TenantSetting',
   'Role',

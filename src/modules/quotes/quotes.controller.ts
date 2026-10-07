@@ -26,11 +26,13 @@ import {
   CreateQuoteSchema,
   FxRatesQuerySchema,
   QuoteQuerySchema,
+  RejectQuoteSchema,
   UpdateQuoteSchema,
   type ApproveQuoteDto,
   type CreateQuoteDto,
   type FxRatesQueryDto,
   type QuoteQueryDto,
+  type RejectQuoteDto,
   type UpdateQuoteDto,
 } from './dto/quote.dto';
 import {
@@ -94,6 +96,16 @@ export class QuotesController {
     }[]
   > {
     return this.quotes.listAssignableUsers();
+  }
+
+  /** /teklifler?tab=reports "Reddedilme Sebepleri" pasta grafigi - `:id` route'undan
+   * once tanimlanmali, ayni desen (bkz. fx-rates/revision-summary/assignable-users). */
+  @Get('rejection-reasons-summary')
+  @RequiresPermission('quotes', 'VIEW')
+  getRejectionReasonsSummary(): Promise<
+    { reason: string | null; count: number }[]
+  > {
+    return this.quotes.getRejectionReasonsSummary();
   }
 
   @Get(':id')
@@ -167,9 +179,10 @@ export class QuotesController {
   @RequiresPermission('quotes', 'APPROVE')
   reject(
     @Param('id') id: string,
+    @Body(new ZodValidationPipe(RejectQuoteSchema)) dto: RejectQuoteDto,
     @CurrentUser() user: RequestUser,
   ): Promise<QuoteWithDetails> {
-    return this.quotes.reject(id, user.id);
+    return this.quotes.reject(id, user.id, dto);
   }
 
   /** SP1-SP2: onayli bir teklif icin onerilen satin alma siparisi kalemlerini

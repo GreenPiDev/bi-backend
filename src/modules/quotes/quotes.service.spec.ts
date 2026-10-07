@@ -505,7 +505,7 @@ describe('QuotesService', () => {
     );
     await service.update(
       'quote-1',
-      { status: 'REJECTED' } as never,
+      { status: 'REJECTED', rejectionReason: 'Yüksek Fiyat' } as never,
       'manager-1',
     );
 
@@ -1047,7 +1047,7 @@ describe('QuotesService', () => {
       fakeNotifications,
       fakeStockItems,
     );
-    await service.reject('quote-1', 'manager-1');
+    await service.reject('quote-1', 'manager-1', { reason: 'Yüksek Fiyat' });
     expect(prisma.quote.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: 'REJECTED' }),
@@ -1074,5 +1074,51 @@ describe('QuotesService', () => {
     expect(prisma.quote.delete).toHaveBeenCalledWith({
       where: { id: 'quote-1' },
     });
+  });
+
+  it('getRejectionReasonsSummary: en son REJECTED sebebine gore gruplar, sebebi olmayanlari null altinda toplar', async () => {
+    const prisma = {
+      quote: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ id: 'q1' }, { id: 'q2' }, { id: 'q3' }]),
+      },
+      quoteStatusHistory: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            quoteId: 'q1',
+            reason: 'Yüksek Fiyat',
+            createdAt: new Date('2026-01-01'),
+          },
+          {
+            quoteId: 'q2',
+            reason: 'Bütçe Yetersiz',
+            createdAt: new Date('2026-01-01'),
+          },
+          // q3 icin hic REJECTED gecmisi yok -> null grubuna dusmeli
+        ]),
+      },
+    };
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeProductsCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+      fakeStockItems,
+    );
+    const result = await service.getRejectionReasonsSummary();
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { reason: 'Yüksek Fiyat', count: 1 },
+        { reason: 'Bütçe Yetersiz', count: 1 },
+        { reason: null, count: 1 },
+      ]),
+    );
   });
 });

@@ -127,11 +127,24 @@ export const UpdateQuoteSchema = z
     templateId: z.string().uuid().nullable().optional(),
     /** Verilirse gonderen degistirilir, hic verilmezse mevcut deger korunur. */
     senderId: z.string().uuid().optional(),
+    /** Status 'REJECTED' ise zorunlu - kullanicinin crm_quote_rejection_reason_options
+     * listesinden sectigi red sebebi (bkz. QuotesListPage'deki durum dropdown'u,
+     * ApproveQuoteModal ile ayni "once onay, sonra geri bildirim" deseni). */
+    rejectionReason: z.string().trim().min(1).optional(),
+    /** Opsiyonel ek aciklama - hangi sebep secilirse secilsin girilebilir. */
+    rejectionNote: z.string().trim().max(2000).optional(),
   })
   .refine((dto) => dto.status !== 'APPROVED' || dto.warehouseId !== undefined, {
     message: 'Onaylamak icin depo secimi gerekli.',
     path: ['warehouseId'],
-  });
+  })
+  .refine(
+    (dto) => dto.status !== 'REJECTED' || dto.rejectionReason !== undefined,
+    {
+      message: 'Red sebebi secimi gerekli.',
+      path: ['rejectionReason'],
+    },
+  );
 export type UpdateQuoteDto = z.infer<typeof UpdateQuoteSchema>;
 
 /** `POST /quotes/:id/approve` - hangi depodan otomatik dusulecegi (bkz.
@@ -140,6 +153,15 @@ export const ApproveQuoteSchema = z.object({
   warehouseId: z.string().uuid('Depo secimi gerekli.'),
 });
 export type ApproveQuoteDto = z.infer<typeof ApproveQuoteSchema>;
+
+/** `POST /quotes/:id/reject` - ApproveQuoteSchema ile ayni "once onay, sonra geri
+ * bildirim modali" deseni: kullanici bir red sebebi secer (tanimli listeden, bkz.
+ * QuoteRejectionReasonOption), istege bagli olarak ek aciklama ekleyebilir. */
+export const RejectQuoteSchema = z.object({
+  reason: z.string().trim().min(1, 'Red sebebi secimi gerekli.'),
+  note: z.string().trim().max(2000).optional(),
+});
+export type RejectQuoteDto = z.infer<typeof RejectQuoteSchema>;
 
 export const QuoteQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),

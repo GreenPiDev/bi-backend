@@ -261,7 +261,8 @@ describe('Quotes (e2e)', () => {
 
     const res = await request(app.getHttpServer())
       .post(`/api/v1/quotes/${createRes.body.id}/reject`)
-      .set('Cookie', cookiesA);
+      .set('Cookie', cookiesA)
+      .send({ reason: 'Yüksek Fiyat' });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('REJECTED');
   });
