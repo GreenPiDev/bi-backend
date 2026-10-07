@@ -20,11 +20,26 @@ export const StockItemQuerySchema = ListQuerySchema.extend({
 });
 export type StockItemQueryDto = z.infer<typeof StockItemQuerySchema>;
 
-/** Stok Gecmisi filtre penceresi: urune, depoya ve guncellemeyi yapan kullaniciya gore. */
+export const StockMovementTypeSchema = z.enum([
+  'INCREASE',
+  'DECREASE',
+  'QUOTE_SALE',
+  'TRANSFER_OUT',
+  'TRANSFER_IN',
+  'CORRECTION',
+]);
+
+/** Stok Gecmisi filtre penceresi: urune, depoya, guncellemeyi yapan kullaniciya ve
+ * (coklu secilebilen, virgulle ayrilmis) hareket turune gore. */
 export const StockHistoryQuerySchema = z.object({
   productId: z.string().optional(),
   warehouseId: z.string().optional(),
   userId: z.string().optional(),
+  types: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.split(',').filter(Boolean) : undefined))
+    .pipe(z.array(StockMovementTypeSchema).optional()),
 });
 export type StockHistoryQueryDto = z.infer<typeof StockHistoryQuerySchema>;
 

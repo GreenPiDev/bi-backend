@@ -191,6 +191,32 @@ export class StockItemsService {
     private readonly productsCache: ProductsCacheService,
   ) {}
 
+  /** /teklifler/:id "Stok Kontrolu" sekmesi icin: verilen urun id'lerinin tum
+   * depolardaki mevcut miktarini dondurur (StockItem kaydi olmayan urun/depo
+   * ciftleri haritada hic yer almaz - cagiran taraf eksik anahtari 0 kabul eder). */
+  async getStockByProductIds(
+    productIds: string[],
+  ): Promise<Map<string, StockItemWarehouseBreakdown[]>> {
+    const byProduct = new Map<string, StockItemWarehouseBreakdown[]>();
+    if (productIds.length === 0) {
+      return byProduct;
+    }
+    const stockItems = await this.prisma.stockItem.findMany({
+      where: { productId: { in: productIds } },
+      include: { warehouse: true },
+    });
+    for (const item of stockItems) {
+      const list = byProduct.get(item.productId) ?? [];
+      list.push({
+        warehouseId: item.warehouseId,
+        warehouseName: item.warehouse.name,
+        quantity: item.quantity,
+      });
+      byProduct.set(item.productId, list);
+    }
+    return byProduct;
+  }
+
   /**
    * /urunler'de tanimli her urun /stok'ta bir satir olarak gorunur - toplam miktar
    * hic girilmemisse (hicbir depoda StockItem kaydi yoksa) 0 miktarli "sanal" bir
@@ -624,6 +650,7 @@ export class StockItemsService {
         ...(query.productId ? { productId: query.productId } : {}),
         ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
         ...(query.userId ? { createdById: query.userId } : {}),
+        ...(query.types?.length ? { type: { in: query.types } } : {}),
       },
       include: { product: true, warehouse: true },
       orderBy: { createdAt: 'desc' },

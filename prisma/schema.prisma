@@ -135,8 +135,10 @@ enum QuoteStatus {
   APPROVED
   REJECTED
   REVIZE
-  /** Ad-hoc /teklifler Excel ice aktarma (bkz. docs/VARSAYIMLAR.md) - import'tan
-   * gelen tekliflerin baslangic durumu. Normal /teklifler/yeni akisi hic uretmez. */
+  /**
+   * Ad-hoc /teklifler Excel ice aktarma (bkz. docs/VARSAYIMLAR.md) - import'tan
+   * gelen tekliflerin baslangic durumu. Normal /teklifler/yeni akisi hic uretmez.
+   */
   UNSPECIFIED
 }
 
@@ -251,6 +253,7 @@ model Tenant {
   purchaseOrders           PurchaseOrder[]
   stockItems               StockItem[]
   stockMovements           StockMovement[]
+  quoteStatusHistories     QuoteStatusHistory[]
   warehouses               Warehouse[]
   messages                 Message[]
   messageStars             MessageStar[]
@@ -1212,17 +1215,18 @@ model Quote {
   updatedAt             DateTime            @updatedAt
   deletedAt             DateTime?
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  account        Account         @relation(fields: [accountId], references: [id])
-  contact        Contact?        @relation(fields: [contactId], references: [id])
-  project        Project?        @relation(fields: [projectId], references: [id])
-  template       QuoteTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  account        Account              @relation(fields: [accountId], references: [id])
+  contact        Contact?             @relation(fields: [contactId], references: [id])
+  project        Project?             @relation(fields: [projectId], references: [id])
+  template       QuoteTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
   items          QuoteItem[]
   opportunity    Opportunity?
   postSaleCase   PostSaleCase?
   purchaseOrders PurchaseOrder[]
   stockMovements StockMovement[]
   drawings       Drawing[]
+  statusHistory  QuoteStatusHistory[]
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, accountId])
@@ -1232,6 +1236,35 @@ model Quote {
   @@index([tenantId, templateId])
   @@index([tenantId, deletedAt])
   @@map("crm_quotes")
+}
+
+/**
+ * Ad-hoc: /teklifler/:id "Durum" sekmesi (kullanici istegi, bkz. CLAUDE.md) - append-only
+ * durum gecmisi ledger'i, StockMovement ile ayni desen. AuditLog'a guvenilmedi: mevcut
+ * Quote audit kayitlari eski/yeni durumu meta'ya yazmiyor ve entityId'ye gore
+ * sorgulanamiyor (bkz. arastirma notlari). create/update/approve/reject HER durum
+ * degisikliginde (ve quote-imports'taki UNSPECIFIED ilk-olusturmada) bir satir ekler,
+ * asla guncellenmez/silinmez. Bu ozellik eklenmeden once olusturulmus tekliflerin
+ * gecmisi yok - frontend bu durumda Quote.createdAt'ten tek bir "Olusturuldu" satiri
+ * sentezler (bkz. docs/VARSAYIMLAR.md).
+ */
+model QuoteStatusHistory {
+  id          String      @id @default(uuid())
+  tenantId    String
+  quoteId     String
+  status      QuoteStatus
+  /**
+   * REVIZE icin revisionNote, REJECTED icin varsa red gerekcesi. Cogu gecis icin null.
+   */
+  note        String?
+  createdById String
+  createdAt   DateTime    @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  quote  Quote  @relation(fields: [quoteId], references: [id])
+
+  @@index([tenantId, quoteId, createdAt])
+  @@map("crm_quote_status_history")
 }
 
 /**
@@ -1296,6 +1329,13 @@ model QuoteItem {
   discountPct  Decimal  @default(0) @db.Decimal(5, 2)
   discountNote String?
   vatPct       Decimal  @default(0) @db.Decimal(5, 2)
+  /**
+   * Maliyet sekmesi (quote-cost-content.tsx) icin donmus (snapshot) WAC maliyeti.
+   * unitPrice/currency ile ayni mantik: satir olusturulurken/guncellenirken
+   * Product.avgCost'tan kopyalanir - boylece urunun GUNCEL avgCost'u degisse bile
+   * (yeni stok girisiyle) bu teklifteki kar/maliyet hesabi degismez.
+   */
+  costPriceAtSale Decimal? @db.Decimal(14, 4)
   createdAt    DateTime @default(now())
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)

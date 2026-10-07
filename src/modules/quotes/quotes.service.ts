@@ -136,9 +136,38 @@ interface ResolvedQuoteItem {
   discountPct: number;
   vatPct: number;
   discountNote: string | null;
+  costPriceAtSale: Prisma.Decimal | null;
 }
 
 type ItemResolutionTx = Pick<TenantPrismaClient, 'product'>;
+
+type StatusHistoryTx = Pick<TenantPrismaClient, 'quoteStatusHistory'>;
+
+export interface QuoteStatusHistoryEntry {
+  id: string;
+  status: Quote['status'];
+  note: string | null;
+  createdAt: Date;
+  createdByName: string | null;
+}
+
+/** /teklifler/:id "Stok Kontrolu" sekmesi - teklifteki her urun satiri + o urunun
+ * tenant'in tum depolarindaki mevcut miktari. Teklif onaylaninca gercekten dusulecek
+ * miktari degil, su anki anlik durumu gosterir (salt-okunur, kayit olusturmaz). */
+export interface QuoteStockCheckRow {
+  productId: string;
+  productName: string;
+  productSku: string | null;
+  unit: string;
+  quoteQuantity: number;
+  stockByWarehouseId: Record<string, number>;
+  totalStock: number;
+}
+
+export interface QuoteStockCheckResult {
+  warehouses: { id: string; name: string }[];
+  items: QuoteStockCheckRow[];
+}
 
 /** Ad-hoc revizyon takibi (bkz. Quote.revisionSnapshot doc comment'i): kaydedilen
  * onceki kalemlerin/kurun frontend'in mevcut quote-totals.ts hesaplayicilarina
@@ -442,6 +471,7 @@ export class QuotesService {
           item.discountPct > 0
             ? `Iskonto uygulandi: %${item.discountPct}`
             : null,
+        costPriceAtSale: product.avgCost,
       };
     });
 
@@ -468,6 +498,89 @@ export class QuotesService {
         asOf?: string;
         rates: Record<string, number>;
       } | null,
+    };
+  }
+
+  /** /teklifler/:id "Durum" sekmesi icin append-only gecmis satiri (bkz.
+   * QuoteStatusHistory doc comment'i) - her gercek durum degisiminde cagrilir. */
+  private async recordStatusHistory(
+    tx: StatusHistoryTx,
+    params: {
+      quoteId: string;
+      status: Quote['status'];
+      createdById: string;
+      note?: string | null;
+    },
+  ): Promise<void> {
+    await tx.quoteStatusHistory.create({
+      data: {
+        quoteId: params.quoteId,
+        status: params.status,
+        note: params.note ?? null,
+        createdById: params.createdById,
+      } as never,
+    });
+  }
+
+  /** /teklifler/:id "Durum" sekmesi: bu teklife ait tum durum gecmisi, en eskiden en
+   * yeniye sirali, kullanici adlari coz ulmus halde. Ozellik eklenmeden once
+   * olusturulmus tekliflerin gecmisi yoktur - bu durumda frontend Quote.createdAt'ten
+   * tek bir "Olusturuldu" satiri sentezler, bu metod bos dizi doner. */
+  async getStatusHistory(id: string): Promise<QuoteStatusHistoryEntry[]> {
+    await this.getById(id);
+    const rows = await this.prisma.quoteStatusHistory.findMany({
+      where: { quoteId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+    const userIds = [...new Set(rows.map((row) => row.createdById))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(users.map((user) => [user.id, user.name]));
+    return rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      note: row.note,
+      createdAt: row.createdAt,
+      createdByName: nameById.get(row.createdById) ?? null,
+    }));
+  }
+
+  /** /teklifler/:id "Stok Kontrolu" sekmesi: teklifteki her urun icin tenant'in tum
+   * depolarindaki mevcut miktar. MANUAL_TOTAL modundaki tekliflerde (bkz. itemsEntryMode)
+   * items bos oldugundan dolu bir sonuc donmez - bu beklenen bir durum, hata degil. */
+  async getStockCheck(id: string): Promise<QuoteStockCheckResult> {
+    const quote = await this.getById(id);
+    const warehouses = await this.prisma.warehouse.findMany({
+      orderBy: { name: 'asc' },
+    });
+    const productIds = [...new Set(quote.items.map((item) => item.productId))];
+    const stockByProduct =
+      await this.stockItems.getStockByProductIds(productIds);
+    const items: QuoteStockCheckRow[] = quote.items.map((item) => {
+      const breakdown = stockByProduct.get(item.productId) ?? [];
+      const stockByWarehouseId: Record<string, number> = {};
+      for (const entry of breakdown) {
+        stockByWarehouseId[entry.warehouseId] = entry.quantity.toNumber();
+      }
+      const totalStock = breakdown.reduce(
+        (sum, entry) => sum + entry.quantity.toNumber(),
+        0,
+      );
+      return {
+        productId: item.productId,
+        productName: item.product.name,
+        productSku: item.product.sku,
+        unit: item.product.unit,
+        quoteQuantity: item.quantity.toNumber(),
+        stockByWarehouseId,
+        totalStock,
+      };
+    });
+    return {
+      warehouses: warehouses.map((w) => ({ id: w.id, name: w.name })),
+      items,
     };
   }
 
@@ -785,6 +898,12 @@ export class QuotesService {
             });
           }
 
+          await this.recordStatusHistory(tx, {
+            quoteId: created.id,
+            status: 'DRAFT',
+            createdById,
+          });
+
           return created.id;
         });
         break;
@@ -997,6 +1116,18 @@ export class QuotesService {
         if (hasFieldUpdates) {
           await tx.quote.update({ where: { id }, data: contactUpdateData });
         }
+        if (isRevisionSave) {
+          // Durum zaten REVIZE'de kaliyor (dto.status gonderilmedi), ama bu kayit
+          // asil revizyon notunu tasiyor - "Durum" sekmesinde gorunmesi icin ayrica
+          // bir status history satiri acilmali, aksi halde not sadece
+          // Quote.revisionNote'ta kalip "Durum" sekmesine hic yazilmaz.
+          await this.recordStatusHistory(tx, {
+            quoteId: id,
+            status: 'REVIZE',
+            createdById: actingUserId,
+            note: dto.revisionNote ?? null,
+          });
+        }
         return null;
       }
 
@@ -1022,6 +1153,11 @@ export class QuotesService {
             quantity: item.quantity,
           })),
         });
+        await this.recordStatusHistory(tx, {
+          quoteId: id,
+          status: 'APPROVED',
+          createdById: actingUserId,
+        });
         return this.ensurePostSaleCase(tx, {
           quoteId: id,
           accountId: existing.accountId,
@@ -1042,12 +1178,23 @@ export class QuotesService {
             ...contactUpdateData,
           },
         });
+        await this.recordStatusHistory(tx, {
+          quoteId: id,
+          status: 'REJECTED',
+          createdById: actingUserId,
+        });
         return null;
       }
 
       await tx.quote.update({
         where: { id },
         data: { status: nextStatus, ...contactUpdateData },
+      });
+      await this.recordStatusHistory(tx, {
+        quoteId: id,
+        status: nextStatus,
+        createdById: actingUserId,
+        note: nextStatus === 'REVIZE' ? (dto.revisionNote ?? null) : null,
       });
       return null;
     });
@@ -1110,6 +1257,11 @@ export class QuotesService {
           quantity: item.quantity,
         })),
       });
+      await this.recordStatusHistory(tx, {
+        quoteId: id,
+        status: 'APPROVED',
+        createdById: approvedById,
+      });
       return this.ensurePostSaleCase(tx, {
         quoteId: id,
         accountId: existing.accountId,
@@ -1134,6 +1286,11 @@ export class QuotesService {
     await this.prisma.quote.update({
       where: { id },
       data: { status: 'REJECTED', approvedAt: new Date(), approvedById },
+    });
+    await this.recordStatusHistory(this.prisma, {
+      quoteId: id,
+      status: 'REJECTED',
+      createdById: approvedById,
     });
     await this.audit.log({ action: 'REJECT', entity: 'Quote', entityId: id });
     await this.quotesCache.invalidate();

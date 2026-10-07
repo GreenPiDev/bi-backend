@@ -80,7 +80,7 @@ function rowsToRecords(
 
 type ImportTx = Pick<
   TenantPrismaClient,
-  'account' | 'quote' | 'user' | 'contact'
+  'account' | 'quote' | 'user' | 'contact' | 'quoteStatusHistory'
 >;
 
 interface ValidImportRow {
@@ -447,6 +447,13 @@ export class QuoteImportsService {
         status: 'UNSPECIFIED',
         attributes:
           Object.keys(data.attributes).length > 0 ? data.attributes : undefined,
+        createdById,
+      } as never,
+    });
+    await tx.quoteStatusHistory.create({
+      data: {
+        quoteId: quote.id,
+        status: 'UNSPECIFIED',
         createdById,
       } as never,
     });

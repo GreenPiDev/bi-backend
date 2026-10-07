@@ -36,6 +36,8 @@ import {
 import {
   QuotesService,
   type QuotePrintData,
+  type QuoteStatusHistoryEntry,
+  type QuoteStockCheckResult,
   type QuoteWithDetails,
 } from './quotes.service';
 import type { FxRatesResult } from '../../core/fx/fx.service';
@@ -106,6 +108,23 @@ export class QuotesController {
   @RequiresPermission('quotes', 'VIEW')
   getPrintData(@Param('id') id: string): Promise<QuotePrintData> {
     return this.quotes.getPrintData(id);
+  }
+
+  /** /teklifler/:id "Durum" sekmesi icin durum gecmisi. */
+  @Get(':id/status-history')
+  @RequiresPermission('quotes', 'VIEW')
+  getStatusHistory(
+    @Param('id') id: string,
+  ): Promise<QuoteStatusHistoryEntry[]> {
+    return this.quotes.getStatusHistory(id);
+  }
+
+  /** /teklifler/:id "Stok Kontrolu" sekmesi icin teklif kalemleri + depo bazli
+   * mevcut stok miktarlari. */
+  @Get(':id/stock-check')
+  @RequiresPermission('quotes', 'VIEW')
+  getStockCheck(@Param('id') id: string): Promise<QuoteStockCheckResult> {
+    return this.quotes.getStockCheck(id);
   }
 
   @Post()
