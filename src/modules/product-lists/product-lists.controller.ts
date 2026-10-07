@@ -22,7 +22,10 @@ import {
   type ProductListQueryDto,
   type UpdateProductListDto,
 } from './dto/product-list.dto';
-import { ProductListsService } from './product-lists.service';
+import {
+  ProductListsService,
+  type ProductListWithCount,
+} from './product-lists.service';
 
 @ModulePage('product-lists')
 @Controller('product-lists')
@@ -34,7 +37,7 @@ export class ProductListsController {
   list(
     @Query(new ZodValidationPipe(ProductListQuerySchema))
     query: ProductListQueryDto,
-  ): Promise<PagedResult<ProductList>> {
+  ): Promise<PagedResult<ProductListWithCount>> {
     return this.productLists.list(query);
   }
 

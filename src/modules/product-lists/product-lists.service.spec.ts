@@ -20,11 +20,15 @@ function createProductListRow(
   };
 }
 
-function createPrisma(row: unknown = createProductListRow(), productCount = 0) {
+function createPrisma(
+  row: unknown = createProductListRow(),
+  productCount = 0,
+  listRows: unknown[] = [],
+) {
   const prisma = {
     productList: {
-      findMany: vi.fn().mockResolvedValue([]),
-      count: vi.fn().mockResolvedValue(0),
+      findMany: vi.fn().mockResolvedValue(listRows),
+      count: vi.fn().mockResolvedValue(listRows.length),
       findFirst: vi.fn().mockResolvedValue(row),
       create: vi.fn().mockResolvedValue(row),
       update: vi.fn().mockResolvedValue(row),
@@ -120,6 +124,26 @@ describe('ProductListsService', () => {
       code: 'PRODUCT_LIST_NOT_EMPTY',
     });
     expect(prisma.productList.delete).not.toHaveBeenCalled();
+  });
+
+  it('list: her satira _count.products degerini productCount olarak ekler', async () => {
+    const prisma = createPrisma(createProductListRow(), 0, [
+      { ...createProductListRow({ id: 'pl-1' }), _count: { products: 5 } },
+      { ...createProductListRow({ id: 'pl-2' }), _count: { products: 0 } },
+    ]);
+    const service = new ProductListsService(
+      prisma as never,
+      fakeAudit,
+      fakeRealtime as never,
+    );
+    const result = await runInTenant(() =>
+      service.list({ page: 1, pageSize: 25 } as never),
+    );
+    expect(result.data).toEqual([
+      expect.objectContaining({ id: 'pl-1', productCount: 5 }),
+      expect.objectContaining({ id: 'pl-2', productCount: 0 }),
+    ]);
+    expect(result.data[0]).not.toHaveProperty('_count');
   });
 
   it('remove: liste bossa siler ve audit log yazar', async () => {

@@ -18,6 +18,8 @@ import type {
 
 const SORTABLE_FIELDS = ['name', 'createdAt'] as const;
 
+export type ProductListWithCount = ProductList & { productCount: number };
+
 @Injectable()
 export class ProductListsService {
   constructor(
@@ -37,7 +39,9 @@ export class ProductListsService {
     this.realtime.emitToTenant(tenantId, 'productLists.updated', lists);
   }
 
-  async list(query: ProductListQueryDto): Promise<PagedResult<ProductList>> {
+  async list(
+    query: ProductListQueryDto,
+  ): Promise<PagedResult<ProductListWithCount>> {
     const { page, pageSize, q } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'name',
@@ -67,12 +71,21 @@ export class ProductListsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { [field]: direction },
+        // Nested `_count`, tenant-scoped extension'dan gecmiyor (extension sadece
+        // ust duzey model operasyonlarini yakaliyor) - silinmis urunleri disarida
+        // birakmak icin deletedAt filtresi burada elle verilmeli.
+        include: {
+          _count: { select: { products: { where: { deletedAt: null } } } },
+        },
       }),
       this.prisma.productList.count({ where }),
     ]);
 
     return {
-      data,
+      data: data.map(({ _count, ...productList }) => ({
+        ...productList,
+        productCount: _count.products,
+      })),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
   }

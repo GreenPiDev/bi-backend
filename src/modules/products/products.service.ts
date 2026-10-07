@@ -26,7 +26,7 @@ import type {
   UpdateProductDto,
 } from './dto/product.dto';
 
-const SORTABLE_FIELDS = ['name', 'sku', 'createdAt'] as const;
+const SORTABLE_FIELDS = ['name', 'sku', 'createdAt', 'stockQuantity'] as const;
 
 type ProductWithProductList = Product & {
   productList: ProductList;
@@ -73,6 +73,11 @@ function sortProducts(
   if (parsed.field === 'createdAt') {
     return [...items].sort(
       (a, b) => dir * (a.createdAt.getTime() - b.createdAt.getTime()),
+    );
+  }
+  if (parsed.field === 'stockQuantity') {
+    return [...items].sort(
+      (a, b) => dir * a.stockQuantity.comparedTo(b.stockQuantity),
     );
   }
   return [...items].sort(

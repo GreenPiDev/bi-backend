@@ -314,6 +314,56 @@ describe('ProductsService', () => {
     expect(result.data[0].stockQuantity.toString()).toBe('20');
   });
 
+  it('list: sort=stockQuantity:asc, stok miktarina gore kucukten buyuge siralar', async () => {
+    const rowLow = createProductRow({
+      id: 'p-low',
+      stockItems: [{ quantity: '2' }],
+    });
+    const rowHigh = createProductRow({
+      id: 'p-high',
+      stockItems: [{ quantity: '20' }],
+    });
+    const prisma = createPrisma(undefined, undefined, [rowHigh, rowLow]);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.list({
+      page: 1,
+      pageSize: 25,
+      sort: 'stockQuantity:asc',
+    } as never);
+    expect(result.data.map((p) => p.id)).toEqual(['p-low', 'p-high']);
+  });
+
+  it('list: sort=stockQuantity:desc, stok miktarina gore buyukten kucuge siralar', async () => {
+    const rowLow = createProductRow({
+      id: 'p-low',
+      stockItems: [{ quantity: '2' }],
+    });
+    const rowHigh = createProductRow({
+      id: 'p-high',
+      stockItems: [{ quantity: '20' }],
+    });
+    const prisma = createPrisma(undefined, undefined, [rowLow, rowHigh]);
+    const service = new ProductsService(
+      prisma as never,
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakePriceHistoryCache,
+    );
+    const result = await service.list({
+      page: 1,
+      pageSize: 25,
+      sort: 'stockQuantity:desc',
+    } as never);
+    expect(result.data.map((p) => p.id)).toEqual(['p-high', 'p-low']);
+  });
+
   it('list: hic StockItem kaydi olmayan urun icin stockQuantity 0 doner', async () => {
     const rowWithoutStock = createProductRow({ stockItems: [] });
     const prisma = createPrisma(undefined, undefined, [rowWithoutStock]);
