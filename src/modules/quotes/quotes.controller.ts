@@ -108,6 +108,23 @@ export class QuotesController {
     return this.quotes.getRejectionReasonsSummary();
   }
 
+  /** /teklifler?tab=reports "Reddedilme Notları" collapsible tablosu - `:id` route'undan
+   * once tanimlanmali, ayni desen (bkz. fx-rates/revision-summary/rejection-reasons-summary). */
+  @Get('rejected-reasons-list')
+  @RequiresPermission('quotes', 'VIEW')
+  getRejectedQuotesWithReasons(): Promise<
+    {
+      id: string;
+      quoteNumber: string;
+      accountName: string;
+      rejectedAt: Date | null;
+      reason: string | null;
+      note: string | null;
+    }[]
+  > {
+    return this.quotes.getRejectedQuotesWithReasons();
+  }
+
   @Get(':id')
   @RequiresPermission('quotes', 'VIEW')
   getById(@Param('id') id: string): Promise<QuoteWithDetails> {

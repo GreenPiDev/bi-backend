@@ -586,6 +586,66 @@ export class QuotesService {
       .sort((a, b) => b.count - a.count);
   }
 
+  /** /teklifler?tab=reports "Reddedilme Notları" collapsible tablosu: her reddedilen
+   * teklifin numarasi/firmasi + en son REJECTED durum gecmisi satirinin sebebi/notu.
+   * getRejectionReasonsSummary() ile ayni veriyi okur, ama gruplamak yerine satir
+   * bazinda (en yeni reddedilen ustte) dondurur. */
+  async getRejectedQuotesWithReasons(): Promise<
+    {
+      id: string;
+      quoteNumber: string;
+      accountName: string;
+      rejectedAt: Date | null;
+      reason: string | null;
+      note: string | null;
+    }[]
+  > {
+    const rejectedQuotes = await this.prisma.quote.findMany({
+      where: { status: 'REJECTED' },
+      select: {
+        id: true,
+        quoteNumber: true,
+        account: { select: { name: true } },
+      },
+    });
+    if (rejectedQuotes.length === 0) {
+      return [];
+    }
+    const quoteIds = rejectedQuotes.map((quote) => quote.id);
+    const historyRows = await this.prisma.quoteStatusHistory.findMany({
+      where: { quoteId: { in: quoteIds }, status: 'REJECTED' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const latestByQuoteId = new Map<
+      string,
+      { reason: string | null; note: string | null; createdAt: Date }
+    >();
+    for (const row of historyRows) {
+      latestByQuoteId.set(row.quoteId, {
+        reason: row.reason,
+        note: row.note,
+        createdAt: row.createdAt,
+      });
+    }
+    return rejectedQuotes
+      .map((quote) => {
+        const latest = latestByQuoteId.get(quote.id);
+        return {
+          id: quote.id,
+          quoteNumber: quote.quoteNumber,
+          accountName: quote.account.name,
+          rejectedAt: latest?.createdAt ?? null,
+          reason: latest?.reason ?? null,
+          note: latest?.note ?? null,
+        };
+      })
+      .sort((a, b) => {
+        const aTime = a.rejectedAt ? a.rejectedAt.getTime() : 0;
+        const bTime = b.rejectedAt ? b.rejectedAt.getTime() : 0;
+        return bTime - aTime;
+      });
+  }
+
   /** /teklifler/:id "Stok Kontrolu" sekmesi: teklifteki her urun icin tenant'in tum
    * depolarindaki mevcut miktar. MANUAL_TOTAL modundaki tekliflerde (bkz. itemsEntryMode)
    * items bos oldugundan dolu bir sonuc donmez - bu beklenen bir durum, hata degil. */

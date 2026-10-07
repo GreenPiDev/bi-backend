@@ -1121,4 +1121,71 @@ describe('QuotesService', () => {
       ]),
     );
   });
+
+  it('getRejectedQuotesWithReasons: en yeni reddedilen ustte, her satir kendi sebebi/notuyla doner', async () => {
+    const prisma = {
+      quote: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'q1',
+            quoteNumber: 'TEK-2026-01-01-001',
+            account: { name: 'Acme' },
+          },
+          {
+            id: 'q2',
+            quoteNumber: 'TEK-2026-01-02-001',
+            account: { name: 'Beta' },
+          },
+        ]),
+      },
+      quoteStatusHistory: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            quoteId: 'q1',
+            reason: 'Yüksek Fiyat',
+            note: null,
+            createdAt: new Date('2026-01-01'),
+          },
+          {
+            quoteId: 'q2',
+            reason: 'Bütçe Yetersiz',
+            note: 'Müşteri bütçe revizesi bekliyor',
+            createdAt: new Date('2026-01-05'),
+          },
+        ]),
+      },
+    };
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeProductsCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+      fakeStockItems,
+    );
+    const result = await service.getRejectedQuotesWithReasons();
+    expect(result).toEqual([
+      {
+        id: 'q2',
+        quoteNumber: 'TEK-2026-01-02-001',
+        accountName: 'Beta',
+        rejectedAt: new Date('2026-01-05'),
+        reason: 'Bütçe Yetersiz',
+        note: 'Müşteri bütçe revizesi bekliyor',
+      },
+      {
+        id: 'q1',
+        quoteNumber: 'TEK-2026-01-01-001',
+        accountName: 'Acme',
+        rejectedAt: new Date('2026-01-01'),
+        reason: 'Yüksek Fiyat',
+        note: null,
+      },
+    ]);
+  });
 });
