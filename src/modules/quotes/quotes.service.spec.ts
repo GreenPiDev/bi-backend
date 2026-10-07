@@ -106,6 +106,9 @@ function createPrisma({
     stockMovement: {
       findFirst: vi.fn().mockResolvedValue(existingStockMovement ?? null),
     },
+    quoteStatusHistory: {
+      create: vi.fn().mockResolvedValue({ id: 'qsh-1' }),
+    },
   };
   return {
     quote: {
@@ -118,6 +121,7 @@ function createPrisma({
       findMany: vi.fn().mockResolvedValue(activeUsers ?? []),
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx)),
+    quoteStatusHistory: tx.quoteStatusHistory,
     __tx: tx,
   };
 }
