@@ -16,7 +16,26 @@ import type {
   UpdateAccountDto,
 } from './dto/account.dto';
 
-const SORTABLE_FIELDS = ['name', 'city', 'createdAt'] as const;
+const SORTABLE_FIELDS = [
+  'name',
+  'city',
+  'createdAt',
+  'interactionCount',
+  'quoteCount',
+] as const;
+// 'name': contacts.service.ts'teki ayni sorun - Postgres'in bu projede
+// LC_CTYPE=C olmasi yuzunden DB-seviyesi orderBy ASCII sirasi kullanir ("M" < "a"),
+// o yuzden Intl.Collator ile JS tarafinda siralaniyor.
+const CASE_INSENSITIVE_SORT_FIELDS = new Set<string>(['name']);
+const nameCollator = new Intl.Collator('tr', { sensitivity: 'base' });
+// 'interactionCount'/'quoteCount' Account tablosunda kolon degil, attachCounts()
+// ile ayri bir groupBy sorgusundan sonradan eklenen hesaplanmis degerler - bu
+// yuzden Prisma orderBy'a hic verilemez, eslesen tum satirlar cekilip sayilar
+// hesaplandiktan sonra JS tarafinda siralanip sayfalanir.
+const COMPUTED_SORT_FIELDS = new Set<string>([
+  'interactionCount',
+  'quoteCount',
+]);
 
 /**
  * A5: "kesin bilmek istedigimiz" alanlar (bkz. VARSAYIMLAR V18) - bu alanlardan
@@ -218,6 +237,59 @@ export class AccountsService {
           }
         : {}),
     };
+
+    if (COMPUTED_SORT_FIELDS.has(field)) {
+      const sortField = field as 'interactionCount' | 'quoteCount';
+      const all = await this.prisma.account.findMany({ where });
+      const withNames = await this.attachCreatedByNames(all);
+      const withCounts = await this.attachCounts(withNames);
+      withCounts.sort((a, b) => {
+        const diff = a[sortField] - b[sortField];
+        return direction === 'asc' ? diff : -diff;
+      });
+      const total = withCounts.length;
+      const pageRows = withCounts.slice(
+        (page - 1) * pageSize,
+        (page - 1) * pageSize + pageSize,
+      );
+      const result = {
+        data: pageRows.map(withMissingCriticalFields),
+        meta: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+      await this.cache.set(query, result);
+      return result;
+    }
+
+    if (CASE_INSENSITIVE_SORT_FIELDS.has(field)) {
+      const all = await this.prisma.account.findMany({ where });
+      all.sort((a, b) => {
+        const cmp = nameCollator.compare(a.name, b.name);
+        return direction === 'asc' ? cmp : -cmp;
+      });
+      const total = all.length;
+      const pageRows = all.slice(
+        (page - 1) * pageSize,
+        (page - 1) * pageSize + pageSize,
+      );
+      const withNames = await this.attachCreatedByNames(pageRows);
+      const withCounts = await this.attachCounts(withNames);
+      const result = {
+        data: withCounts.map(withMissingCriticalFields),
+        meta: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+      await this.cache.set(query, result);
+      return result;
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.account.findMany({

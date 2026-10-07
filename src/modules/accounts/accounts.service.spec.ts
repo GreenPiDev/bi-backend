@@ -105,14 +105,16 @@ describe('AccountsService', () => {
     });
   });
 
-  it('list: arama, sayfalama ve toplam sayfa hesaplar', async () => {
+  it('list: arama, sayfalama ve toplam sayfa hesaplar (DB-seviyesi siralama alanlarinda)', async () => {
     const prisma = createPrisma();
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
     prisma.account.count.mockResolvedValue(30);
+    // 'name' artik JS-tarafi (Turkce collator) siralaniyor, bu test skip/take'in
+    // dogrudan Prisma orderBy'a gittigi 'createdAt' gibi bir alanla kalsin.
     const result = await service.list({
       page: 2,
       pageSize: 10,
-      sort: undefined,
+      sort: 'createdAt:asc',
     } as never);
     expect(prisma.account.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 10, take: 10 }),
@@ -125,13 +127,73 @@ describe('AccountsService', () => {
     });
   });
 
-  it('list: varsayilan siralama isme gore alfabetiktir', async () => {
+  it('list: varsayilan siralama isme gore (Turkce) alfabetiktir', async () => {
     const prisma = createPrisma();
+    prisma.account.findMany.mockResolvedValue([
+      createAccountRow({ id: '1', name: 'Öztürk A.Ş.' }),
+      createAccountRow({ id: '2', name: 'Acme' }),
+    ]);
     const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
-    await service.list({ page: 1, pageSize: 10, sort: undefined } as never);
-    expect(prisma.account.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { name: 'asc' } }),
-    );
+    const result = await service.list({
+      page: 1,
+      pageSize: 10,
+      sort: undefined,
+    } as never);
+    expect(result.data.map((a) => a.id)).toEqual(['2', '1']);
+  });
+
+  it('list: sort=name:asc, firmalari Turkce karakterlere gore siralar', async () => {
+    const prisma = createPrisma();
+    prisma.account.findMany.mockResolvedValue([
+      createAccountRow({ id: '1', name: 'Öztürk A.Ş.' }),
+      createAccountRow({ id: '2', name: 'Acme' }),
+    ]);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 10,
+      sort: 'name:asc',
+    } as never);
+    expect(result.data.map((a) => a.id)).toEqual(['2', '1']);
+  });
+
+  it('list: sort=interactionCount:desc, gorusme sayisina gore buyukten kucuge siralar', async () => {
+    const prisma = createPrisma();
+    prisma.account.findMany.mockResolvedValue([
+      createAccountRow({ id: '1' }),
+      createAccountRow({ id: '2' }),
+      createAccountRow({ id: '3' }),
+    ]);
+    prisma.interaction.groupBy.mockResolvedValue([
+      { accountId: '1', _count: { _all: 2 } },
+      { accountId: '2', _count: { _all: 5 } },
+    ]);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 10,
+      sort: 'interactionCount:desc',
+    } as never);
+    expect(result.data.map((a) => a.id)).toEqual(['2', '1', '3']);
+  });
+
+  it('list: sort=quoteCount:asc, teklif sayisina gore kucukten buyuge siralar', async () => {
+    const prisma = createPrisma();
+    prisma.account.findMany.mockResolvedValue([
+      createAccountRow({ id: '1' }),
+      createAccountRow({ id: '2' }),
+    ]);
+    prisma.quote.groupBy.mockResolvedValue([
+      { accountId: '1', _count: { _all: 3 } },
+      { accountId: '2', _count: { _all: 1 } },
+    ]);
+    const service = new AccountsService(prisma as never, fakeAudit, fakeCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 10,
+      sort: 'quoteCount:asc',
+    } as never);
+    expect(result.data.map((a) => a.id)).toEqual(['2', '1']);
   });
 
   it('list: from/to verilirse createdAt araligina gore filtreler', async () => {

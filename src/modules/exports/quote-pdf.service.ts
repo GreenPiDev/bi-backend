@@ -4,7 +4,23 @@ import { chromium } from 'playwright';
 import { ACCESS_TOKEN_COOKIE } from '../auth/token.types';
 
 const RENDER_SETTLE_MS = 300;
+// Maliyet/Grafikler tab'lari ECharts pasta grafigi render ediyor (asenkron/animasyonlu,
+// bkz. DashboardPdfService'teki ayni gerekce) - sabit teklif metin/tablosundan daha uzun
+// bir bekleme gerekiyor.
+const CHARTS_RENDER_SETTLE_MS = 1200;
 const PDF_CONTENT_WIDTH_PX = 718;
+// Maliyet tab'i 11 kolonlu genis bir tablo (bkz. quote-cost-content.tsx) - dikey A4'te
+// kolonlar sikisiyordu, bu yuzden bu export yatay (landscape) alinir. A4 yatay (297mm)
+// eksi sol+sag 10mm marj = 277mm kullanilabilir fiziksel genislik, 96dpi'da px'e cevrilir.
+const LANDSCAPE_CONTENT_WIDTH_PX = 1046;
+// Tablo (Table bileseni table-layout:fixed kullaniyor) sadece LANDSCAPE_CONTENT_WIDTH_PX
+// kadar bir viewport'ta hala sikisiyordu (kolonlarin toplam sabit genisligi bu degeri
+// asiyor, bkz. kullanici ekran goruntusu) - gercek tarayicida (genis masaustu ekraninda)
+// goruldugu gibi rahat yerlesmesi icin DAHA GENIS bir viewport'ta render edilir, sonra
+// `scale` ile fiziksel sayfaya sigacak sekilde kucultulur (gercek tarayicinin "yazdir,
+// sayfaya sigdir" davranisiyla ayni mantik - layout degismez, sadece ciktida olceklenir).
+const COST_RENDER_WIDTH_PX = 1400;
+const COST_PDF_SCALE = LANDSCAPE_CONTENT_WIDTH_PX / COST_RENDER_WIDTH_PX;
 const PDF_VIEWPORT_HEIGHT_PX = 1200;
 
 /** Q6: DashboardPdfService ile ayni desen (bkz. docs/VARSAYIMLAR.md V27) - canli
@@ -18,7 +34,7 @@ export class QuotePdfService {
   async render(
     quoteId: string,
     accessToken: string,
-    options?: { branded?: boolean },
+    options?: { branded?: boolean; tab?: 'cost' | 'charts' },
   ): Promise<Buffer> {
     const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
     // Auth cookie'si backend tarafindan domain belirtilmeden set edilir (bkz.
@@ -33,11 +49,12 @@ export class QuotePdfService {
     // Chromium cookie'yi cross-site fetch'lerde sessizce atar (addCookies varsayilani
     // Lax'tir, buraya ozellikle yazilmazsa ayni bug domain duzeltmesine ragmen surer).
     const secure = process.env.NODE_ENV === 'production';
+    const isLandscape = options?.tab === 'cost';
     const browser = await chromium.launch();
     try {
       const context = await browser.newContext({
         viewport: {
-          width: PDF_CONTENT_WIDTH_PX,
+          width: isLandscape ? COST_RENDER_WIDTH_PX : PDF_CONTENT_WIDTH_PX,
           height: PDF_VIEWPORT_HEIGHT_PX,
         },
       });
@@ -55,17 +72,25 @@ export class QuotePdfService {
        * Ad-hoc (bkz. docs/VARSAYIMLAR.md V41): teklifin bir QuoteTemplate'i varsa
        * markali cok sayfali yazdirma rotasina (quote-template-print-page.tsx)
        * gidilir; yoksa DEGISMEYEN mevcut sade rota kullanilir - baska hicbir PDF
-       * export'u (dashboard, sablonsuz teklif) bu daldan etkilenmez.
+       * export'u (dashboard, sablonsuz teklif) bu daldan etkilenmez. `tab` verilince
+       * (Maliyet/Grafikler) markali rota degil, her zaman duz /teklifler/:id rotasi
+       * `?tab=` ile kullanilir - bu iki tab'in kendi markali sablonu yok.
        */
-      const printPath = options?.branded
-        ? `/teklifler/${quoteId}/sablon-baski`
-        : `/teklifler/${quoteId}`;
-      await page.goto(`${frontendUrl}${printPath}?print=1`, {
+      const printPath =
+        options?.branded && !options.tab
+          ? `/teklifler/${quoteId}/sablon-baski`
+          : `/teklifler/${quoteId}`;
+      const tabQuery = options?.tab ? `&tab=${options.tab}` : '';
+      await page.goto(`${frontendUrl}${printPath}?print=1${tabQuery}`, {
         waitUntil: 'networkidle',
       });
-      await page.waitForTimeout(RENDER_SETTLE_MS);
+      await page.waitForTimeout(
+        options?.tab === 'charts' ? CHARTS_RENDER_SETTLE_MS : RENDER_SETTLE_MS,
+      );
       const pdf = await page.pdf({
         format: 'A4',
+        landscape: isLandscape,
+        scale: isLandscape ? COST_PDF_SCALE : undefined,
         printBackground: true,
         margin: { top: '12mm', bottom: '12mm', left: '10mm', right: '10mm' },
       });

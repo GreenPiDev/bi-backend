@@ -67,4 +67,46 @@ export class ExportsService {
       branded: quote.templateId !== null,
     });
   }
+
+  private async requireExportableQuote(quoteId: string): Promise<void> {
+    const quote = await this.quotes.getById(quoteId);
+    if (!QUOTE_EXPORTABLE_STATUSES.has(quote.status)) {
+      throw new AppException(
+        'QUOTE_NOT_READY',
+        'Bu teklif onay bekliyor veya reddedildi, PDF olarak disa aktarilamaz.',
+        HttpStatus.CONFLICT,
+      );
+    }
+  }
+
+  /** /teklifler/:id?tab=cost ekraninin kendi PDF export'u - ana teklif PDF'inden
+   * (exportQuotePdf) bagimsiz, markali sablon kullanmaz. */
+  async exportQuoteCostPdf(
+    quoteId: string,
+    user: RequestUser,
+  ): Promise<Buffer> {
+    await this.requireExportableQuote(quoteId);
+    const accessToken = this.tokenService.signAccessToken({
+      sub: user.id,
+      tenantId: user.tenantId,
+      roleIds: user.roleIds,
+      isPlatformAdmin: user.isPlatformAdmin,
+    });
+    return this.quotePdf.render(quoteId, accessToken, { tab: 'cost' });
+  }
+
+  /** /teklifler/:id?tab=charts ekraninin kendi PDF export'u - ayni gerekce. */
+  async exportQuoteChartsPdf(
+    quoteId: string,
+    user: RequestUser,
+  ): Promise<Buffer> {
+    await this.requireExportableQuote(quoteId);
+    const accessToken = this.tokenService.signAccessToken({
+      sub: user.id,
+      tenantId: user.tenantId,
+      roleIds: user.roleIds,
+      isPlatformAdmin: user.isPlatformAdmin,
+    });
+    return this.quotePdf.render(quoteId, accessToken, { tab: 'charts' });
+  }
 }

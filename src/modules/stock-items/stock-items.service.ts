@@ -159,7 +159,7 @@ function sortRows(
   rows: StockItemWithProduct[],
   sort: string | undefined,
 ): StockItemWithProduct[] {
-  const parsed = parseSort(sort, ['name'], {
+  const parsed = parseSort(sort, ['name', 'quantity'], {
     field: 'status',
     direction: 'asc',
   });
@@ -168,6 +168,10 @@ function sortRows(
     return [...rows].sort(
       (a, b) => dir * a.product.name.localeCompare(b.product.name, 'tr'),
     );
+  }
+  if (parsed.field === 'quantity') {
+    const dir = parsed.direction === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => dir * a.quantity.comparedTo(b.quantity));
   }
   return [...rows].sort(
     (a, b) =>

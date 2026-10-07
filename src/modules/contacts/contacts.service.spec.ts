@@ -183,6 +183,37 @@ describe('ContactsService', () => {
     );
   });
 
+  it('list: sort=account:asc, kisileri bagli firma adina gore Turkce siralar', async () => {
+    const prisma = createPrisma();
+    prisma.contact.findMany.mockResolvedValue([
+      { ...createContactRow(), id: '1', account: { name: 'Öztürk A.Ş.' } },
+      { ...createContactRow(), id: '2', account: { name: 'Acme' } },
+      { ...createContactRow(), id: '3', account: null },
+    ]);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 25,
+      sort: 'account:asc',
+    } as never);
+    expect(result.data.map((c) => c.id)).toEqual(['3', '2', '1']);
+  });
+
+  it('list: sort=account:desc, siralamayi ters cevirir', async () => {
+    const prisma = createPrisma();
+    prisma.contact.findMany.mockResolvedValue([
+      { ...createContactRow(), id: '1', account: { name: 'Öztürk A.Ş.' } },
+      { ...createContactRow(), id: '2', account: { name: 'Acme' } },
+    ]);
+    const service = new ContactsService(prisma as never, fakeAudit, fakeCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 25,
+      sort: 'account:desc',
+    } as never);
+    expect(result.data.map((c) => c.id)).toEqual(['1', '2']);
+  });
+
   it('list: status filtresi where kosuluna eklenir', async () => {
     const prisma = createPrisma();
     const service = new ContactsService(prisma as never, fakeAudit, fakeCache);

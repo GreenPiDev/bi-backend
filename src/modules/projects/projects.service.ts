@@ -1,7 +1,12 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { Project, ProjectAttachment, Quote } from '@prisma/client';
+import type {
+  Project,
+  ProjectAttachment,
+  Quote,
+  QuoteItem,
+} from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import {
   findIdsBySql,
@@ -31,7 +36,9 @@ export const MAX_PROJECT_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 export const MAX_PROJECT_ATTACHMENTS_PER_PROJECT = 10;
 
 const PROJECT_INCLUDE = {
-  quotes: true,
+  // items: genel toplam goruntulenebilsin diye (bkz. project-detail-page.tsx
+  // quoteGrandTotalDisplay) - MANUAL_TOTAL tekliflerde bos kalir, ITEMIZED'de gerekli.
+  quotes: { include: { items: true } },
   responsibles: true,
   attachments: true,
 } as const;
@@ -48,7 +55,7 @@ export interface ProjectAttachmentView {
 }
 
 export type ProjectWithQuotes = Project & {
-  quotes: Quote[];
+  quotes: (Quote & { items: QuoteItem[] })[];
   responsibleUsers: ProjectResponsibleUser[];
   attachments: ProjectAttachmentView[];
 };

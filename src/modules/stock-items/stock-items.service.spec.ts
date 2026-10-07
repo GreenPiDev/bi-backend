@@ -112,6 +112,66 @@ describe('StockItemsService', () => {
     ]);
   });
 
+  it('list: sort=name:asc, urunleri Turkce isme gore siralar', async () => {
+    const prisma = createPrisma({
+      products: [
+        createProductRow({ id: 'p1', name: 'Zebra' }),
+        createProductRow({ id: 'p2', name: 'Akor' }),
+      ],
+    });
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 20,
+      sort: 'name:asc',
+    } as never);
+    expect(result.data.map((row) => row.productId)).toEqual(['p2', 'p1']);
+  });
+
+  it('list: sort=quantity:asc, miktara gore kucukten buyuge siralar', async () => {
+    const prisma = createPrisma({
+      products: [
+        createProductRow({
+          id: 'p1',
+          stockItems: [stockItem({ id: 's1', quantity: '10.000' })],
+        }),
+        createProductRow({
+          id: 'p2',
+          stockItems: [stockItem({ id: 's2', quantity: '2.000' })],
+        }),
+      ],
+    });
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 20,
+      sort: 'quantity:asc',
+    } as never);
+    expect(result.data.map((row) => row.productId)).toEqual(['p2', 'p1']);
+  });
+
+  it('list: sort=quantity:desc, miktara gore buyukten kucuge siralar', async () => {
+    const prisma = createPrisma({
+      products: [
+        createProductRow({
+          id: 'p1',
+          stockItems: [stockItem({ id: 's1', quantity: '10.000' })],
+        }),
+        createProductRow({
+          id: 'p2',
+          stockItems: [stockItem({ id: 's2', quantity: '2.000' })],
+        }),
+      ],
+    });
+    const service = new StockItemsService(prisma as never, fakeProductsCache);
+    const result = await service.list({
+      page: 1,
+      pageSize: 20,
+      sort: 'quantity:desc',
+    } as never);
+    expect(result.data.map((row) => row.productId)).toEqual(['p1', 'p2']);
+  });
+
   it('listLowStock: minStockLevel tanimsizsa disari birakir', async () => {
     const prisma = createPrisma({
       products: [

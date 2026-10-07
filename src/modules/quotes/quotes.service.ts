@@ -61,6 +61,7 @@ const QUOTE_INCLUDE = {
   contact: true,
   opportunity: true,
   template: true,
+  project: { select: { id: true, projectNumber: true, name: true } },
   items: { include: { product: { include: { productList: true } } } },
 } as const;
 
@@ -69,6 +70,7 @@ export type QuoteWithDetails = Quote & {
   contact: Contact | null;
   opportunity: Opportunity | null;
   template: QuoteTemplate | null;
+  project: { id: string; projectNumber: string; name: string } | null;
   items: (QuoteItem & { product: Product & { productList: ProductList } })[];
   createdByName: string | null;
 };
@@ -112,6 +114,7 @@ type QuoteRow = Quote & {
   contact: Contact | null;
   opportunity: Opportunity | null;
   template: QuoteTemplate | null;
+  project: { id: string; projectNumber: string; name: string } | null;
   items: (QuoteItem & { product: Product & { productList: ProductList } })[];
 };
 

@@ -20,14 +20,31 @@ import type {
   UpdateContactDto,
 } from './dto/contact.dto';
 
-const SORTABLE_FIELDS = ['lastName', 'firstName', 'createdAt'] as const;
+const SORTABLE_FIELDS = [
+  'lastName',
+  'firstName',
+  'account',
+  'createdAt',
+] as const;
 // Bu projenin Prisma surumunde orderBy `mode: 'insensitive'` desteklemiyor (sadece
 // where filtrelerinde var) ve DB'nin varsayilan collation'i ASCII sirasi kullaniyor
 // ("M" < "a"), o yuzden bu alanlar icin DB-seviyesi siralamaya guvenilmiyor -
 // eslesen tum kayitlar cekilip Intl.Collator ile JS tarafinda siralanip sonra
-// sayfalaniyor (bkz. asagidaki list()).
-const CASE_INSENSITIVE_SORT_FIELDS = new Set<string>(['firstName', 'lastName']);
+// sayfalaniyor (bkz. asagidaki list()). `account` bir iliski oldugu icin ayrica
+// orderBy: { account: { name } } Prisma'da da mumkun degil (ayni case-insensitive
+// kisitiyla), o yuzden ayni JS-tarafi dala giriyor.
+const CASE_INSENSITIVE_SORT_FIELDS = new Set<string>([
+  'firstName',
+  'lastName',
+  'account',
+]);
 const nameCollator = new Intl.Collator('tr', { sensitivity: 'base' });
+type SortableContactRow = Contact & { account: { name: string } | null };
+const SORT_ACCESSORS: Record<string, (row: SortableContactRow) => string> = {
+  firstName: (row) => row.firstName,
+  lastName: (row) => row.lastName,
+  account: (row) => row.account?.name ?? '',
+};
 
 export type ContactWithMeta = Contact & { createdByName: string | null };
 
@@ -121,13 +138,13 @@ export class ContactsService {
     };
 
     if (CASE_INSENSITIVE_SORT_FIELDS.has(field)) {
-      const sortField = field as 'firstName' | 'lastName';
+      const accessor = SORT_ACCESSORS[field];
       const all = await this.prisma.contact.findMany({
         where,
         include: { account: { select: { id: true, name: true } } },
       });
       all.sort((a, b) => {
-        const cmp = nameCollator.compare(a[sortField], b[sortField]);
+        const cmp = nameCollator.compare(accessor(a), accessor(b));
         return direction === 'asc' ? cmp : -cmp;
       });
       const total = all.length;

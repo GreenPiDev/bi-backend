@@ -75,4 +75,36 @@ export class ExportsController {
     });
     res.send(pdf);
   }
+
+  @Post('quote/:id/cost-pdf')
+  @RequiresPermission('quotes', 'EXPORT')
+  @HttpCode(HttpStatus.OK)
+  async exportQuoteCostPdf(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.exports.exportQuoteCostPdf(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="teklif-${id}-maliyet.pdf"`,
+    });
+    res.send(pdf);
+  }
+
+  @Post('quote/:id/charts-pdf')
+  @RequiresPermission('quotes', 'EXPORT')
+  @HttpCode(HttpStatus.OK)
+  async exportQuoteChartsPdf(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ): Promise<void> {
+    const pdf = await this.exports.exportQuoteChartsPdf(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="teklif-${id}-grafikler.pdf"`,
+    });
+    res.send(pdf);
+  }
 }
