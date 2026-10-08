@@ -14,6 +14,11 @@ function createPrisma() {
 const AUDIT_STUB = { log: vi.fn() } as never;
 const STORAGE_STUB = {} as never;
 const FILE_URL_STUB = { build: vi.fn().mockReturnValue(null) } as never;
+const PROFILE_CACHE_STUB = {
+  get: vi.fn().mockResolvedValue(null),
+  set: vi.fn(),
+  invalidate: vi.fn(),
+} as never;
 
 function createPageModules(
   assignments: { pageKey: string; label: string; moduleKeys: string[] }[] = [],
@@ -32,6 +37,7 @@ describe('TenantsService modulleri', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     const modules = await service.listModules('t1');
     expect(modules).toEqual([
@@ -60,6 +66,7 @@ describe('TenantsService modulleri', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     await expect(
       service.enableModule('t1', 'yok-boyle-modul'),
@@ -76,6 +83,7 @@ describe('TenantsService modulleri', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     await expect(service.disableModule('t1', 'core')).rejects.toMatchObject({
       code: 'MODULE_ALWAYS_ON',
@@ -96,6 +104,7 @@ describe('TenantsService.listPageAccess', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     const access = await service.listPageAccess('t1');
     expect(access).toEqual([
@@ -114,6 +123,7 @@ describe('TenantsService.listPageAccess', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     const access = await service.listPageAccess('t1');
     expect(access).toEqual([
@@ -133,6 +143,7 @@ describe('TenantsService.listPageAccess', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     const access = await service.listPageAccess('t1');
     expect(access).toEqual([
@@ -152,6 +163,7 @@ describe('TenantsService.listPageAccess', () => {
       AUDIT_STUB,
       STORAGE_STUB,
       FILE_URL_STUB,
+      PROFILE_CACHE_STUB,
     );
     const access = await service.listPageAccess('t1');
     expect(access[0].accessible).toBe(true);

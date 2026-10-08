@@ -6,6 +6,8 @@ const fakeFileUrl = { build: vi.fn(() => null) } as never;
 const fakeCalendarEventsCache = {
   get: vi.fn().mockResolvedValue(null),
   set: vi.fn(),
+  getPendingInvites: vi.fn().mockResolvedValue(null),
+  setPendingInvites: vi.fn(),
   invalidate: vi.fn(),
 } as never;
 const fakeRealtime = { emitToTenant: vi.fn() } as never;

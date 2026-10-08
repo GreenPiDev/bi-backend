@@ -8,7 +8,11 @@ function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 const productsCacheInvalidate = vi.fn();
-const fakeProductsCache = { invalidate: productsCacheInvalidate } as never;
+const fakeProductsCache = {
+  invalidate: productsCacheInvalidate,
+  getLowStock: vi.fn().mockResolvedValue(null),
+  setLowStock: vi.fn(),
+} as never;
 
 function createProductRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {

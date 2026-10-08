@@ -298,14 +298,20 @@ export class StockItemsService {
    * girilmemisse 0 varsayilan) bu esige esit ya da altindaysa dusuk stok sayilir.
    */
   async listLowStock(): Promise<StockItemWithProduct[]> {
+    const cached = await this.productsCache.getLowStock();
+    if (cached) {
+      return cached;
+    }
     const rows = await this.resolveRows();
-    return rows.filter((row) => {
+    const lowStockRows = rows.filter((row) => {
       const minStockLevel = row.product.minStockLevel;
       if (minStockLevel === null || minStockLevel === undefined) {
         return false;
       }
       return Number(row.quantity) <= minStockLevel;
     });
+    await this.productsCache.setLowStock(lowStockRows);
+    return lowStockRows;
   }
 
   private async requireProduct(

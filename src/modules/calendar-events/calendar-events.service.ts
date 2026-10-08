@@ -613,6 +613,10 @@ export class CalendarEventsService {
   async listPendingInvites(
     currentUserId: string,
   ): Promise<PendingCalendarInvite[]> {
+    const cached = await this.cache.getPendingInvites(currentUserId);
+    if (cached) {
+      return cached;
+    }
     const rows = await this.prisma.calendarEventAttendee.findMany({
       where: {
         userId: currentUserId,
@@ -632,7 +636,7 @@ export class CalendarEventsService {
       : [];
     const creatorNameById = new Map(creators.map((u) => [u.id, u.name]));
 
-    return rows.map((row) => ({
+    const result = rows.map((row) => ({
       attendeeId: row.id,
       eventId: row.event.id,
       eventTitle: row.event.title,
@@ -644,6 +648,8 @@ export class CalendarEventsService {
       creatorName:
         creatorNameById.get(row.event.createdById) ?? 'Bir kullanici',
     }));
+    await this.cache.setPendingInvites(currentUserId, result);
+    return result;
   }
 
   /** Kullanicinin olusturdugu etkinliklerde, kendisi disindaki tum katilimci

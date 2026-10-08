@@ -20,6 +20,7 @@ import { detectImageExtension } from '../../core/validators/image-upload-validat
 import { AuditService } from '../audit/audit.service';
 import type { UpdateCompanyInfoDto } from './dto/update-company-info.dto';
 import { slugify } from './slugify';
+import { TenantProfileCacheService } from './tenant-profile-cache.service';
 
 export interface CreateTenantWithAdminInput {
   tenantName: string;
@@ -81,6 +82,7 @@ export class TenantsService {
     private readonly audit: AuditService,
     private readonly storage: R2StorageService,
     private readonly fileUrl: FileUrlService,
+    private readonly profileCache: TenantProfileCacheService,
   ) {}
 
   async createTenantWithUniqueSlug(
@@ -377,14 +379,21 @@ export class TenantsService {
       entityId: tenantId,
       meta: { companyInfoUpdated: true },
     });
+    await this.profileCache.invalidate(tenantId);
     return this.toProfile(updated);
   }
 
   async getProfile(tenantId: string): Promise<TenantProfile> {
+    const cached = await this.profileCache.get(tenantId);
+    if (cached) {
+      return cached;
+    }
     const tenant = await this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
     });
-    return this.toProfile(tenant);
+    const profile = this.toProfile(tenant);
+    await this.profileCache.set(tenantId, profile);
+    return profile;
   }
 
   /** Sirket logosu - kullanici avatariyla ayni desen (bkz. UsersService.uploadAvatar):
@@ -416,6 +425,7 @@ export class TenantsService {
       entityId: tenantId,
       meta: { logoUploaded: true },
     });
+    await this.profileCache.invalidate(tenantId);
     return this.toProfile(updated);
   }
 
@@ -436,6 +446,7 @@ export class TenantsService {
       entityId: tenantId,
       meta: { logoRemoved: true },
     });
+    await this.profileCache.invalidate(tenantId);
     return this.toProfile(updated);
   }
 

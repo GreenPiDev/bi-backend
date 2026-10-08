@@ -1,4 +1,8 @@
 import { Controller, HttpCode, Post } from '@nestjs/common';
+import {
+  CurrentUser,
+  type RequestUser,
+} from '../../core/decorators/current-user.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { CalendarEventsCacheService } from '../calendar-events/calendar-events-cache.service';
@@ -10,6 +14,7 @@ import { ProductsCacheService } from '../products/products-cache.service';
 import { ProjectsCacheService } from '../projects/projects-cache.service';
 import { PurchaseOrdersCacheService } from '../purchase-orders/purchase-orders-cache.service';
 import { QuotesCacheService } from '../quotes/quotes-cache.service';
+import { TenantProfileCacheService } from '../tenants/tenant-profile-cache.service';
 
 /**
  * Ayarlar > Genel sekmesindeki "Önbellekleri Boşalt" butonu icin - normalde
@@ -20,7 +25,9 @@ import { QuotesCacheService } from '../quotes/quotes-cache.service';
  * kalir. Bu uc, o kacis yolu icin - TTL'siz liste cache'i olan tum
  * modulleri kapsar (accounts, opportunities, quotes, projects,
  * purchase-orders, post-sale-cases, interactions, messages, products,
- * calendar-events).
+ * calendar-events, tenant profili). products.invalidate() dusuk stok
+ * listesini, calendarEvents.invalidate() bekleyen davetleri de kapsar
+ * (bkz. ilgili cache servisindeki genisletilmis anahtar deseni).
  */
 @Controller('cache')
 export class CacheController {
@@ -35,12 +42,13 @@ export class CacheController {
     private readonly messagesCache: MessagesCacheService,
     private readonly productsCache: ProductsCacheService,
     private readonly calendarEventsCache: CalendarEventsCacheService,
+    private readonly tenantProfileCache: TenantProfileCacheService,
   ) {}
 
   @Post('clear')
   @RequiresPermission('settings', 'UPDATE', 'general')
   @HttpCode(204)
-  async clear(): Promise<void> {
+  async clear(@CurrentUser() user: RequestUser): Promise<void> {
     await Promise.all([
       this.accountsCache.invalidate(),
       this.opportunitiesCache.invalidate(),
@@ -52,6 +60,7 @@ export class CacheController {
       this.messagesCache.invalidate(),
       this.productsCache.invalidate(),
       this.calendarEventsCache.invalidate(),
+      this.tenantProfileCache.invalidate(user.tenantId),
     ]);
   }
 }

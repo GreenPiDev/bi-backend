@@ -9,6 +9,7 @@ import { ProductsModule } from '../products/products.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { PurchaseOrdersModule } from '../purchase-orders/purchase-orders.module';
 import { QuotesModule } from '../quotes/quotes.module';
+import { TenantsModule } from '../tenants/tenants.module';
 import { CacheController } from './cache.controller';
 
 @Module({
@@ -23,6 +24,7 @@ import { CacheController } from './cache.controller';
     MessagesModule,
     ProductsModule,
     CalendarEventsModule,
+    TenantsModule,
   ],
   controllers: [CacheController],
 })

@@ -134,6 +134,7 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     label: 'Pano Sablonlari',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
+  { key: 'home', label: 'Ana Sayfa', alwaysVisible: true },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
   {
     key: 'settings',
