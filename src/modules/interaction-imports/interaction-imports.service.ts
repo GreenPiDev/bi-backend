@@ -24,7 +24,7 @@ import type {
 } from './dto/interaction-import.dto';
 
 const PREVIEW_SAMPLE_SIZE = 10;
-const RAW_PREVIEW_ROW_COUNT = 14;
+const RAW_PREVIEW_ROW_COUNT = 9;
 
 export interface InteractionImportRowError {
   row: number;

@@ -18,7 +18,7 @@ import type {
 import { normalizeCurrency, parseImportNumber } from './number-format';
 
 const PREVIEW_SAMPLE_SIZE = 10;
-const RAW_PREVIEW_ROW_COUNT = 14;
+const RAW_PREVIEW_ROW_COUNT = 9;
 /** parseImportNumber ile sayiya cevrilmesi gereken hedef alanlar - currency ayrica
  * normalizeCurrency'den gecer (bkz. asagida), digerleri (name, sku, unit, description,
  * category) string olarak birebir gecer. */

@@ -22,7 +22,7 @@ import type {
 const DEFAULT_CURRENCY = 'TRY';
 
 const PREVIEW_SAMPLE_SIZE = 10;
-const RAW_PREVIEW_ROW_COUNT = 14;
+const RAW_PREVIEW_ROW_COUNT = 9;
 
 /** M1/M2'deki (interactions.service.ts) ve interaction-imports.service.ts'teki ayni
  * "Ahmet Yilmaz" -> {firstName:'Ahmet', lastName:'Yilmaz'} bolme mantigi - kucuk/saf
