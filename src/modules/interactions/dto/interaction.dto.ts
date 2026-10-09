@@ -113,6 +113,9 @@ export const UpdateInteractionSchema = z.object({
    * gondermez, bkz. schema.prisma Interaction.parentInteractionId/performedByUserId. */
   contactId: z.string().uuid().optional(),
   performedByUserId: z.string().uuid().optional(),
+  /** M10: verilince mevcut katilimci listesinin tamamini degistirir (replace), tekil
+   * ekleme/cikarma ucu yok - bkz. InteractionsService.update. */
+  participants: z.array(ParticipantSchema).max(20).optional(),
 });
 export type UpdateInteractionDto = z.infer<typeof UpdateInteractionSchema>;
 

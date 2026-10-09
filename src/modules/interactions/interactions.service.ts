@@ -626,7 +626,23 @@ export class InteractionsService {
         );
       }
     }
-    await this.prisma.interaction.update({ where: { id }, data: dto });
+    const { participants, ...rest } = dto;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.interaction.update({ where: { id }, data: rest });
+      if (participants) {
+        await tx.interactionParticipant.deleteMany({
+          where: { interactionId: id },
+        });
+        if (participants.length > 0) {
+          await tx.interactionParticipant.createMany({
+            data: participants.map((participant) => ({
+              ...participant,
+              interactionId: id,
+            })),
+          });
+        }
+      }
+    });
     await this.audit.log({
       action: 'UPDATE',
       entity: 'Interaction',

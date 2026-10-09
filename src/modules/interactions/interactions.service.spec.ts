@@ -92,6 +92,10 @@ function createPrisma(interactionRow: unknown = createInteractionRow()) {
         ),
       findFirst: vi.fn().mockResolvedValue({ id: USER_ID }),
     },
+    interactionParticipant: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(client)),
   };
   return client;
@@ -676,6 +680,75 @@ describe('InteractionsService', () => {
       where: { id: 'interaction-1' },
       data: { contactId: 'contact-1', performedByUserId: USER_ID },
     });
+    expect(prisma.interactionParticipant.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('update: participants verilmezse mevcut katilimcilara dokunulmaz (M10)', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+      fakeListPdf,
+    );
+    await service.update('interaction-1', { notes: 'Guncellendi' } as never);
+    expect(prisma.interactionParticipant.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.interactionParticipant.createMany).not.toHaveBeenCalled();
+  });
+
+  it('update: participants verilirse mevcut liste silinip yenisiyle degistirilir (M10)', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+      fakeListPdf,
+    );
+    await service.update('interaction-1', {
+      participants: [
+        { name: 'Karsi Taraf', isInternal: false, note: 'Yetkili' },
+      ],
+    } as never);
+    expect(prisma.interactionParticipant.deleteMany).toHaveBeenCalledWith({
+      where: { interactionId: 'interaction-1' },
+    });
+    expect(prisma.interactionParticipant.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          name: 'Karsi Taraf',
+          isInternal: false,
+          note: 'Yetkili',
+          interactionId: 'interaction-1',
+        },
+      ],
+    });
+  });
+
+  it('update: bos participants dizisi mevcut listeyi tamamen temizler (M10)', async () => {
+    const prisma = createPrisma();
+    const service = new InteractionsService(
+      prisma as never,
+      fakeAudit,
+      fakeAccountsCache,
+      fakeCalendarEventsCache,
+      fakeCalendarEvents,
+      fakeInteractionsCache,
+      fakeOpportunitiesCache,
+      fakeListPdf,
+    );
+    await service.update('interaction-1', { participants: [] } as never);
+    expect(prisma.interactionParticipant.deleteMany).toHaveBeenCalledWith({
+      where: { interactionId: 'interaction-1' },
+    });
+    expect(prisma.interactionParticipant.createMany).not.toHaveBeenCalled();
   });
 
   it('remove: gorusmeyi siler ve audit log yazar', async () => {

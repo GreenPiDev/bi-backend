@@ -1,4 +1,7 @@
-import { CreateInteractionSchema } from './interaction.dto';
+import {
+  CreateInteractionSchema,
+  UpdateInteractionSchema,
+} from './interaction.dto';
 
 describe('Interaction DTO', () => {
   const base = {
@@ -93,5 +96,38 @@ describe('Interaction DTO', () => {
       parentInteractionId: '11111111-1111-1111-8111-111111111111',
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('UpdateInteractionSchema (M10: Diger Katilimcilar duzenleme)', () => {
+  it('participants verilmezse gecerlidir (mevcut listeye dokunulmaz)', () => {
+    const result = UpdateInteractionSchema.safeParse({ notes: 'Guncellendi' });
+    expect(result.success).toBe(true);
+  });
+
+  it('bos participants dizisi gecerlidir (tum katilimcilar silinir)', () => {
+    const result = UpdateInteractionSchema.safeParse({ participants: [] });
+    expect(result.success).toBe(true);
+  });
+
+  it('gecerli participants dizisi kabul edilir', () => {
+    const result = UpdateInteractionSchema.safeParse({
+      participants: [
+        { name: 'Ahmet Yilmaz', isInternal: true },
+        {
+          name: 'Karsi Taraf',
+          isInternal: false,
+          note: 'Satin alma yetkilisi',
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('bos isimli katilimci reddedilir', () => {
+    const result = UpdateInteractionSchema.safeParse({
+      participants: [{ name: '', isInternal: true }],
+    });
+    expect(result.success).toBe(false);
   });
 });
