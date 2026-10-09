@@ -26,12 +26,14 @@ import {
   CreateQuoteSchema,
   FxRatesQuerySchema,
   QuoteQuerySchema,
+  QuoteReportsQuerySchema,
   RejectQuoteSchema,
   UpdateQuoteSchema,
   type ApproveQuoteDto,
   type CreateQuoteDto,
   type FxRatesQueryDto,
   type QuoteQueryDto,
+  type QuoteReportsQueryDto,
   type RejectQuoteDto,
   type UpdateQuoteDto,
 } from './dto/quote.dto';
@@ -102,17 +104,21 @@ export class QuotesController {
    * once tanimlanmali, ayni desen (bkz. fx-rates/revision-summary/assignable-users). */
   @Get('rejection-reasons-summary')
   @RequiresPermission('quotes', 'VIEW')
-  getRejectionReasonsSummary(): Promise<
-    { reason: string | null; count: number }[]
-  > {
-    return this.quotes.getRejectionReasonsSummary();
+  getRejectionReasonsSummary(
+    @Query(new ZodValidationPipe(QuoteReportsQuerySchema))
+    query: QuoteReportsQueryDto,
+  ): Promise<{ reason: string | null; count: number }[]> {
+    return this.quotes.getRejectionReasonsSummary(query.from, query.to);
   }
 
   /** /teklifler?tab=reports "Reddedilme Notları" collapsible tablosu - `:id` route'undan
    * once tanimlanmali, ayni desen (bkz. fx-rates/revision-summary/rejection-reasons-summary). */
   @Get('rejected-reasons-list')
   @RequiresPermission('quotes', 'VIEW')
-  getRejectedQuotesWithReasons(): Promise<
+  getRejectedQuotesWithReasons(
+    @Query(new ZodValidationPipe(QuoteReportsQuerySchema))
+    query: QuoteReportsQueryDto,
+  ): Promise<
     {
       id: string;
       quoteNumber: string;
@@ -122,7 +128,7 @@ export class QuotesController {
       note: string | null;
     }[]
   > {
-    return this.quotes.getRejectedQuotesWithReasons();
+    return this.quotes.getRejectedQuotesWithReasons(query.from, query.to);
   }
 
   @Get(':id')

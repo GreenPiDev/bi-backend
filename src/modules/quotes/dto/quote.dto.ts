@@ -177,3 +177,11 @@ export const QuoteQuerySchema = ListQuerySchema.extend({
 /** `q` (ListQuerySchema'dan miras) - serbest metin arama: baslik, teklif no, firma adi,
  * olusturan kullanici adi (bkz. QuotesService.list). */
 export type QuoteQueryDto = z.infer<typeof QuoteQuerySchema>;
+
+/** /teklifler?tab=reports filtre penceresi - KPI kartlari/grafikler icin ayni
+ * tek-tarih/aralik deseni (bkz. QuoteQuerySchema.from/to), ama sayfalama/arama yok. */
+export const QuoteReportsQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+});
+export type QuoteReportsQueryDto = z.infer<typeof QuoteReportsQuerySchema>;

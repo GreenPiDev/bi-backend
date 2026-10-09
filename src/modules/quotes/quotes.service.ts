@@ -557,11 +557,22 @@ export class QuotesService {
    * (bkz. QuoteStatusHistory.reason, reject()/update() akislarinda artik zorunlu secim)
    * gruplanir. Sebebi olmayan (bu alan eklenmeden once reddedilmis) tekliflerin sayisi
    * `reason: null` ile tek bir grupta doner, frontend bunu "Belirtilmemiş" olarak gosterir. */
-  async getRejectionReasonsSummary(): Promise<
-    { reason: string | null; count: number }[]
-  > {
+  async getRejectionReasonsSummary(
+    from?: Date,
+    to?: Date,
+  ): Promise<{ reason: string | null; count: number }[]> {
     const rejectedQuotes = await this.prisma.quote.findMany({
-      where: { status: 'REJECTED' },
+      where: {
+        status: 'REJECTED',
+        ...(from || to
+          ? {
+              quoteDate: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
       select: { id: true },
     });
     if (rejectedQuotes.length === 0) {
@@ -590,7 +601,10 @@ export class QuotesService {
    * teklifin numarasi/firmasi + en son REJECTED durum gecmisi satirinin sebebi/notu.
    * getRejectionReasonsSummary() ile ayni veriyi okur, ama gruplamak yerine satir
    * bazinda (en yeni reddedilen ustte) dondurur. */
-  async getRejectedQuotesWithReasons(): Promise<
+  async getRejectedQuotesWithReasons(
+    from?: Date,
+    to?: Date,
+  ): Promise<
     {
       id: string;
       quoteNumber: string;
@@ -601,7 +615,17 @@ export class QuotesService {
     }[]
   > {
     const rejectedQuotes = await this.prisma.quote.findMany({
-      where: { status: 'REJECTED' },
+      where: {
+        status: 'REJECTED',
+        ...(from || to
+          ? {
+              quoteDate: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
       select: {
         id: true,
         quoteNumber: true,
