@@ -48,6 +48,10 @@ function createQuotePdf() {
   return { render: vi.fn().mockResolvedValue(Buffer.from('quote-pdf-bytes')) };
 }
 
+function createReportPdf() {
+  return { render: vi.fn().mockResolvedValue(Buffer.from('report-pdf-bytes')) };
+}
+
 function createQuotes(
   status: string = 'APPROVED',
   templateId: string | null = null,
@@ -68,6 +72,7 @@ function buildService(overrides: Partial<Record<string, unknown>> = {}) {
     (overrides.tokenService ?? createTokenService()) as never,
     (overrides.dashboardPdf ?? createDashboardPdf()) as never,
     (overrides.quotePdf ?? createQuotePdf()) as never,
+    (overrides.reportPdf ?? createReportPdf()) as never,
   );
 }
 
@@ -154,6 +159,42 @@ describe('ExportsService', () => {
     };
     await expect(service.exportQuotePdf(QUOTE_ID, user)).rejects.toMatchObject({
       code: 'QUOTE_NOT_READY',
+    });
+  });
+
+  it('exportReportsPdf: bilinen bir tab icin kisa omurlu token uretip PDF uretir', async () => {
+    const tokenService = createTokenService();
+    const reportPdf = createReportPdf();
+    const service = buildService({ tokenService, reportPdf });
+    const user = {
+      id: 'u1',
+      tenantId: TENANT_ID,
+      roleIds: ['role-1'],
+      isPlatformAdmin: false,
+    };
+    const pdf = await service.exportReportsPdf('quotes', user);
+    expect(tokenService.signAccessToken).toHaveBeenCalledWith({
+      sub: 'u1',
+      tenantId: TENANT_ID,
+      roleIds: ['role-1'],
+      isPlatformAdmin: false,
+    });
+    expect(reportPdf.render).toHaveBeenCalledWith('quotes', 'signed-token');
+    expect(pdf.toString()).toBe('report-pdf-bytes');
+  });
+
+  it('exportReportsPdf: bilinmeyen tab icin UNKNOWN_REPORT_TAB firlatir', async () => {
+    const service = buildService();
+    const user = {
+      id: 'u1',
+      tenantId: TENANT_ID,
+      roleIds: ['role-1'],
+      isPlatformAdmin: false,
+    };
+    await expect(
+      service.exportReportsPdf('unknown', user),
+    ).rejects.toMatchObject({
+      code: 'UNKNOWN_REPORT_TAB',
     });
   });
 });

@@ -107,4 +107,27 @@ export class ExportsController {
     });
     res.send(pdf);
   }
+
+  @Post('reports/pdf')
+  @RequiresPermission('reports', 'EXPORT')
+  @HttpCode(HttpStatus.OK)
+  async exportReportsPdf(
+    @Query('tab') tab: string | undefined,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ): Promise<void> {
+    if (!tab) {
+      throw new AppException(
+        'UNKNOWN_REPORT_TAB',
+        'Bilinmeyen rapor sekmesi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const pdf = await this.exports.exportReportsPdf(tab, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="raporlar-${tab}.pdf"`,
+    });
+    res.send(pdf);
+  }
 }

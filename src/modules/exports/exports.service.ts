@@ -10,6 +10,7 @@ import { WidgetsService } from '../widgets/widgets.service';
 import { buildCsv } from './csv';
 import { DashboardPdfService } from './dashboard-pdf.service';
 import { QuotePdfService } from './quote-pdf.service';
+import { isKnownReportTab, ReportPdfService } from './report-pdf.service';
 
 const QUOTE_EXPORTABLE_STATUSES = new Set(['DRAFT', 'APPROVED']);
 
@@ -23,6 +24,7 @@ export class ExportsService {
     private readonly tokenService: TokenService,
     private readonly dashboardPdf: DashboardPdfService,
     private readonly quotePdf: QuotePdfService,
+    private readonly reportPdf: ReportPdfService,
   ) {}
 
   async exportWidgetCsv(widgetId: string, tenantId: string): Promise<string> {
@@ -108,5 +110,22 @@ export class ExportsService {
       isPlatformAdmin: user.isPlatformAdmin,
     });
     return this.quotePdf.render(quoteId, accessToken, { tab: 'charts' });
+  }
+
+  async exportReportsPdf(tab: string, user: RequestUser): Promise<Buffer> {
+    if (!isKnownReportTab(tab)) {
+      throw new AppException(
+        'UNKNOWN_REPORT_TAB',
+        'Bilinmeyen rapor sekmesi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const accessToken = this.tokenService.signAccessToken({
+      sub: user.id,
+      tenantId: user.tenantId,
+      roleIds: user.roleIds,
+      isPlatformAdmin: user.isPlatformAdmin,
+    });
+    return this.reportPdf.render(tab, accessToken);
   }
 }

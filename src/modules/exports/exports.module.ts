@@ -8,6 +8,7 @@ import { DashboardPdfService } from './dashboard-pdf.service';
 import { ExportsController } from './exports.controller';
 import { ExportsService } from './exports.service';
 import { QuotePdfService } from './quote-pdf.service';
+import { ReportPdfService } from './report-pdf.service';
 
 @Module({
   imports: [
@@ -18,7 +19,12 @@ import { QuotePdfService } from './quote-pdf.service';
     QuotesModule,
   ],
   controllers: [ExportsController],
-  providers: [ExportsService, DashboardPdfService, QuotePdfService],
+  providers: [
+    ExportsService,
+    DashboardPdfService,
+    QuotePdfService,
+    ReportPdfService,
+  ],
   exports: [DashboardPdfService],
 })
 export class ExportsModule {}

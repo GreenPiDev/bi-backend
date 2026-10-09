@@ -120,6 +120,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['CREATE'],
   },
   {
+    key: 'reports',
+    label: 'Raporlar',
+    supportedActions: ['EXPORT'],
+  },
+  {
     key: 'drawings',
     label: 'Teknik Cizimler',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'EXPORT'],
