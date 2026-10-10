@@ -131,6 +131,7 @@ export class ProductsService {
       attr,
       includeDeleted,
       sort,
+      drawable,
     } = query;
 
     const attrConditions = attr
@@ -165,6 +166,18 @@ export class ProductsService {
       ...(brand ? { brand } : {}),
       ...(category ? { category } : {}),
       ...(attrConditions.length > 0 ? { AND: attrConditions } : {}),
+      ...(drawable
+        ? {
+            drawingSpec: {
+              is: {
+                widthMm: { not: null },
+                heightMm: { not: null },
+                libraryComponentKey: { not: null },
+                bandKey: { not: null },
+              },
+            },
+          }
+        : {}),
     };
 
     // "Silinmis Urunleri Goster" acikken tenant-scoped extension'in otomatik
@@ -181,12 +194,12 @@ export class ProductsService {
       ? await this.rawPrisma.product.findMany({
           where: { ...where, tenantId: TenantContext.getOrThrow().tenantId },
           orderBy: { name: 'asc' },
-          include: { productList: true, stockItems: true },
+          include: { productList: true, stockItems: true, drawingSpec: true },
         })
       : await this.prisma.product.findMany({
           where,
           orderBy: { name: 'asc' },
-          include: { productList: true, stockItems: true },
+          include: { productList: true, stockItems: true, drawingSpec: true },
         });
 
     // Stok miktarini /stok sayfasindaki ayni desenle (resolveRows) tek alana indirgiyoruz:

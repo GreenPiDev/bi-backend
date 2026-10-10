@@ -84,6 +84,13 @@ export const ProductQuerySchema = ListQuerySchema.extend({
   includeDeleted: z
     .preprocess((value) => value === 'true' || value === true, z.boolean())
     .default(false),
+  /** Sadece oto. pano cizim motorunda kullanilabilir (drawingSpec'in tum zorunlu
+   * alanlari dolu) urunleri dondurur - bkz. drawing-imports onizleme ekrani,
+   * `pageSize` sinirinin tum katalogu (binlerce urun olabilir) client'a cekmeden
+   * dogru calismasi icin bu filtre backend'de uygulanir. */
+  drawable: z
+    .preprocess((value) => value === 'true' || value === true, z.boolean())
+    .optional(),
 });
 export type ProductQueryDto = z.infer<typeof ProductQuerySchema>;
 
