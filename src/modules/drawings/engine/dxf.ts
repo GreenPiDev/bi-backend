@@ -80,7 +80,12 @@ function labelFontHeight(heightMm: number): number {
 }
 
 function elementEntities(layer: string, el: DrawingElementInstance): string[] {
-  const fontHeight = labelFontHeight(el.heightMm);
+  // render-svg.ts ile ayni ilke: etiket kullanici tarafindan ayrica
+  // tasinmis/boyutlandirilmissa (labelX/Y/labelFontSizeMm) o degerler kullanilir,
+  // yoksa kutunun merkezine otomatik puntoyla yerlesir.
+  const fontHeight = el.labelFontSizeMm ?? labelFontHeight(el.heightMm);
+  const labelCx = el.labelX ?? el.x + el.widthMm / 2;
+  const labelCy = el.labelY ?? el.y + el.heightMm / 2;
   return [
     ...closedPolyline(
       layer,
@@ -88,8 +93,8 @@ function elementEntities(layer: string, el: DrawingElementInstance): string[] {
     ),
     ...textEntity(
       layer,
-      el.x + el.widthMm / 2 - el.label.length * fontHeight * 0.3,
-      el.y + el.heightMm / 2 - fontHeight / 2,
+      labelCx - el.label.length * fontHeight * 0.3,
+      labelCy - fontHeight / 2,
       fontHeight,
       el.label,
     ),

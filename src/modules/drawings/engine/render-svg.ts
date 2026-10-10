@@ -54,12 +54,16 @@ function renderView(model: DrawingModel, viewKey: DrawingViewKey): string {
   }
 
   for (const el of view.elements) {
-    const label = renderCenteredText(
-      el.label,
-      el.x + el.widthMm / 2,
-      el.y + el.heightMm / 2,
-      fitFontSize(el.label, el.widthMm, el.heightMm),
-    );
+    // Etiket, kullanici editorde ayrica tasimis/boyutlandirmissa (labelX/Y/
+    // labelWidthMm/labelFontSizeMm) o konum/boyutu kullanir; yoksa (eski cizimler,
+    // veya hic duzenlenmemis yeni cizimler) kutunun merkezine, otomatik punto ile
+    // yerlesir - bkz. docs/VARSAYIMLAR.md, "Ad-hoc: Cizim Etiketi Serbest Konum".
+    const labelCx = el.labelX ?? el.x + el.widthMm / 2;
+    const labelCy = el.labelY ?? el.y + el.heightMm / 2;
+    const labelFontSize =
+      el.labelFontSizeMm ??
+      fitFontSize(el.label, el.labelWidthMm ?? el.widthMm, el.heightMm);
+    const label = renderCenteredText(el.label, labelCx, labelCy, labelFontSize);
     parts.push(
       `<g data-id="${el.id}" data-category="${escapeXml(el.category)}">` +
         `<rect x="${el.x}" y="${el.y}" width="${el.widthMm}" height="${el.heightMm}" fill="#fff" stroke="#222" stroke-width="0.4"/>` +

@@ -25,6 +25,15 @@ export interface DrawingElementInstance {
   widthMm: number;
   heightMm: number;
   rotationDeg: number;
+  /** Etiketin kutudan BAGIMSIZ konum/boyutu (kullanici talebi: "labelların da
+   * yerini/boyutunu degistirebilmek") - tumu opsiyonel, YOKSA render/auto-pack
+   * eskisi gibi etiketi kutunun merkezine, fitFontSize ile otomatik olceklenmis
+   * halde yerlestirir (geriye donuk uyumluluk: eski cizimlerde bu alanlar yok).
+   * labelX/labelY, etiket kutusunun MERKEZ noktasi (top-left degil). */
+  labelX?: number;
+  labelY?: number;
+  labelWidthMm?: number;
+  labelFontSizeMm?: number;
 }
 
 /** Bara (busbar) segmenti - karar 3 (bkz. V52): proje-1'de karsiligi olmayan,
