@@ -22,11 +22,12 @@ import {
  * olan her urunun avgCost'una bir gunluk bilesik artis uygular. Maliyeti
  * null/0 olan urunler atlanir (0 uzerinde bilesik artis anlamsiz).
  *
- * StockMovement urun bazinda tek bir "temsili" depoya (o urunun en cok
- * stogunun oldugu depo) yazilir - quantity=0 (miktar degismez),
- * previousQuantity/newQuantity urunun TUM depolardaki toplam miktaridir
- * (maliyet depo bazinda degil urun bazinda tutuldugu icin, bkz.
- * docs/VARSAYIMLAR.md).
+ * Urun bazinda StockMovement YAZILMAZ (ad-hoc karar, bkz. CLAUDE.md) - stoklu
+ * urun sayisi buyuk tenant'larda her gece her urun icin bir satir acmak
+ * crm_stock_movements/stockHistory ekranini sissirip asil mal kabul/satis/
+ * transfer hareketlerini gorsel olarak gomerdi. Bunun yerine tenant basina
+ * TEK bir StockHoldingCostLog ozet satiri yazilir (etkilenen urun sayisi +
+ * toplam maliyet artisinin TL karsiligi).
  */
 @Processor(STOCK_HOLDING_COST_QUEUE)
 export class ApplyStockHoldingCostProcessor extends WorkerHost {
@@ -69,6 +70,9 @@ export class ApplyStockHoldingCostProcessor extends WorkerHost {
       include: { stockItems: true },
     });
 
+    let productCount = 0;
+    let totalCostDelta = new Prisma.Decimal(0);
+
     for (const product of products) {
       const totalQty = product.stockItems.reduce(
         (sum, si) => sum.add(si.quantity),
@@ -87,29 +91,27 @@ export class ApplyStockHoldingCostProcessor extends WorkerHost {
         monthlyRatePct,
       ).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
 
-      const representativeWarehouseId = [...product.stockItems].sort(
-        (a, b) =>
-          b.quantity.comparedTo(a.quantity) ||
-          a.warehouseId.localeCompare(b.warehouseId),
-      )[0].warehouseId;
-
       await this.prisma.product.update({
         where: { id: product.id },
         data: { avgCost: newAvgCost },
       });
-      await this.prisma.stockMovement.create({
+
+      productCount += 1;
+      totalCostDelta = totalCostDelta.add(
+        newAvgCost.sub(previousAvgCost).mul(totalQty),
+      );
+    }
+
+    if (productCount > 0) {
+      await this.prisma.stockHoldingCostLog.create({
         data: {
           tenantId,
-          productId: product.id,
-          warehouseId: representativeWarehouseId,
-          type: 'HOLDING_COST',
-          quantity: new Prisma.Decimal(0),
-          unitCost: null,
-          previousAvgCost,
-          newAvgCost,
-          previousQuantity: totalQty,
-          newQuantity: totalQty,
-          note: `Günlük stok bekletme maliyeti artışı (aylık %${monthlyRatePct}).`,
+          monthlyRatePct: new Prisma.Decimal(monthlyRatePct),
+          productCount,
+          totalCostDelta: totalCostDelta.toDecimalPlaces(
+            2,
+            Prisma.Decimal.ROUND_HALF_UP,
+          ),
           createdById: STOCK_HOLDING_COST_SYSTEM_ACTOR_ID,
         },
       });

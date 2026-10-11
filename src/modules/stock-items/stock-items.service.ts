@@ -76,6 +76,14 @@ export type StockItemWithProduct = Pick<
   warehouses: StockItemWarehouseBreakdown[];
 };
 
+export interface StockHoldingCostLogView {
+  id: string;
+  monthlyRatePct: number;
+  productCount: number;
+  totalCostDelta: number;
+  createdAt: Date;
+}
+
 export interface StockMovementView {
   id: string;
   productId: string;
@@ -693,5 +701,22 @@ export class StockItemsService {
         createdAt: m.createdAt,
       };
     });
+  }
+
+  /** Stok Bekletme Maliyeti Geçmişi (/envanter?tab=stockHoldingCostLog) - tenant basina
+   * gunluk TEK ozet satir (bkz. ApplyStockHoldingCostProcessor); urun bazinda
+   * StockMovement yazilmiyor, bkz. CLAUDE.md. */
+  async listHoldingCostLogs(): Promise<StockHoldingCostLogView[]> {
+    const logs = await this.prisma.stockHoldingCostLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: STOCK_HISTORY_LIST_LIMIT,
+    });
+    return logs.map((log) => ({
+      id: log.id,
+      monthlyRatePct: Number(log.monthlyRatePct),
+      productCount: log.productCount,
+      totalCostDelta: Number(log.totalCostDelta),
+      createdAt: log.createdAt,
+    }));
   }
 }

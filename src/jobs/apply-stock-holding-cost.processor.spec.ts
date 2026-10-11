@@ -27,7 +27,7 @@ function createPrisma(overrides: Partial<Record<string, unknown>> = {}) {
       findMany: vi.fn().mockResolvedValue([createProduct()]),
       update: vi.fn().mockResolvedValue({}),
     },
-    stockMovement: {
+    stockHoldingCostLog: {
       create: vi.fn().mockResolvedValue({}),
     },
     ...overrides,
@@ -39,7 +39,7 @@ function createProductsCache() {
 }
 
 describe('ApplyStockHoldingCostProcessor', () => {
-  it('etkin ve stogu olan urunun avgCost unu arttirir ve HOLDING_COST hareketi yazar', async () => {
+  it('etkin ve stogu olan urunun avgCost unu arttirir ve tenant basina ozet log yazar', async () => {
     const prisma = createPrisma();
     const productsCache = createProductsCache();
     const processor = new ApplyStockHoldingCostProcessor(
@@ -57,30 +57,24 @@ describe('ApplyStockHoldingCostProcessor', () => {
     expect(updatedCost.toNumber()).toBeGreaterThan(100);
     expect(updatedCost.toNumber()).toBeLessThan(100.2);
 
-    expect(prisma.stockMovement.create).toHaveBeenCalledWith({
+    expect(prisma.stockHoldingCostLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tenantId: TENANT_ID,
-        productId: 'p1',
-        warehouseId: 'w1',
-        type: 'HOLDING_COST',
-        quantity: expect.any(Prisma.Decimal),
-        previousQuantity: expect.any(Prisma.Decimal),
-        newQuantity: expect.any(Prisma.Decimal),
+        productCount: 1,
+        totalCostDelta: expect.any(Prisma.Decimal),
       }),
     });
     expect(productsCache.invalidate).toHaveBeenCalledTimes(1);
   });
 
-  it('en cok stogu olan depoyu temsili depo olarak secer', async () => {
+  it('birden fazla urun varsa tek bir ozet log satiri yazar', async () => {
     const prisma = createPrisma();
-    prisma.product.findMany = vi.fn().mockResolvedValue([
-      createProduct({
-        stockItems: [
-          { warehouseId: 'w1', quantity: new Prisma.Decimal('5') },
-          { warehouseId: 'w2', quantity: new Prisma.Decimal('20') },
-        ],
-      }),
-    ]);
+    prisma.product.findMany = vi
+      .fn()
+      .mockResolvedValue([
+        createProduct({ id: 'p1' }),
+        createProduct({ id: 'p2' }),
+      ]);
     const productsCache = createProductsCache();
     const processor = new ApplyStockHoldingCostProcessor(
       prisma as never,
@@ -88,8 +82,9 @@ describe('ApplyStockHoldingCostProcessor', () => {
     );
     await processor.process();
 
-    expect(prisma.stockMovement.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ warehouseId: 'w2' }),
+    expect(prisma.stockHoldingCostLog.create).toHaveBeenCalledTimes(1);
+    expect(prisma.stockHoldingCostLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ productCount: 2 }),
     });
   });
 
@@ -143,7 +138,7 @@ describe('ApplyStockHoldingCostProcessor', () => {
     await processor.process();
 
     expect(prisma.product.update).not.toHaveBeenCalled();
-    expect(prisma.stockMovement.create).not.toHaveBeenCalled();
+    expect(prisma.stockHoldingCostLog.create).not.toHaveBeenCalled();
   });
 
   it('maliyeti tanimsiz (null) olan urun atlanir', async () => {

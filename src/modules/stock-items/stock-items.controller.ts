@@ -17,6 +17,7 @@ import {
 } from './dto/stock-item.dto';
 import {
   StockItemsService,
+  type StockHoldingCostLogView,
   type StockItemWithProduct,
   type StockMovementView,
 } from './stock-items.service';
@@ -39,6 +40,12 @@ export class StockItemsController {
     query: StockHistoryQueryDto,
   ): Promise<StockMovementView[]> {
     return this.stockItems.listHistory(query);
+  }
+
+  @Get('holding-cost-log')
+  @RequiresPermission('stock', 'VIEW')
+  listHoldingCostLogs(): Promise<StockHoldingCostLogView[]> {
+    return this.stockItems.listHoldingCostLogs();
   }
 
   @Get()

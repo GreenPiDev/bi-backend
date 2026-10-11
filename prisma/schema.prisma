@@ -254,6 +254,7 @@ model Tenant {
   purchaseOrders           PurchaseOrder[]
   stockItems               StockItem[]
   stockMovements           StockMovement[]
+  stockHoldingCostLogs     StockHoldingCostLog[]
   quoteStatusHistories     QuoteStatusHistory[]
   warehouses               Warehouse[]
   messages                 Message[]
@@ -1611,9 +1612,6 @@ enum StockMovementType {
   TRANSFER_OUT
   TRANSFER_IN
   CORRECTION
-  /** Ad-hoc (bkz. CLAUDE.md): opsiyonel gunluk stok bekletme maliyeti artisi -
-   * previousAvgCost/newAvgCost dolu, quantity her zaman 0 (miktar degismez). */
-  HOLDING_COST
 }
 
 /**
@@ -1657,6 +1655,29 @@ model StockMovement {
   @@index([tenantId, productId, createdAt])
   @@index([tenantId, quoteId])
   @@map("crm_stock_movements")
+}
+
+/**
+ * Ad-hoc (bkz. CLAUDE.md): gunluk stok bekletme maliyeti job'inin tenant basina TEK
+ * ozet satiri. Urun bazinda StockMovement YAZILMAZ - stoklu urun sayisi buyuk tenant'larda
+ * her gece her urun icin bir HOLDING_COST satiri acmak crm_stock_movements/stockHistory
+ * ekranini sissirip asil mal kabul/satis/transfer hareketlerini gorsel olarak gomerdi.
+ * Denetlenebilirlik icin burada o gun etkilenen urun sayisi + toplam maliyet artisinin
+ * TL karsiligi (sum((newAvgCost-previousAvgCost)*toplamMiktar)) tutulur.
+ */
+model StockHoldingCostLog {
+  id             String   @id @default(uuid())
+  tenantId       String
+  monthlyRatePct Decimal  @db.Decimal(5, 2)
+  productCount   Int
+  totalCostDelta Decimal  @db.Decimal(14, 2)
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("crm_stock_holding_cost_logs")
 }
 
 /**
