@@ -24,6 +24,24 @@ export const DEFAULT_QUOTE_GENERAL_TERMS_KEY = 'crm.defaultQuoteGeneralTerms';
 export const DEFAULT_QUOTE_TERMS_TEXT = '';
 
 /**
+ * Ad-hoc (bkz. CLAUDE.md, /settings?tab=general "Stok Bekletme Maliyeti"):
+ * etkinlestirilirse, stogu olan her urunun Product.avgCost'u her gun (00:30
+ * Europe/Istanbul) bu aylik oranin 30 gune bolunmus bilesik (compound) hali
+ * kadar artar - bkz. stock-holding-cost.util.ts. Oran degistirilince onceki
+ * birikmis artis etkilenmez, sadece o gunden itibaren yeni oran uygulanir
+ * (gecmise donuk yeniden hesap yok).
+ */
+export const STOCK_HOLDING_COST_KEY = 'crm.stockHoldingCost';
+export interface StockHoldingCostSetting {
+  enabled: boolean;
+  monthlyRatePct: number;
+}
+export const DEFAULT_STOCK_HOLDING_COST: StockHoldingCostSetting = {
+  enabled: false,
+  monthlyRatePct: 0,
+};
+
+/**
  * Tenant'in ayarlayabilecegi bilinen anahtarlarin tek kaynagi. Yeni bir ayar
  * eklerken buraya bir satir eklemek yeterli; bilinmeyen anahtara PATCH 400 doner.
  */
@@ -55,6 +73,13 @@ export const KNOWN_TENANT_SETTINGS = {
   [DEFAULT_QUOTE_GENERAL_TERMS_KEY]: {
     schema: z.string().max(5000),
     default: DEFAULT_QUOTE_TERMS_TEXT,
+  },
+  [STOCK_HOLDING_COST_KEY]: {
+    schema: z.object({
+      enabled: z.boolean(),
+      monthlyRatePct: z.number().min(0).max(100),
+    }),
+    default: DEFAULT_STOCK_HOLDING_COST,
   },
 } as const;
 

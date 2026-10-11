@@ -5,9 +5,11 @@ import { AuthModule } from '../modules/auth/auth.module';
 import { DatasourcesModule } from '../modules/datasources/datasources.module';
 import { ExportsModule } from '../modules/exports/exports.module';
 import { PostSaleCasesModule } from '../modules/post-sale-cases/post-sale-cases.module';
+import { ProductsModule } from '../modules/products/products.module';
 import { QueryModule } from '../modules/query/query.module';
 import { ALERTS_QUEUE } from './alerts-queue.constants';
 import { AlertsSchedulerBootstrap } from './alerts-scheduler.bootstrap';
+import { ApplyStockHoldingCostProcessor } from './apply-stock-holding-cost.processor';
 import { CheckAlertsProcessor } from './check-alerts.processor';
 import { CheckContactInactivityProcessor } from './check-contact-inactivity.processor';
 import { CheckPostSaleFollowupProcessor } from './check-post-sale-followup.processor';
@@ -25,6 +27,8 @@ import { REPORTS_QUEUE } from './reports-queue.constants';
 import { SendInteractionRemindersProcessor } from './send-interaction-reminders.processor';
 import { SendPostSaleSurveyProcessor } from './send-post-sale-survey.processor';
 import { SendScheduledReportProcessor } from './send-scheduled-report.processor';
+import { StockHoldingCostSchedulerBootstrap } from './stock-holding-cost-scheduler.bootstrap';
+import { STOCK_HOLDING_COST_QUEUE } from './stock-holding-cost-queue.constants';
 import { TODAYS_REMINDERS_QUEUE } from './todays-reminders-queue.constants';
 import { TodaysRemindersSchedulerBootstrap } from './todays-reminders-scheduler.bootstrap';
 
@@ -45,11 +49,13 @@ import { TodaysRemindersSchedulerBootstrap } from './todays-reminders-scheduler.
     BullModule.registerQueue({ name: POST_SALE_FOLLOWUP_QUEUE }),
     BullModule.registerQueue({ name: POST_SALE_SURVEY_QUEUE }),
     BullModule.registerQueue({ name: TODAYS_REMINDERS_QUEUE }),
+    BullModule.registerQueue({ name: STOCK_HOLDING_COST_QUEUE }),
     DatasourcesModule,
     AuthModule,
     ExportsModule,
     QueryModule,
     PostSaleCasesModule,
+    ProductsModule,
   ],
   providers: [
     IngestDatasourceProcessor,
@@ -65,6 +71,8 @@ import { TodaysRemindersSchedulerBootstrap } from './todays-reminders-scheduler.
     SendPostSaleSurveyProcessor,
     CheckTodaysRemindersProcessor,
     TodaysRemindersSchedulerBootstrap,
+    ApplyStockHoldingCostProcessor,
+    StockHoldingCostSchedulerBootstrap,
   ],
 })
 export class JobsModule {}

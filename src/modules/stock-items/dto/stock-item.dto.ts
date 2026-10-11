@@ -27,6 +27,7 @@ export const StockMovementTypeSchema = z.enum([
   'TRANSFER_OUT',
   'TRANSFER_IN',
   'CORRECTION',
+  'HOLDING_COST',
 ]);
 
 /** Stok Gecmisi filtre penceresi: urune, depoya, guncellemeyi yapan kullaniciya ve

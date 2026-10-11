@@ -1611,6 +1611,9 @@ enum StockMovementType {
   TRANSFER_OUT
   TRANSFER_IN
   CORRECTION
+  /** Ad-hoc (bkz. CLAUDE.md): opsiyonel gunluk stok bekletme maliyeti artisi -
+   * previousAvgCost/newAvgCost dolu, quantity her zaman 0 (miktar degismez). */
+  HOLDING_COST
 }
 
 /**
