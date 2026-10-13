@@ -772,6 +772,8 @@ model IbanOption {
   accountHolderName String
   accountNumber     String?
   iban              String
+  /** TRY/USD/EUR - hesabin tutuldugu para birimi. */
+  currency          String   @default("TRY")
   createdAt         DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])

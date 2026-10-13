@@ -36,6 +36,7 @@ export class IbanOptionsService {
         accountHolderName: dto.accountHolderName,
         accountNumber: dto.accountNumber ?? null,
         iban: dto.iban,
+        currency: dto.currency,
       } as never,
     });
     await this.audit.log({
@@ -64,6 +65,7 @@ export class IbanOptionsService {
         accountHolderName: dto.accountHolderName,
         accountNumber: dto.accountNumber ?? null,
         iban: dto.iban,
+        currency: dto.currency,
       },
     });
     await this.audit.log({

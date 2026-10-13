@@ -154,11 +154,13 @@ async function main(): Promise<void> {
           accountHolderName: 'Demo Şirket Ltd. Şti.',
           accountNumber: '1234567',
           iban: 'TR330006100519786457841326',
+          currency: 'TRY',
         });
         await ibanOptions.create({
           bankName: 'Garanti BBVA',
           accountHolderName: 'Demo Şirket Ltd. Şti.',
           iban: 'TR120006200051600006299024',
+          currency: 'TRY',
         });
 
         console.log('Urun kategorileri dolduruluyor...');

@@ -24,5 +24,6 @@ export const IbanOptionSchema = z.object({
     .string()
     .transform(normalizeIban)
     .pipe(z.string().regex(IBAN_PATTERN, 'Gecerli bir IBAN numarasi giriniz.')),
+  currency: z.enum(['TRY', 'USD', 'EUR']),
 });
 export type IbanOptionDto = z.infer<typeof IbanOptionSchema>;
