@@ -1107,6 +1107,7 @@ model Product {
   productList        ProductList         @relation(fields: [productListId], references: [id])
   quoteItems         QuoteItem[]
   purchaseOrderItems PurchaseOrderItem[]
+  salesOrderItems    SalesOrderItem[]
   stockItems         StockItem[]
   stockMovements     StockMovement[]
   drawingSpec        ProductDrawingSpec?
@@ -1548,23 +1549,29 @@ model ProjectResponsible {
  * ensurePostSaleCase ile ayni iki cagri noktasi - update/approve) idempotent olarak
  * (findFirst + create, upsert yok - tenant-scoped.extension.ts bunu desteklemiyor)
  * tek bir SalesOrder acilir. quoteId @unique: bir teklif en fazla bir satis siparisine
- * donusur (Project.quoteId ile ayni "1:1" karari). Kendi kalem tablosu YOK - satilan
- * kalemler zaten Quote.items'ta, burada tekrar tutmak PurchaseOrderItem'daki gibi
- * "siparise ozel ek kalem" ihtiyaci olmadigi icin gereksiz karmasiklik olurdu; detay
- * ekrani Quote.items'i salt-okunur gosterir. accountId/contactId, PostSaleCase ile
- * ayni "sorgu/arama icin denormalize" gerekcesiyle buraya kopyalanir.
+ * donusur (Project.quoteId ile ayni "1:1" karari), ama ARTIK zorunlu degil - 2026-10-13
+ * kullanici geri bildirimi: "bir teklif onaylaninca zaten otomatik aciliyor, benim butun
+ * siparislerim bir teklifle iliskili olmak zorunda degil" uzerine quoteId nullable'a
+ * cevrildi (Postgres nullable unique'te NULL'lar birbirinden farkli sayildigi icin
+ * cogu teklifsiz siparis sorunsuz bir arada durabiliyor). Teklifli (quoteId dolu)
+ * siparislerde kalemler HALA Quote.items'tan salt-okunur gosterilir (kendi SalesOrderItem
+ * satiri YOK, PurchaseOrderItem'daki gibi "siparise ozel ek kalem" ihtiyaci olmadigi
+ * icin). Teklifsiz (quoteId null, kullanici /satis-siparisleri/yeni'de dogrudan firma +
+ * kalem girdigi) siparislerde ise kalemler kendi `items` (SalesOrderItem) iliskisinde
+ * tutulur - detay ekrani quoteId varsa Quote.items'i, yoksa kendi items'ini gosterir.
+ * accountId/contactId, PostSaleCase ile ayni "sorgu/arama icin denormalize" gerekcesiyle
+ * buraya kopyalanir (teklifli akista Quote'tan, teklifsiz akista dogrudan kullanicidan).
  * orderNumber SAT-YYYY-AA-GG-NNN formatinda (Quote/Project/PurchaseOrder ile ayni
- * gun-icinde-sirali sayac deseni) - tek-denemelik (retry YOK): zaten tek bir
- * transaction icinde (Quote APPROVED gecisiyle ayni tx) olusturuldugundan
- * PurchaseOrdersService.createWithGeneratedNumber'daki "ayni tx icinde retry 25P02'ye
- * carpar" riskini tasimamak icin tek deneme kabul edildi - cakisma ihtimali (ayni
- * tenant'ta ayni gun ayni sayaç pozisyonunda es zamanli iki onay) cok dusuk.
+ * gun-icinde-sirali sayac deseni) - teklif onayindaki otomatik acilis tek-denemelik
+ * (ayni tx icinde retry 25P02'ye carpar riskini tasimamak icin), ama SalesOrdersService.
+ * create() (manuel/backfill ucu) PurchaseOrdersService.createWithGeneratedNumber'daki
+ * gibi P2002'de retry eder (ayri bir transaction'da calistigindan bu risk yok).
  */
 model SalesOrder {
   id          String           @id @default(uuid())
   tenantId    String
   orderNumber String
-  quoteId     String           @unique
+  quoteId     String?          @unique
   accountId   String
   contactId   String?
   status      SalesOrderStatus @default(PENDING)
@@ -1572,15 +1579,40 @@ model SalesOrder {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id])
-  quote   Quote    @relation(fields: [quoteId], references: [id])
-  account Account  @relation(fields: [accountId], references: [id])
-  contact Contact? @relation(fields: [contactId], references: [id])
+  tenant  Tenant            @relation(fields: [tenantId], references: [id])
+  quote   Quote?            @relation(fields: [quoteId], references: [id])
+  account Account           @relation(fields: [accountId], references: [id])
+  contact Contact?          @relation(fields: [contactId], references: [id])
+  items   SalesOrderItem[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId, status])
   @@index([tenantId, accountId])
   @@map("crm_sales_orders")
+}
+
+/**
+ * Sadece quoteId'si NULL olan (teklifsiz, /satis-siparisleri/yeni'de manuel
+ * olusturulan) SalesOrder'lar icin dolar - teklifli siparislerde kalemler
+ * Quote.items'tan okunur, bu tablo bos kalir (bkz. SalesOrder doc comment'i).
+ * QuoteItem'daki discountPct/vatPct/costPriceAtSale YOK - manuel siparis sadece
+ * operasyonel bir kayit, teklifin fiyatlandirma/karlilik mantigini tasimaz.
+ */
+model SalesOrderItem {
+  id           String   @id @default(uuid())
+  salesOrderId String
+  productId    String
+  quantity     Decimal  @db.Decimal(14, 3)
+  unitPrice    Decimal  @db.Decimal(14, 2)
+  /** unitPrice ile ayni snapshot semantigi: satir olusturulurken Product.currency'den
+   * kopyalanir, client'tan kabul edilmez (QuoteItem.currency ile ayni gerekce). */
+  currency     String   @default("TRY")
+  createdAt    DateTime @default(now())
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@map("crm_sales_order_items")
 }
 
 model PurchaseOrder {

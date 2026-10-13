@@ -43,6 +43,72 @@ export const DEFAULT_QUOTE_REJECTION_REASONS = [
   'Diğer',
 ] as const;
 
+/** /settings?tab=crm'deki diger "sabit" listeleri de ayni sekilde her yeni
+ * tenant'ta bomboş değil, 4-6 hazır tanımla başlasın diye eklendi (kullanıcı
+ * talebi, 2026-10-13). Ürün Kategorisi ve Marka buraya kasıtlı olarak dahil
+ * edilmedi - tamamen tenant'ın sattığı ürüne bağlı, genel bir varsayılan
+ * gerçek işe uymayabilir (kullanıcıyla netleştirildi). */
+export const DEFAULT_SECTOR_OPTIONS = [
+  'İmalat',
+  'Toptan Ticaret',
+  'Perakende',
+  'İnşaat',
+  'Hizmet',
+  'Lojistik',
+] as const;
+
+export const DEFAULT_DEPARTMENT_OPTIONS = [
+  'Satış',
+  'Satın Alma',
+  'Muhasebe',
+  'Yönetim',
+  'Üretim',
+  'Lojistik',
+] as const;
+
+export const DEFAULT_TITLE_OPTIONS = [
+  'Genel Müdür',
+  'Satış Müdürü',
+  'Satış Temsilcisi',
+  'Satın Alma Sorumlusu',
+  'Muhasebe Sorumlusu',
+] as const;
+
+export const DEFAULT_UNIT_OPTIONS = [
+  'Adet',
+  'Kg',
+  'Metre',
+  'Litre',
+  'Kutu',
+] as const;
+
+export const DEFAULT_PAYMENT_METHOD_OPTIONS = [
+  'Nakit',
+  'Havale/EFT',
+  'Kredi Kartı',
+  'Çek',
+  'Senet',
+] as const;
+
+// InteractionTypeOption/ReminderTypeOption etiketleri her zaman buyuk harfle
+// saklanir (bkz. InteractionTypeOptionsService) - varsayilanlar da bu yuzden
+// zaten buyuk harfle tanimli, create zamaninda tekrar normalize edilmiyor.
+export const DEFAULT_INTERACTION_TYPE_OPTIONS = [
+  'TELEFON',
+  'E-POSTA',
+  'YÜZ YÜZE ZİYARET',
+  'TOPLANTI',
+  'VİDEO GÖRÜŞME',
+] as const;
+
+export const DEFAULT_REMINDER_TYPE_OPTIONS = [
+  'ARAMA',
+  'E-POSTA',
+  'ZİYARET',
+  'TEKLİF TAKİBİ',
+  'TOPLANTI',
+] as const;
+
 export interface TenantSummary {
   id: string;
   name: string;
@@ -192,6 +258,39 @@ export class TenantsService {
         });
         await tx.quoteRejectionReasonOption.createMany({
           data: DEFAULT_QUOTE_REJECTION_REASONS.map((label) => ({
+            tenantId,
+            label,
+          })),
+        });
+        await tx.sectorOption.createMany({
+          data: DEFAULT_SECTOR_OPTIONS.map((label) => ({ tenantId, label })),
+        });
+        await tx.departmentOption.createMany({
+          data: DEFAULT_DEPARTMENT_OPTIONS.map((label) => ({
+            tenantId,
+            label,
+          })),
+        });
+        await tx.titleOption.createMany({
+          data: DEFAULT_TITLE_OPTIONS.map((label) => ({ tenantId, label })),
+        });
+        await tx.unitOption.createMany({
+          data: DEFAULT_UNIT_OPTIONS.map((label) => ({ tenantId, label })),
+        });
+        await tx.paymentMethodOption.createMany({
+          data: DEFAULT_PAYMENT_METHOD_OPTIONS.map((label) => ({
+            tenantId,
+            label,
+          })),
+        });
+        await tx.interactionTypeOption.createMany({
+          data: DEFAULT_INTERACTION_TYPE_OPTIONS.map((label) => ({
+            tenantId,
+            label,
+          })),
+        });
+        await tx.reminderTypeOption.createMany({
+          data: DEFAULT_REMINDER_TYPE_OPTIONS.map((label) => ({
             tenantId,
             label,
           })),

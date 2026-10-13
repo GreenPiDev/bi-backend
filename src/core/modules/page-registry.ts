@@ -102,10 +102,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   {
     key: 'sales-orders',
     label: 'Satis Siparisleri',
-    /** CREATE/DELETE yok: SalesOrder sadece Quote APPROVED olunca otomatik
-     * olusur (bkz. QuotesService.ensureSalesOrder), kullanici sadece durumunu
-     * degistirebilir. */
-    supportedActions: ['UPDATE'],
+    /** SalesOrder normalde Quote APPROVED olunca otomatik olusur (bkz.
+     * QuotesService.ensureSalesOrder). CREATE sadece bu otomasyondan ONCE
+     * onaylanmis (bu yuzden SalesOrder'i hic olmayan) teklifler icin elle
+     * tamamlama (backfill) amaciyla var - DELETE hala yok. */
+    supportedActions: ['CREATE', 'UPDATE'],
   },
   {
     key: 'purchase-orders',

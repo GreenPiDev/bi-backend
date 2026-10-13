@@ -217,6 +217,99 @@ describe('Sales Orders (e2e)', () => {
     expect(countBefore).toBe(1);
   });
 
+  it('POST /sales-orders: zaten siparisi olan teklif icin SALES_ORDER_ALREADY_EXISTS doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({ quoteId: approvedQuoteId });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('SALES_ORDER_ALREADY_EXISTS');
+  });
+
+  it('POST /sales-orders: onaylanmamis teklif icin QUOTE_NOT_APPROVED doner', async () => {
+    const draftRes = await request(app.getHttpServer())
+      .post('/api/v1/quotes')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        status: 'DRAFT',
+        items: [{ productId, quantity: 1, discountPct: 0, vatPct: 0 }],
+      });
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({ quoteId: draftRes.body.id });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('QUOTE_NOT_APPROVED');
+  });
+
+  it('POST /sales-orders: bu otomasyondan once onaylanmis bir teklif icin manuel (backfill) olusturur', async () => {
+    const backfillQuoteRes = await request(app.getHttpServer())
+      .post('/api/v1/quotes')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        items: [{ productId, quantity: 1, discountPct: 0, vatPct: 0 }],
+      });
+    const backfillQuoteId = backfillQuoteRes.body.id as string;
+    // SalesOrder, create() tx'inde ensureSalesOrder tarafindan otomatik acilir -
+    // bu testte "eski teklif" senaryosunu simule etmek icin elle siliyoruz.
+    await prisma.salesOrder.deleteMany({ where: { quoteId: backfillQuoteId } });
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({ quoteId: backfillQuoteId });
+    expect(res.status).toBe(201);
+    expect(res.body.quoteId).toBe(backfillQuoteId);
+    expect(res.body.orderNumber).toMatch(/^SAT-\d{4}-\d{2}-\d{2}-\d{3}$/);
+  });
+
+  it('POST /sales-orders: accountId + items ile teklifsiz, manuel bir siparis olusturur', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        items: [{ productId, quantity: 3, unitPrice: 12000 }],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.quoteId).toBeNull();
+    expect(res.body.accountId).toBe(accountIdA);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].productId).toBe(productId);
+    expect(res.body.items[0].quantity).toBe('3');
+    expect(res.body.items[0].unitPrice).toBe('12000');
+  });
+
+  it('POST /sales-orders: hem quoteId hem accountId verilirse 400 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({ quoteId: approvedQuoteId, accountId: accountIdA });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /sales-orders: accountId verilip items bos birakilirsa 400 doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({ accountId: accountIdA, items: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /sales-orders: manuel kalemde bilinmeyen urun icin PRODUCT_NOT_FOUND doner', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/sales-orders')
+      .set('Cookie', cookiesA)
+      .send({
+        accountId: accountIdA,
+        items: [{ productId: randomUUID(), quantity: 1, unitPrice: 100 }],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PRODUCT_NOT_FOUND');
+  });
+
   it('B tenanti A tenantinin satis siparisine erisemez (404)', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/sales-orders/${salesOrderId}`)
