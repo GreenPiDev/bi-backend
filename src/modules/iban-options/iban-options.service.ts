@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { IbanOption } from '@prisma/client';
+import type { IbanOption, IbanOptionGroup } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import {
   TENANT_PRISMA,
@@ -18,8 +18,11 @@ export class IbanOptionsService {
     private readonly realtime: RealtimeService,
   ) {}
 
-  list(): Promise<IbanOption[]> {
-    return this.prisma.ibanOption.findMany({ orderBy: { createdAt: 'asc' } });
+  list(): Promise<(IbanOption & { group: IbanOptionGroup | null })[]> {
+    return this.prisma.ibanOption.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { group: true },
+    });
   }
 
   private async emitUpdated(): Promise<void> {
@@ -37,6 +40,7 @@ export class IbanOptionsService {
         accountNumber: dto.accountNumber ?? null,
         iban: dto.iban,
         currency: dto.currency,
+        groupId: dto.groupId ?? null,
       } as never,
     });
     await this.audit.log({
@@ -66,6 +70,7 @@ export class IbanOptionsService {
         accountNumber: dto.accountNumber ?? null,
         iban: dto.iban,
         currency: dto.currency,
+        groupId: dto.groupId ?? null,
       },
     });
     await this.audit.log({

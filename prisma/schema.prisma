@@ -250,6 +250,7 @@ model Tenant {
   paymentMethodOptions        PaymentMethodOption[]
   quoteRejectionReasonOptions QuoteRejectionReasonOption[]
   ibanOptions                 IbanOption[]
+  ibanOptionGroups            IbanOptionGroup[]
   settings                    TenantSetting[]
   roles                       Role[]
   calendarEvents              CalendarEvent[]
@@ -765,9 +766,29 @@ model QuoteRejectionReasonOption {
  * unitPrice'in Product.price'tan kopyalanmasiyla ayni desen, boylece IbanOption
  * sonradan degistirilse/silinse bile mevcut teklifler etkilenmez.
  */
+/**
+ * Birden fazla IbanOption'i tek bir "grup" altinda toplar (kullanici talebi -
+ * gercek hayatta tekliflerde birden fazla banka hesabi birlikte yer aliyor).
+ * Teklif formunda tek bir secim (bu grup) yapilir, teklife grubun ICINDEKI TUM
+ * IbanOption'lar snapshot olarak kopyalanir (bkz. Quote.ibanAccounts).
+ */
+model IbanOptionGroup {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id])
+  options IbanOption[]
+
+  @@map("crm_iban_option_groups")
+}
+
 model IbanOption {
   id                String   @id @default(uuid())
   tenantId          String
+  /** Opsiyonel - bos birakilirsa hesap teklif formunda tek basina secilebilir kalir. */
+  groupId           String?
   bankName          String
   accountHolderName String
   accountNumber     String?
@@ -776,7 +797,8 @@ model IbanOption {
   currency          String   @default("TRY")
   createdAt         DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant           @relation(fields: [tenantId], references: [id])
+  group  IbanOptionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@map("crm_iban_options")
 }
@@ -1176,13 +1198,14 @@ model Quote {
   deliveryTerms         String?
   generalTerms          String?
   /**
-   * Secilen IbanOption'in 4 alani olusturma/guncelleme aninda buraya kopyalanir
-   * (bkz. IbanOption doc comment'i) - FK degil, snapshot.
+   * Secilen IbanOption(lar)'in alanlari olusturma/guncelleme aninda buraya
+   * kopyalanir (bkz. IbanOption doc comment'i) - FK degil, snapshot. Bir grup
+   * secildiyse gruptaki TUM hesaplar burada array olarak yer alir (kullanici
+   * talebi - gercek hayatta tekliflerde birden fazla hesap birlikte gosterilir),
+   * tek bir hesap secildiyse 1 elemanli array. Her eleman:
+   * { bankName, accountHolderName, accountNumber, iban, currency }.
    */
-  ibanBankName          String?
-  ibanAccountHolderName String?
-  ibanAccountNumber     String?
-  ibanNumber            String?
+  ibanAccounts          Json?
   status                QuoteStatus         @default(DRAFT)
   approvedAt            DateTime?
   approvedById          String?

@@ -24,6 +24,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'PaymentMethodOption',
   'QuoteRejectionReasonOption',
   'IbanOption',
+  'IbanOptionGroup',
   'TenantSetting',
   'Role',
   'CalendarEvent',

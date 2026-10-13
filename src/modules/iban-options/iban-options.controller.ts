@@ -8,7 +8,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import type { IbanOption } from '@prisma/client';
+import type { IbanOption, IbanOptionGroup } from '@prisma/client';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
@@ -21,7 +21,7 @@ export class IbanOptionsController {
   constructor(private readonly ibanOptions: IbanOptionsService) {}
 
   @Get()
-  list(): Promise<IbanOption[]> {
+  list(): Promise<(IbanOption & { group: IbanOptionGroup | null })[]> {
     return this.ibanOptions.list();
   }
 

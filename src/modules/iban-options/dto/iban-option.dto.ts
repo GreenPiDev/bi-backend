@@ -9,6 +9,9 @@ function normalizeIban(value: string): string {
 }
 
 export const IbanOptionSchema = z.object({
+  /** Opsiyonel - bos birakilirsa hesap teklif formunda tek basina secilebilir
+   * kalir (bkz. IbanOptionGroup doc comment'i). */
+  groupId: z.string().uuid().nullable().optional(),
   bankName: z
     .string()
     .trim()

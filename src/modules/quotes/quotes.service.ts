@@ -111,6 +111,31 @@ export type QuotePrintData = Omit<QuoteWithDetails, 'template'> & {
   sender: QuotePrintSenderData | null;
 };
 
+/** Quote.ibanAccounts (JSON) icindeki her elemanin sekli - bkz. resolveIbanSnapshot. */
+export interface IbanAccountSnapshot {
+  bankName: string;
+  accountHolderName: string;
+  accountNumber: string | null;
+  iban: string;
+  currency: string;
+}
+
+function toIbanAccountSnapshot(option: {
+  bankName: string;
+  accountHolderName: string;
+  accountNumber: string | null;
+  iban: string;
+  currency: string;
+}): IbanAccountSnapshot {
+  return {
+    bankName: option.bankName,
+    accountHolderName: option.accountHolderName,
+    accountNumber: option.accountNumber,
+    iban: option.iban,
+    currency: option.currency,
+  };
+}
+
 type QuoteRow = Quote & {
   account: Account;
   contact: Contact | null;
@@ -407,24 +432,33 @@ export class QuotesService {
     }
   }
 
-  /** Secilen IbanOption'in 4 alanini teklife kopyalanacak sekilde doner - FK degil,
-   * QuoteItem.unitPrice ile ayni "olusturma anindaki degeri koru" deseni (bkz.
-   * IbanOption doc comment'i). ibanOptionId verilmezse tum alanlar null doner. */
+  /** Secilen IbanOption('lar)in alanlarini teklife kopyalanacak sekilde doner -
+   * FK degil, QuoteItem.unitPrice ile ayni "olusturma anindaki degeri koru"
+   * deseni (bkz. IbanOption doc comment'i). ibanOptionGroupId verilirse
+   * gruptaki TUM hesaplar (kullanici talebi - bkz. IbanOptionGroup doc
+   * comment'i), ibanOptionId verilirse sadece o hesap 1 elemanli array olarak
+   * doner. Ikisi de verilmezse null doner (zod .refine ikisinin ayni anda
+   * verilmesini zaten engeller). */
   private async resolveIbanSnapshot(
     ibanOptionId: string | null | undefined,
-  ): Promise<{
-    ibanBankName: string | null;
-    ibanAccountHolderName: string | null;
-    ibanAccountNumber: string | null;
-    ibanNumber: string | null;
-  }> {
+    ibanOptionGroupId: string | null | undefined,
+  ): Promise<{ ibanAccounts: IbanAccountSnapshot[] | null }> {
+    if (ibanOptionGroupId) {
+      const options = await this.prisma.ibanOption.findMany({
+        where: { groupId: ibanOptionGroupId },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (options.length === 0) {
+        throw new AppException(
+          'IBAN_GROUP_NOT_FOUND',
+          'Secilen hesap grubu tanimli degil veya bos.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return { ibanAccounts: options.map(toIbanAccountSnapshot) };
+    }
     if (!ibanOptionId) {
-      return {
-        ibanBankName: null,
-        ibanAccountHolderName: null,
-        ibanAccountNumber: null,
-        ibanNumber: null,
-      };
+      return { ibanAccounts: null };
     }
     const option = await this.prisma.ibanOption.findFirst({
       where: { id: ibanOptionId },
@@ -436,12 +470,7 @@ export class QuotesService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    return {
-      ibanBankName: option.bankName,
-      ibanAccountHolderName: option.accountHolderName,
-      ibanAccountNumber: option.accountNumber,
-      ibanNumber: option.iban,
-    };
+    return { ibanAccounts: [toIbanAccountSnapshot(option)] };
   }
 
   /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). `templateId`
@@ -878,7 +907,7 @@ export class QuotesService {
   /** Ad-hoc: markali PDF yazdirma sayfasinin (quote-template-print-page.tsx) tek
    * seferde ihtiyac duydugu tum veri - sablonun gorsel URL'leri dahil (bkz.
    * docs/VARSAYIMLAR.md V41). Banka hesabi/kosul metni sablon duzeyinde
-   * TUTULMAZ - bunlar zaten teklifin kendi alanlaridir (Quote.ibanNumber vb.,
+   * TUTULMAZ - bunlar zaten teklifin kendi alanlaridir (Quote.ibanAccounts,
    * Quote.salesTerms, Quote.deliveryTerms), QUOTE_INCLUDE ile gelen
    * `quote.template` uzerinde ek sorguya gerek yok. templateId yoksa
    * `template: null` doner. */
@@ -978,7 +1007,10 @@ export class QuotesService {
     dto: CreateQuoteDto,
   ): Promise<QuoteWithDetails> {
     await this.assertValidPaymentMethod(dto.paymentMethod);
-    const ibanSnapshot = await this.resolveIbanSnapshot(dto.ibanOptionId);
+    const ibanSnapshot = await this.resolveIbanSnapshot(
+      dto.ibanOptionId,
+      dto.ibanOptionGroupId,
+    );
     const sender = await this.prisma.user.findFirst({
       where: { id: dto.senderId },
     });
@@ -1197,9 +1229,10 @@ export class QuotesService {
         );
       }
     }
-    const ibanOptionIdProvided = dto.ibanOptionId !== undefined;
-    const ibanSnapshot = ibanOptionIdProvided
-      ? await this.resolveIbanSnapshot(dto.ibanOptionId)
+    const ibanSelectionProvided =
+      dto.ibanOptionId !== undefined || dto.ibanOptionGroupId !== undefined;
+    const ibanSnapshot = ibanSelectionProvided
+      ? await this.resolveIbanSnapshot(dto.ibanOptionId, dto.ibanOptionGroupId)
       : null;
 
     const contactIdProvided = dto.contactId !== undefined;
@@ -1290,7 +1323,10 @@ export class QuotesService {
       const nextStatus = dto.status ?? existing.status;
       if (nextStatus === existing.status) {
         if (hasFieldUpdates) {
-          await tx.quote.update({ where: { id }, data: contactUpdateData });
+          await tx.quote.update({
+            where: { id },
+            data: contactUpdateData as never,
+          });
         }
         if (isRevisionSave) {
           // Durum zaten REVIZE'de kaliyor (dto.status gonderilmedi), ama bu kayit
@@ -1316,7 +1352,7 @@ export class QuotesService {
             approvedAt,
             approvedById: actingUserId,
             ...contactUpdateData,
-          },
+          } as never,
         });
         // dto.warehouseId burada kesinlikle dolu: UpdateQuoteSchema.refine
         // status==='APPROVED' oldugunda bunu zorunlu kilar.
@@ -1359,7 +1395,7 @@ export class QuotesService {
             approvedAt: new Date(),
             approvedById: actingUserId,
             ...contactUpdateData,
-          },
+          } as never,
         });
         await this.recordStatusHistory(tx, {
           quoteId: id,
@@ -1376,7 +1412,7 @@ export class QuotesService {
 
       await tx.quote.update({
         where: { id },
-        data: { status: nextStatus, ...contactUpdateData },
+        data: { status: nextStatus, ...contactUpdateData } as never,
       });
       await this.recordStatusHistory(tx, {
         quoteId: id,

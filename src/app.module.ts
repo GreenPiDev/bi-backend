@@ -31,6 +31,7 @@ import { DrawingsModule } from './modules/drawings/drawings.module';
 import { DrawingImportsModule } from './modules/drawing-imports/drawing-imports.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
+import { IbanOptionGroupsModule } from './modules/iban-option-groups/iban-option-groups.module';
 import { IbanOptionsModule } from './modules/iban-options/iban-options.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { InteractionImportsModule } from './modules/interaction-imports/interaction-imports.module';
@@ -111,6 +112,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     PaymentMethodOptionsModule,
     QuoteRejectionReasonOptionsModule,
     IbanOptionsModule,
+    IbanOptionGroupsModule,
     TenantSettingsModule,
     CalendarEventsModule,
     CalendarSharesModule,
