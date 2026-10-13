@@ -35,6 +35,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { OpportunitiesCacheService } from '../opportunities/opportunities-cache.service';
 import { PostSaleCasesCacheService } from '../post-sale-cases/post-sale-cases-cache.service';
 import { ProductsCacheService } from '../products/products-cache.service';
+import { SalesOrdersCacheService } from '../sales-orders/sales-orders-cache.service';
 import {
   StockItemsService,
   type StockTx,
@@ -129,6 +130,8 @@ type PostSaleCaseTx = Pick<
   'postSaleCase' | 'tenantSetting'
 >;
 
+type SalesOrderTx = Pick<TenantPrismaClient, 'salesOrder'>;
+
 interface ResolvedQuoteItem {
   productId: string;
   quantity: number;
@@ -194,6 +197,13 @@ function quoteNumberPrefix(date: Date): string {
   return `TEK-${yyyy}-${mm}-${dd}-`;
 }
 
+function salesOrderNumberPrefix(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `SAT-${yyyy}-${mm}-${dd}-`;
+}
+
 @Injectable()
 export class QuotesService {
   constructor(
@@ -204,6 +214,7 @@ export class QuotesService {
     private readonly quotesCache: QuotesCacheService,
     private readonly opportunitiesCache: OpportunitiesCacheService,
     private readonly postSaleCasesCache: PostSaleCasesCacheService,
+    private readonly salesOrdersCache: SalesOrdersCacheService,
     private readonly productsCache: ProductsCacheService,
     private readonly fx: FxService,
     private readonly fileUrl: FileUrlService,
@@ -294,6 +305,48 @@ export class QuotesService {
     });
 
     return { id: postSaleCase.id, contactId: postSaleCase.contactId };
+  }
+
+  /**
+   * Ad-hoc Satis Siparisi (bkz. CLAUDE.md, kullanici istegi): Quote.status
+   * APPROVED'a ulastigi HER an (ensurePostSaleCase ile ayni iki cagri noktasi -
+   * update/approve) idempotent bir SalesOrder acar. findFirst + create (upsert
+   * tenant-scoped extension'da desteklenmiyor - ensurePostSaleCase ile ayni
+   * gerekce), quoteId @unique oldugu icin idempotency findFirst ile saglanir.
+   * orderNumber uretimi tek deneme (retry YOK) - bkz. SalesOrder model doc
+   * comment'i, ayni tx icinde retry 25P02'ye carpar.
+   */
+  private async ensureSalesOrder(
+    tx: SalesOrderTx,
+    params: {
+      quoteId: string;
+      accountId: string;
+      contactId: string | null;
+      createdById: string;
+    },
+  ): Promise<void> {
+    const existing = await tx.salesOrder.findFirst({
+      where: { quoteId: params.quoteId },
+    });
+    if (existing) {
+      return;
+    }
+
+    const prefix = salesOrderNumberPrefix(new Date());
+    const countToday = await tx.salesOrder.count({
+      where: { orderNumber: { startsWith: prefix } },
+    });
+    const orderNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
+
+    await tx.salesOrder.create({
+      data: {
+        quoteId: params.quoteId,
+        accountId: params.accountId,
+        contactId: params.contactId,
+        orderNumber,
+        createdById: params.createdById,
+      } as never,
+    });
   }
 
   /**
@@ -1281,12 +1334,19 @@ export class QuotesService {
           status: 'APPROVED',
           createdById: actingUserId,
         });
+        const resolvedContactId = contactIdProvided
+          ? (dto.contactId ?? null)
+          : existing.contactId;
+        await this.ensureSalesOrder(tx, {
+          quoteId: id,
+          accountId: existing.accountId,
+          contactId: resolvedContactId,
+          createdById: actingUserId,
+        });
         return this.ensurePostSaleCase(tx, {
           quoteId: id,
           accountId: existing.accountId,
-          contactId: contactIdProvided
-            ? (dto.contactId ?? null)
-            : existing.contactId,
+          contactId: resolvedContactId,
           approvedAt,
         });
       }
@@ -1331,6 +1391,7 @@ export class QuotesService {
     await this.quotesCache.invalidate();
     if (postSaleCase) {
       await this.postSaleCasesCache.invalidate();
+      await this.salesOrdersCache.invalidate();
       await this.productsCache.invalidate();
     }
     if (postSaleCase?.contactId) {
@@ -1390,6 +1451,12 @@ export class QuotesService {
         status: 'APPROVED',
         createdById: approvedById,
       });
+      await this.ensureSalesOrder(tx, {
+        quoteId: id,
+        accountId: existing.accountId,
+        contactId: existing.contactId,
+        createdById: approvedById,
+      });
       return this.ensurePostSaleCase(tx, {
         quoteId: id,
         accountId: existing.accountId,
@@ -1400,6 +1467,7 @@ export class QuotesService {
     await this.audit.log({ action: 'APPROVE', entity: 'Quote', entityId: id });
     await this.quotesCache.invalidate();
     await this.postSaleCasesCache.invalidate();
+    await this.salesOrdersCache.invalidate();
     await this.productsCache.invalidate();
     if (postSaleCase.contactId) {
       await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {

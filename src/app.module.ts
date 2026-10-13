@@ -57,6 +57,7 @@ import { QuotesModule } from './modules/quotes/quotes.module';
 import { QuoteImportsModule } from './modules/quote-imports/quote-imports.module';
 import { QuoteTemplatesModule } from './modules/quote-templates/quote-templates.module';
 import { ReminderTypeOptionsModule } from './modules/reminder-type-options/reminder-type-options.module';
+import { SalesOrdersModule } from './modules/sales-orders/sales-orders.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
@@ -127,6 +128,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     PostSaleCasesModule,
     ProjectsModule,
     PurchaseOrdersModule,
+    SalesOrdersModule,
     StockItemsModule,
     WarehousesModule,
     MessagesModule,

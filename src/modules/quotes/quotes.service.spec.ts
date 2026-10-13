@@ -20,6 +20,7 @@ const fakeQuotesCache = {
 } as never;
 const fakeOpportunitiesCache = { invalidate: vi.fn() } as never;
 const fakePostSaleCasesCache = { invalidate: vi.fn() } as never;
+const fakeSalesOrdersCache = { invalidate: vi.fn() } as never;
 const fakeProductsCache = { invalidate: vi.fn() } as never;
 const fakeFx = { getRatesToBase: vi.fn() } as never;
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
@@ -91,6 +92,11 @@ function createPrisma({
         .fn()
         .mockResolvedValue(postSaleCase ?? { id: 'psc-1', contactId: null }),
     },
+    salesOrder: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn().mockResolvedValue({ id: 'so-1' }),
+    },
     quote: {
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue(quoteRow),
@@ -142,6 +148,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -166,6 +173,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -207,6 +215,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -244,6 +253,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -273,6 +283,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -308,6 +319,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -354,6 +366,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -390,6 +403,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -428,6 +442,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -455,6 +470,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -480,9 +496,51 @@ describe('QuotesService', () => {
         data: expect.objectContaining({ quoteId: 'quote-1' }),
       }),
     );
+    expect(prisma.__tx.salesOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          quoteId: 'quote-1',
+          accountId: 'account-1',
+          contactId: 'contact-1',
+          orderNumber: expect.stringMatching(/^SAT-\d{4}-\d{2}-\d{2}-\d{3}$/),
+        }),
+      }),
+    );
     expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
       postSaleCaseId: 'psc-1',
     });
+  });
+
+  it('update: SalesOrder zaten varsa tekrar olusturmaz (idempotent)', async () => {
+    const prisma = createPrisma({
+      quoteRow: createQuoteRow({ status: 'DRAFT', contactId: 'contact-1' }),
+      products: [],
+      postSaleCase: { id: 'psc-1', contactId: 'contact-1' },
+    });
+    prisma.__tx.salesOrder.findFirst = vi
+      .fn()
+      .mockResolvedValue({ id: 'so-existing', quoteId: 'quote-1' });
+    const service = new QuotesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeQuotesCache,
+      fakeOpportunitiesCache,
+      fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
+      fakeProductsCache,
+      fakeFx,
+      fakeFileUrl,
+      fakeNotifications,
+      fakeStockItems,
+    );
+    await service.update(
+      'quote-1',
+      { status: 'APPROVED' } as never,
+      'manager-1',
+    );
+
+    expect(prisma.__tx.salesOrder.create).not.toHaveBeenCalled();
   });
 
   it('update: dropdown status: REJECTED gonderince PostSaleCase acmadan reddeder', async () => {
@@ -497,6 +555,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -538,6 +597,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -584,6 +644,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -611,6 +672,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -642,6 +704,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -670,6 +733,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -708,6 +772,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -752,6 +817,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -800,6 +866,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -837,6 +904,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -886,6 +954,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -914,6 +983,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -954,6 +1024,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -970,6 +1041,16 @@ describe('QuotesService', () => {
           quoteId: 'quote-1',
           accountId: 'account-1',
           contactId: 'contact-1',
+        }),
+      }),
+    );
+    expect(prisma.__tx.salesOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          quoteId: 'quote-1',
+          accountId: 'account-1',
+          contactId: 'contact-1',
+          createdById: 'manager-1',
         }),
       }),
     );
@@ -991,6 +1072,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -1016,6 +1098,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -1041,6 +1124,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -1064,6 +1148,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -1106,6 +1191,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,
@@ -1162,6 +1248,7 @@ describe('QuotesService', () => {
       fakeQuotesCache,
       fakeOpportunitiesCache,
       fakePostSaleCasesCache,
+      fakeSalesOrdersCache,
       fakeProductsCache,
       fakeFx,
       fakeFileUrl,

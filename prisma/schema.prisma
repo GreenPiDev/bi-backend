@@ -29,6 +29,21 @@ enum PurchaseOrderStatus {
   CONFIRMED
 }
 
+/**
+ * Ad-hoc: Satis Siparisi (kullanici istegi, bkz. CLAUDE.md). PENDING'den COMPLETED'e
+ * operasyonel/sevkiyat durumu - stok zaten Quote onayinda (QUOTE_SALE) tek seferde
+ * dusuldugu icin bu durum gecisleri stok hareketi URETMEZ, sadece takip amaclidir.
+ */
+enum SalesOrderStatus {
+  PENDING
+  PROCESSING
+  READY_FOR_SHIPMENT
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
 enum PurchaseOrderItemSource {
   QUOTE
   EXTRA
@@ -216,54 +231,55 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                    User[]
-  dataSources              DataSource[]
-  datasets                 Dataset[]
-  dashboards               Dashboard[]
-  scheduledReports         ScheduledReport[]
-  alerts                   Alert[]
-  auditLogs                AuditLog[]
-  modules                  TenantModule[]
-  accounts                 Account[]
-  contacts                 Contact[]
-  sectorOptions            SectorOption[]
-  departmentOptions        DepartmentOption[]
-  titleOptions             TitleOption[]
-  productCategoryOptions   ProductCategoryOption[]
-  brandOptions             BrandOption[]
-  unitOptions              UnitOption[]
-  paymentMethodOptions     PaymentMethodOption[]
+  users                       User[]
+  dataSources                 DataSource[]
+  datasets                    Dataset[]
+  dashboards                  Dashboard[]
+  scheduledReports            ScheduledReport[]
+  alerts                      Alert[]
+  auditLogs                   AuditLog[]
+  modules                     TenantModule[]
+  accounts                    Account[]
+  contacts                    Contact[]
+  sectorOptions               SectorOption[]
+  departmentOptions           DepartmentOption[]
+  titleOptions                TitleOption[]
+  productCategoryOptions      ProductCategoryOption[]
+  brandOptions                BrandOption[]
+  unitOptions                 UnitOption[]
+  paymentMethodOptions        PaymentMethodOption[]
   quoteRejectionReasonOptions QuoteRejectionReasonOption[]
-  ibanOptions              IbanOption[]
-  settings                 TenantSetting[]
-  roles                    Role[]
-  calendarEvents           CalendarEvent[]
-  calendarShares           CalendarShare[]
-  reminderTypeOptions      ReminderTypeOption[]
-  interactions             Interaction[]
-  interactionTypeOptions   InteractionTypeOption[]
-  opportunities            Opportunity[]
-  products                 Product[]
-  productLists             ProductList[]
-  quotes                   Quote[]
-  quoteTemplates           QuoteTemplate[]
-  postSaleCases            PostSaleCase[]
-  feedbackSurveys          FeedbackSurvey[]
-  projects                 Project[]
-  projectAttachments       ProjectAttachment[]
-  purchaseOrders           PurchaseOrder[]
-  stockItems               StockItem[]
-  stockMovements           StockMovement[]
-  stockHoldingCostLogs     StockHoldingCostLog[]
-  quoteStatusHistories     QuoteStatusHistory[]
-  warehouses               Warehouse[]
-  messages                 Message[]
-  messageStars             MessageStar[]
-  messageAttachments       MessageAttachment[]
-  notifications            Notification[]
-  drawingLibraryComponents DrawingLibraryComponent[]
-  drawingPanelTemplates    DrawingPanelTemplate[]
-  drawings                 Drawing[]
+  ibanOptions                 IbanOption[]
+  settings                    TenantSetting[]
+  roles                       Role[]
+  calendarEvents              CalendarEvent[]
+  calendarShares              CalendarShare[]
+  reminderTypeOptions         ReminderTypeOption[]
+  interactions                Interaction[]
+  interactionTypeOptions      InteractionTypeOption[]
+  opportunities               Opportunity[]
+  products                    Product[]
+  productLists                ProductList[]
+  quotes                      Quote[]
+  quoteTemplates              QuoteTemplate[]
+  postSaleCases               PostSaleCase[]
+  feedbackSurveys             FeedbackSurvey[]
+  projects                    Project[]
+  projectAttachments          ProjectAttachment[]
+  salesOrders                 SalesOrder[]
+  purchaseOrders              PurchaseOrder[]
+  stockItems                  StockItem[]
+  stockMovements              StockMovement[]
+  stockHoldingCostLogs        StockHoldingCostLog[]
+  quoteStatusHistories        QuoteStatusHistory[]
+  warehouses                  Warehouse[]
+  messages                    Message[]
+  messageStars                MessageStar[]
+  messageAttachments          MessageAttachment[]
+  notifications               Notification[]
+  drawingLibraryComponents    DrawingLibraryComponent[]
+  drawingPanelTemplates       DrawingPanelTemplate[]
+  drawings                    Drawing[]
 
   @@map("tenants")
 }
@@ -570,6 +586,7 @@ model Account {
   opportunities Opportunity[]
   quotes        Quote[]
   postSaleCases PostSaleCase[]
+  salesOrders   SalesOrder[]
   projects      Project[]
 
   @@index([tenantId, name])
@@ -606,6 +623,7 @@ model Contact {
   interactions    Interaction[]
   quotes          Quote[]
   postSaleCases   PostSaleCase[]
+  salesOrders     SalesOrder[]
   feedbackSurveys FeedbackSurvey[]
 
   @@index([tenantId, lastName])
@@ -1244,6 +1262,7 @@ model Quote {
   items          QuoteItem[]
   opportunity    Opportunity?
   postSaleCase   PostSaleCase?
+  salesOrder     SalesOrder?
   purchaseOrders PurchaseOrder[]
   stockMovements StockMovement[]
   drawings       Drawing[]
@@ -1343,19 +1362,19 @@ model QuoteTemplate {
  * korur. discountNote Q5'in otomatik notu.
  */
 model QuoteItem {
-  id           String   @id @default(uuid())
-  quoteId      String
-  productId    String
-  quantity     Decimal  @db.Decimal(14, 3)
-  unitPrice    Decimal  @db.Decimal(14, 2)
+  id              String   @id @default(uuid())
+  quoteId         String
+  productId       String
+  quantity        Decimal  @db.Decimal(14, 3)
+  unitPrice       Decimal  @db.Decimal(14, 2)
   /**
    * unitPrice ile ayni snapshot semantigi: satir olusturulurken/guncellenirken
    * Product.currency'den kopyalanir, client'tan kabul edilmez (bkz. resolveItems).
    */
-  currency     String   @default("TRY")
-  discountPct  Decimal  @default(0) @db.Decimal(5, 2)
-  discountNote String?
-  vatPct       Decimal  @default(0) @db.Decimal(5, 2)
+  currency        String   @default("TRY")
+  discountPct     Decimal  @default(0) @db.Decimal(5, 2)
+  discountNote    String?
+  vatPct          Decimal  @default(0) @db.Decimal(5, 2)
   /**
    * Maliyet sekmesi (quote-cost-content.tsx) icin donmus (snapshot) WAC maliyeti.
    * unitPrice/currency ile ayni mantik: satir olusturulurken/guncellenirken
@@ -1363,7 +1382,7 @@ model QuoteItem {
    * (yeni stok girisiyle) bu teklifteki kar/maliyet hesabi degismez.
    */
   costPriceAtSale Decimal? @db.Decimal(14, 4)
-  createdAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -1523,6 +1542,47 @@ model ProjectResponsible {
  * bu akiste teklif zorunlu degildir, quoteId opsiyonel bir baglantidir (Project.quoteId
  * ile ayni "zorunlu degil" deseni, bkz. SP1-SP3 dokumaninda P2).
  */
+/**
+ * Ad-hoc: Satis Siparisi (kullanici istegi, bkz. CLAUDE.md). PostSaleCase ile AYNI
+ * desen: Quote.status APPROVED'a ulastigi HER an (QuotesService.ensureSalesOrder,
+ * ensurePostSaleCase ile ayni iki cagri noktasi - update/approve) idempotent olarak
+ * (findFirst + create, upsert yok - tenant-scoped.extension.ts bunu desteklemiyor)
+ * tek bir SalesOrder acilir. quoteId @unique: bir teklif en fazla bir satis siparisine
+ * donusur (Project.quoteId ile ayni "1:1" karari). Kendi kalem tablosu YOK - satilan
+ * kalemler zaten Quote.items'ta, burada tekrar tutmak PurchaseOrderItem'daki gibi
+ * "siparise ozel ek kalem" ihtiyaci olmadigi icin gereksiz karmasiklik olurdu; detay
+ * ekrani Quote.items'i salt-okunur gosterir. accountId/contactId, PostSaleCase ile
+ * ayni "sorgu/arama icin denormalize" gerekcesiyle buraya kopyalanir.
+ * orderNumber SAT-YYYY-AA-GG-NNN formatinda (Quote/Project/PurchaseOrder ile ayni
+ * gun-icinde-sirali sayac deseni) - tek-denemelik (retry YOK): zaten tek bir
+ * transaction icinde (Quote APPROVED gecisiyle ayni tx) olusturuldugundan
+ * PurchaseOrdersService.createWithGeneratedNumber'daki "ayni tx icinde retry 25P02'ye
+ * carpar" riskini tasimamak icin tek deneme kabul edildi - cakisma ihtimali (ayni
+ * tenant'ta ayni gun ayni sayaç pozisyonunda es zamanli iki onay) cok dusuk.
+ */
+model SalesOrder {
+  id          String           @id @default(uuid())
+  tenantId    String
+  orderNumber String
+  quoteId     String           @unique
+  accountId   String
+  contactId   String?
+  status      SalesOrderStatus @default(PENDING)
+  createdById String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  quote   Quote    @relation(fields: [quoteId], references: [id])
+  account Account  @relation(fields: [accountId], references: [id])
+  contact Contact? @relation(fields: [contactId], references: [id])
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, accountId])
+  @@map("crm_sales_orders")
+}
+
 model PurchaseOrder {
   id          String              @id @default(uuid())
   tenantId    String

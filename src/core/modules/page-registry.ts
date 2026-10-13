@@ -100,6 +100,14 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
   {
+    key: 'sales-orders',
+    label: 'Satis Siparisleri',
+    /** CREATE/DELETE yok: SalesOrder sadece Quote APPROVED olunca otomatik
+     * olusur (bkz. QuotesService.ensureSalesOrder), kullanici sadece durumunu
+     * degistirebilir. */
+    supportedActions: ['UPDATE'],
+  },
+  {
     key: 'purchase-orders',
     label: 'Siparis / Satin Alma',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
