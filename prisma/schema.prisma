@@ -776,11 +776,17 @@ model IbanOptionGroup {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
+  /** Bir tenant'ta en fazla bir isDefault=true kaydi olur (QuoteTemplatesService
+   * ile ayni desen - create/update transaction icinde digerlerini once false
+   * yapar). /teklifler/yeni'de IBAN secimi varsayilan olarak bu gruba onceden
+   * secili gelir (kullanici talebi). */
+  isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 
   tenant  Tenant       @relation(fields: [tenantId], references: [id])
   options IbanOption[]
 
+  @@index([tenantId, isDefault])
   @@map("crm_iban_option_groups")
 }
 

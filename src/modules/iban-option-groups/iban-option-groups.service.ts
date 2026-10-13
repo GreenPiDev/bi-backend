@@ -34,10 +34,21 @@ export class IbanOptionGroupsService {
     this.realtime.emitToTenant(tenantId, 'ibanOptionGroups.updated', groups);
   }
 
+  /** QuoteTemplatesService ile ayni "en fazla bir isDefault=true" deseni -
+   * yeni grup varsayilan isaretlenirse diger tum gruplar once false'a cekilir. */
   async create(dto: IbanOptionGroupDto): Promise<IbanOptionGroup> {
-    const group = await this.prisma.ibanOptionGroup.create({
-      // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
-      data: { name: dto.name } as never,
+    const isDefault = dto.isDefault ?? false;
+    const group = await this.prisma.$transaction(async (tx) => {
+      if (isDefault) {
+        await tx.ibanOptionGroup.updateMany({
+          where: { isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+      return tx.ibanOptionGroup.create({
+        // tenantId, tenant-scoped extension tarafindan calisma zamaninda eklenir
+        data: { name: dto.name, isDefault } as never,
+      });
     });
     await this.audit.log({
       action: 'CREATE',
@@ -60,9 +71,17 @@ export class IbanOptionGroupsService {
         HttpStatus.NOT_FOUND,
       );
     }
-    const group = await this.prisma.ibanOptionGroup.update({
-      where: { id },
-      data: { name: dto.name },
+    const group = await this.prisma.$transaction(async (tx) => {
+      if (dto.isDefault) {
+        await tx.ibanOptionGroup.updateMany({
+          where: { isDefault: true, id: { not: id } },
+          data: { isDefault: false },
+        });
+      }
+      return tx.ibanOptionGroup.update({
+        where: { id },
+        data: { name: dto.name, isDefault: dto.isDefault ?? false },
+      });
     });
     await this.audit.log({
       action: 'UPDATE',
