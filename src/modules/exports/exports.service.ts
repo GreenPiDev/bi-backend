@@ -5,6 +5,7 @@ import { DashboardsService } from '../dashboards/dashboards.service';
 import type { QuerySpec } from '../query/dto/query-spec.dto';
 import { QueryService } from '../query/query.service';
 import { QuotesService } from '../quotes/quotes.service';
+import { TenantsService } from '../tenants/tenants.service';
 import { TokenService } from '../auth/token.service';
 import { WidgetsService } from '../widgets/widgets.service';
 import { buildCsv } from './csv';
@@ -13,6 +14,8 @@ import { QuotePdfService } from './quote-pdf.service';
 import { isKnownReportTab, ReportPdfService } from './report-pdf.service';
 
 const QUOTE_EXPORTABLE_STATUSES = new Set(['DRAFT', 'APPROVED']);
+const QUOTE_PDF_COVER_TITLE = 'Fiyat Teklifi';
+const quotePdfDateFormatter = new Intl.DateTimeFormat('tr-TR');
 
 @Injectable()
 export class ExportsService {
@@ -21,11 +24,49 @@ export class ExportsService {
     private readonly query: QueryService,
     private readonly dashboards: DashboardsService,
     private readonly quotes: QuotesService,
+    private readonly tenants: TenantsService,
     private readonly tokenService: TokenService,
     private readonly dashboardPdf: DashboardPdfService,
     private readonly quotePdf: QuotePdfService,
     private readonly reportPdf: ReportPdfService,
   ) {}
+
+  /** Ana teklif PDF'inin (exportQuotePdf) her sayfasinda tekrar eden
+   * header/footer'i (bkz. QuotePdfService) besleyen tenant-genel marka bilgisi. */
+  private async getQuotePdfBranding(
+    quoteId: string,
+    tenantId: string,
+  ): Promise<{
+    header: {
+      logoUrl: string | null;
+      title: string;
+      quoteDate: string;
+      quoteNumber: string;
+    };
+    company: {
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+    };
+  }> {
+    const [quote, tenantProfile] = await Promise.all([
+      this.quotes.getById(quoteId),
+      this.tenants.getProfile(tenantId),
+    ]);
+    return {
+      header: {
+        logoUrl: tenantProfile.logoUrl,
+        title: QUOTE_PDF_COVER_TITLE,
+        quoteDate: quotePdfDateFormatter.format(new Date(quote.quoteDate)),
+        quoteNumber: quote.quoteNumber,
+      },
+      company: {
+        address: tenantProfile.address,
+        phone: tenantProfile.phone,
+        email: tenantProfile.email,
+      },
+    };
+  }
 
   async exportWidgetCsv(widgetId: string, tenantId: string): Promise<string> {
     const widget = await this.widgets.findByIdAcrossDashboards(widgetId);
@@ -65,8 +106,14 @@ export class ExportsService {
       roleIds: user.roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
     });
+    const { header, company } = await this.getQuotePdfBranding(
+      quoteId,
+      user.tenantId,
+    );
     return this.quotePdf.render(quoteId, accessToken, {
       branded: quote.templateId !== null,
+      header,
+      company,
     });
   }
 

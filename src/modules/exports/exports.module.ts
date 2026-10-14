@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { DashboardsModule } from '../dashboards/dashboards.module';
 import { QueryModule } from '../query/query.module';
 import { QuotesModule } from '../quotes/quotes.module';
+import { TenantsModule } from '../tenants/tenants.module';
 import { WidgetsModule } from '../widgets/widgets.module';
 import { DashboardPdfService } from './dashboard-pdf.service';
 import { ExportsController } from './exports.controller';
@@ -17,6 +18,7 @@ import { ReportPdfService } from './report-pdf.service';
     WidgetsModule,
     QueryModule,
     QuotesModule,
+    TenantsModule,
   ],
   controllers: [ExportsController],
   providers: [

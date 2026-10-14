@@ -57,7 +57,26 @@ function createQuotes(
   templateId: string | null = null,
 ) {
   return {
-    getById: vi.fn().mockResolvedValue({ id: QUOTE_ID, status, templateId }),
+    getById: vi.fn().mockResolvedValue({
+      id: QUOTE_ID,
+      status,
+      templateId,
+      quoteDate: '2026-09-23T00:00:00.000Z',
+      quoteNumber: 'TEK-2026-09-23-001',
+    }),
+  };
+}
+
+function createTenants() {
+  return {
+    getProfile: vi.fn().mockResolvedValue({
+      id: TENANT_ID,
+      name: 'Tenant Co',
+      logoUrl: 'https://cdn.example.com/logo.png',
+      address: 'Adres 1',
+      phone: '0312 000 00 00',
+      email: 'info@tenant.com',
+    }),
   };
 }
 
@@ -69,6 +88,7 @@ function buildService(overrides: Partial<Record<string, unknown>> = {}) {
     (overrides.query ?? createQuery()) as never,
     (overrides.dashboards ?? createDashboards()) as never,
     (overrides.quotes ?? createQuotes()) as never,
+    (overrides.tenants ?? createTenants()) as never,
     (overrides.tokenService ?? createTokenService()) as never,
     (overrides.dashboardPdf ?? createDashboardPdf()) as never,
     (overrides.quotePdf ?? createQuotePdf()) as never,
@@ -127,9 +147,18 @@ describe('ExportsService', () => {
       isPlatformAdmin: false,
     };
     const pdf = await service.exportQuotePdf(QUOTE_ID, user);
-    expect(quotePdf.render).toHaveBeenCalledWith(QUOTE_ID, 'signed-token', {
-      branded: false,
-    });
+    expect(quotePdf.render).toHaveBeenCalledWith(
+      QUOTE_ID,
+      'signed-token',
+      expect.objectContaining({
+        branded: false,
+        header: expect.objectContaining({
+          logoUrl: 'https://cdn.example.com/logo.png',
+          quoteNumber: 'TEK-2026-09-23-001',
+        }),
+        company: expect.objectContaining({ address: 'Adres 1' }),
+      }),
+    );
     expect(pdf.toString()).toBe('quote-pdf-bytes');
   });
 
@@ -144,9 +173,11 @@ describe('ExportsService', () => {
       isPlatformAdmin: false,
     };
     await service.exportQuotePdf(QUOTE_ID, user);
-    expect(quotePdf.render).toHaveBeenCalledWith(QUOTE_ID, 'signed-token', {
-      branded: true,
-    });
+    expect(quotePdf.render).toHaveBeenCalledWith(
+      QUOTE_ID,
+      'signed-token',
+      expect.objectContaining({ branded: true }),
+    );
   });
 
   it('exportQuotePdf: PENDING_APPROVAL teklif icin QUOTE_NOT_READY firlatir', async () => {
