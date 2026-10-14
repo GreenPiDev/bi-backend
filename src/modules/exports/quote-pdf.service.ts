@@ -30,7 +30,7 @@ const PDF_FOOTER_MARGIN_BOTTOM = '24mm';
 // Logo + "Fiyat Teklifi" basligi + tarih/teklif no satirinin sigmasi icin ayrilan
 // ust marj (bkz. buildHeaderTemplate) - eskiden body icinde tek seferlik render
 // edilen AppShell print header'inin yerini alir, artik her sayfada tekrar eder.
-const PDF_HEADER_MARGIN_TOP = '22mm';
+const PDF_HEADER_MARGIN_TOP = '26mm';
 
 /** Playwright'in header/footer template frame'i, asil sayfanin auth cookie'sini
  * tasimaz - korumali bir `/files?key=...` URL'i oraya dogrudan verilirse logo
