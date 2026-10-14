@@ -781,7 +781,12 @@ model IbanOptionGroup {
    * yapar). /teklifler/yeni'de IBAN secimi varsayilan olarak bu gruba onceden
    * secili gelir (kullanici talebi). */
   isDefault Boolean  @default(false)
+  /** Banka logosu - Product/User avatar ile ayni R2 deseni (bkz.
+   * IbanOptionGroupsService.uploadLogo). Opsiyonel, teklif PDF'inde ve
+   * ayarlar listesinde kucuk bir onizleme olarak gosterilir. */
+  logoKey   String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant  Tenant       @relation(fields: [tenantId], references: [id])
   options IbanOption[]

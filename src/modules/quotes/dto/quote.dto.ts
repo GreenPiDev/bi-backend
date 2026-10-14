@@ -56,53 +56,50 @@ const QuoteOpportunityInputSchema = z.object({
     .optional(),
 });
 
-export const CreateQuoteSchema = z
-  .object({
-    accountId: z.string().uuid(),
-    /** S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - opsiyonel, verilirse
-     * accountId'ye ait bir kisi olmalidir. */
-    contactId: z.string().uuid().optional(),
-    items: z
-      .array(QuoteItemInputSchema)
-      .min(1, 'En az bir urun satiri eklenmelidir.')
-      .max(200),
-    opportunity: QuoteOpportunityInputSchema.optional(),
-    /** Kullanicinin elle girdigi teklif tarihi - quoteNumber'in gun-icinde-sayaci
-     * icin kullandigi sistem tarihinden bagimsizdir. */
-    quoteDate: z.coerce.date(),
-    /** Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta". */
-    leadTime: z.string().trim().max(200).optional(),
-    /** Tenant'in tanimladigi listeye karsi dogrulanir, bkz. QuotesService.assertValidPaymentMethod. */
-    paymentMethod: z.string().trim().max(200).optional(),
-    title: z.string().trim().max(200).optional(),
-    paymentTerms: z.string().trim().max(4000).optional(),
-    salesTerms: z.string().trim().max(4000).optional(),
-    deliveryTerms: z.string().trim().max(4000).optional(),
-    generalTerms: z.string().trim().max(4000).optional(),
-    /** Tenant'in crm_iban_options listesinden secilir, teklife snapshot olarak
-     * kopyalanir (bkz. QuotesService.resolveIbanSnapshot). ibanOptionGroupId ile
-     * ayni anda verilemez. */
-    ibanOptionId: z.string().uuid().optional(),
-    /** Tenant'in crm_iban_option_groups listesinden secilir - secilirse gruptaki
-     * TUM hesaplar teklife snapshot olarak kopyalanir (kullanici talebi, bkz.
-     * IbanOptionGroup doc comment'i). ibanOptionId ile ayni anda verilemez. */
-    ibanOptionGroupId: z.string().uuid().optional(),
-    /** Kalemler quoteCurrency disinda bir para biriminde iceriyorsa zorunlu -
-     * QuotesService.assertExchangeRatesCoverItems dogrular. */
-    quoteCurrency: CurrencyCodeSchema.default('TRY'),
-    exchangeRates: QuoteExchangeRatesSchema.optional(),
-    /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Verilmezse
-     * tenant'in varsayilan sablonu otomatik atanir (varsa) - bkz. QuotesService.create. */
-    templateId: z.string().uuid().nullable().optional(),
-    /** Teklifin "gonderen"i (PDF'te gosterilen temsilci) - frontend varsayilan
-     * olarak isteği yapan kullaniciyi onceden secili gosterir ama degistirilebilir,
-     * bu yuzden zorunlu (createdById'den bagimsiz, bkz. Quote.senderId doc comment'i). */
-    senderId: z.string().uuid(),
-  })
-  .refine((dto) => !dto.ibanOptionId || !dto.ibanOptionGroupId, {
-    message: 'IBAN hesabi ve hesap grubu ayni anda secilemez.',
-    path: ['ibanOptionGroupId'],
-  });
+export const CreateQuoteSchema = z.object({
+  accountId: z.string().uuid(),
+  /** S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - opsiyonel, verilirse
+   * accountId'ye ait bir kisi olmalidir. */
+  contactId: z.string().uuid().optional(),
+  items: z
+    .array(QuoteItemInputSchema)
+    .min(1, 'En az bir urun satiri eklenmelidir.')
+    .max(200),
+  opportunity: QuoteOpportunityInputSchema.optional(),
+  /** Kullanicinin elle girdigi teklif tarihi - quoteNumber'in gun-icinde-sayaci
+   * icin kullandigi sistem tarihinden bagimsizdir. */
+  quoteDate: z.coerce.date(),
+  /** Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta". */
+  leadTime: z.string().trim().max(200).optional(),
+  /** Tenant'in tanimladigi listeye karsi dogrulanir, bkz. QuotesService.assertValidPaymentMethod. */
+  paymentMethod: z.string().trim().max(200).optional(),
+  title: z.string().trim().max(200).optional(),
+  paymentTerms: z.string().trim().max(4000).optional(),
+  salesTerms: z.string().trim().max(4000).optional(),
+  deliveryTerms: z.string().trim().max(4000).optional(),
+  generalTerms: z.string().trim().max(4000).optional(),
+  /** Tenant'in crm_iban_options listesinden coklu secilir, teklife snapshot
+   * olarak kopyalanir (bkz. QuotesService.resolveIbanSnapshot). ibanOptionGroupIds
+   * ile birlikte verilebilir - gruptaki ve tek tek secilen TUM hesaplar
+   * birlestirilir (kullanici talebi: birden fazla grup/hesap ayni teklife
+   * eklenebilmeli). */
+  ibanOptionIds: z.array(z.string().uuid()).max(20).optional(),
+  /** Tenant'in crm_iban_option_groups listesinden coklu secilir - secilen her
+   * gruptaki TUM hesaplar teklife snapshot olarak kopyalanir (kullanici talebi,
+   * bkz. IbanOptionGroup doc comment'i). ibanOptionIds ile birlikte verilebilir. */
+  ibanOptionGroupIds: z.array(z.string().uuid()).max(20).optional(),
+  /** Kalemler quoteCurrency disinda bir para biriminde iceriyorsa zorunlu -
+   * QuotesService.assertExchangeRatesCoverItems dogrular. */
+  quoteCurrency: CurrencyCodeSchema.default('TRY'),
+  exchangeRates: QuoteExchangeRatesSchema.optional(),
+  /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Verilmezse
+   * tenant'in varsayilan sablonu otomatik atanir (varsa) - bkz. QuotesService.create. */
+  templateId: z.string().uuid().nullable().optional(),
+  /** Teklifin "gonderen"i (PDF'te gosterilen temsilci) - frontend varsayilan
+   * olarak isteği yapan kullaniciyi onceden secili gosterir ama degistirilebilir,
+   * bu yuzden zorunlu (createdById'den bagimsiz, bkz. Quote.senderId doc comment'i). */
+  senderId: z.string().uuid(),
+});
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
 
@@ -128,13 +125,16 @@ export const UpdateQuoteSchema = z
     salesTerms: z.string().trim().max(4000).nullable().optional(),
     deliveryTerms: z.string().trim().max(4000).nullable().optional(),
     generalTerms: z.string().trim().max(4000).nullable().optional(),
-    /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger
-     * korunur. ibanOptionGroupId ile ayni anda (ikisi de non-null) verilemez. */
-    ibanOptionId: z.string().uuid().nullable().optional(),
-    /** null verilirse IBAN snapshot'i temizlenir, hic verilmezse mevcut deger
-     * korunur - secilirse gruptaki TUM hesaplar snapshot'lanir (bkz.
-     * IbanOptionGroup doc comment'i). ibanOptionId ile ayni anda verilemez. */
-    ibanOptionGroupId: z.string().uuid().nullable().optional(),
+    /** Hic verilmezse (undefined) mevcut IBAN snapshot'i korunur; verilirse
+     * (bos array dahil) ibanOptionGroupIds ile birlikte snapshot'i yeniden
+     * hesaplar (bkz. QuotesService.resolveIbanSnapshot). ibanOptionGroupIds ile
+     * birlikte verilebilir - ikisindeki TUM hesaplar birlestirilir. */
+    ibanOptionIds: z.array(z.string().uuid()).max(20).optional(),
+    /** Hic verilmezse (undefined) mevcut IBAN snapshot'i korunur; verilirse
+     * (bos array dahil) ibanOptionIds ile birlikte snapshot'i yeniden hesaplar -
+     * secilen her gruptaki TUM hesaplar dahil edilir (bkz. IbanOptionGroup doc
+     * comment'i). */
+    ibanOptionGroupIds: z.array(z.string().uuid()).max(20).optional(),
     quoteCurrency: CurrencyCodeSchema.optional(),
     exchangeRates: QuoteExchangeRatesSchema.optional(),
     /** null verilirse sablon kaldirilir (sade export'a doner), hic verilmezse mevcut
@@ -152,10 +152,6 @@ export const UpdateQuoteSchema = z
   .refine((dto) => dto.status !== 'APPROVED' || dto.warehouseId !== undefined, {
     message: 'Onaylamak icin depo secimi gerekli.',
     path: ['warehouseId'],
-  })
-  .refine((dto) => !dto.ibanOptionId || !dto.ibanOptionGroupId, {
-    message: 'IBAN hesabi ve hesap grubu ayni anda secilemez.',
-    path: ['ibanOptionGroupId'],
   })
   .refine(
     (dto) => dto.status !== 'REJECTED' || dto.rejectionReason !== undefined,

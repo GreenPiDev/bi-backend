@@ -111,28 +111,43 @@ export type QuotePrintData = Omit<QuoteWithDetails, 'template'> & {
   sender: QuotePrintSenderData | null;
 };
 
-/** Quote.ibanAccounts (JSON) icindeki her elemanin sekli - bkz. resolveIbanSnapshot. */
+/** Quote.ibanAccounts (JSON) icindeki her elemanin sekli - bkz. resolveIbanSnapshot.
+ * groupId/groupLogoUrl, teklif PDF'inde ayni gruba ait ardisik kayitlarin basina
+ * grubun logosunu tek seferlik basmak icin tutulur (bkz. quote-pdf.service.ts
+ * buildBankLogoSpans). */
 export interface IbanAccountSnapshot {
   bankName: string;
   accountHolderName: string;
   accountNumber: string | null;
   iban: string;
   currency: string;
+  groupId: string | null;
+  groupLogoUrl: string | null;
 }
 
-function toIbanAccountSnapshot(option: {
-  bankName: string;
-  accountHolderName: string;
-  accountNumber: string | null;
-  iban: string;
-  currency: string;
-}): IbanAccountSnapshot {
+function toIbanAccountSnapshot(
+  option: {
+    bankName: string;
+    accountHolderName: string;
+    accountNumber: string | null;
+    iban: string;
+    currency: string;
+    groupId: string | null;
+  },
+  fileUrl: FileUrlService,
+  groupLogoByGroupId: Map<string, { logoKey: string | null; updatedAt: Date }>,
+): IbanAccountSnapshot {
+  const group = option.groupId
+    ? groupLogoByGroupId.get(option.groupId)
+    : undefined;
   return {
     bankName: option.bankName,
     accountHolderName: option.accountHolderName,
     accountNumber: option.accountNumber,
     iban: option.iban,
     currency: option.currency,
+    groupId: option.groupId,
+    groupLogoUrl: group ? fileUrl.build(group.logoKey, group.updatedAt) : null,
   };
 }
 
@@ -432,45 +447,101 @@ export class QuotesService {
     }
   }
 
-  /** Secilen IbanOption('lar)in alanlarini teklife kopyalanacak sekilde doner -
-   * FK degil, QuoteItem.unitPrice ile ayni "olusturma anindaki degeri koru"
-   * deseni (bkz. IbanOption doc comment'i). ibanOptionGroupId verilirse
-   * gruptaki TUM hesaplar (kullanici talebi - bkz. IbanOptionGroup doc
-   * comment'i), ibanOptionId verilirse sadece o hesap 1 elemanli array olarak
-   * doner. Ikisi de verilmezse null doner (zod .refine ikisinin ayni anda
-   * verilmesini zaten engeller). */
+  /** Secilen IbanOption('lar)in/grup(lar)in alanlarini teklife kopyalanacak
+   * sekilde doner - FK degil, QuoteItem.unitPrice ile ayni "olusturma anindaki
+   * degeri koru" deseni (bkz. IbanOption doc comment'i). ibanOptionGroupIds
+   * verilirse secilen HER gruptaki TUM hesaplar (kullanici talebi - bkz.
+   * IbanOptionGroup doc comment'i), ibanOptionIds verilirse o tekil hesaplar da
+   * eklenir - ikisi birlikte verilebilir, sonuc birlestirilip tekillestirilir.
+   * Ikisi de bos/verilmezse null doner. */
   private async resolveIbanSnapshot(
-    ibanOptionId: string | null | undefined,
-    ibanOptionGroupId: string | null | undefined,
+    ibanOptionIds: string[] | null | undefined,
+    ibanOptionGroupIds: string[] | null | undefined,
   ): Promise<{ ibanAccounts: IbanAccountSnapshot[] | null }> {
-    if (ibanOptionGroupId) {
-      const options = await this.prisma.ibanOption.findMany({
-        where: { groupId: ibanOptionGroupId },
-        orderBy: { createdAt: 'asc' },
-      });
-      if (options.length === 0) {
-        throw new AppException(
-          'IBAN_GROUP_NOT_FOUND',
-          'Secilen hesap grubu tanimli degil veya bos.',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      return { ibanAccounts: options.map(toIbanAccountSnapshot) };
-    }
-    if (!ibanOptionId) {
+    const optionIds = ibanOptionIds ?? [];
+    const groupIds = ibanOptionGroupIds ?? [];
+    if (optionIds.length === 0 && groupIds.length === 0) {
       return { ibanAccounts: null };
     }
-    const option = await this.prisma.ibanOption.findFirst({
-      where: { id: ibanOptionId },
-    });
-    if (!option) {
+
+    const groupOptions =
+      groupIds.length > 0
+        ? await this.prisma.ibanOption.findMany({
+            where: { groupId: { in: groupIds } },
+            orderBy: { createdAt: 'asc' },
+          })
+        : [];
+    const foundGroupIds = new Set(groupOptions.map((option) => option.groupId));
+    const missingGroupId = groupIds.find((id) => !foundGroupIds.has(id));
+    if (missingGroupId) {
+      throw new AppException(
+        'IBAN_GROUP_NOT_FOUND',
+        'Secilen hesap grubu tanimli degil veya bos.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const singleOptions =
+      optionIds.length > 0
+        ? await this.prisma.ibanOption.findMany({
+            where: { id: { in: optionIds } },
+          })
+        : [];
+    if (singleOptions.length !== optionIds.length) {
       throw new AppException(
         'IBAN_NOT_FOUND',
         'Secilen IBAN tanimli degil.',
         HttpStatus.BAD_REQUEST,
       );
     }
-    return { ibanAccounts: [toIbanAccountSnapshot(option)] };
+
+    // groupOptions sorgusu tum secili gruplarin hesaplarini createdAt'e gore
+    // (gruplar arasi karisik) dondurur - teklif PDF'inde ayni gruba ait kayitlarin
+    // ardisik olmasi (logo span'i icin, bkz. IbanAccountSnapshot doc comment'i)
+    // gerektiginden, once secilen grup sirasina gore stabil sekilde yeniden sirala.
+    const groupIdOrder = new Map(groupIds.map((id, index) => [id, index]));
+    const sortedGroupOptions = [...groupOptions].sort(
+      (a, b) =>
+        (groupIdOrder.get(a.groupId ?? '') ?? 0) -
+        (groupIdOrder.get(b.groupId ?? '') ?? 0),
+    );
+
+    const seenIds = new Set<string>();
+    const combined = [...sortedGroupOptions, ...singleOptions].filter(
+      (option) => {
+        if (seenIds.has(option.id)) {
+          return false;
+        }
+        seenIds.add(option.id);
+        return true;
+      },
+    );
+
+    const combinedGroupIds = [
+      ...new Set(
+        combined
+          .map((option) => option.groupId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const groups =
+      combinedGroupIds.length > 0
+        ? await this.prisma.ibanOptionGroup.findMany({
+            where: { id: { in: combinedGroupIds } },
+          })
+        : [];
+    const groupLogoByGroupId = new Map(
+      groups.map((group) => [
+        group.id,
+        { logoKey: group.logoKey, updatedAt: group.updatedAt },
+      ]),
+    );
+
+    return {
+      ibanAccounts: combined.map((option) =>
+        toIbanAccountSnapshot(option, this.fileUrl, groupLogoByGroupId),
+      ),
+    };
   }
 
   /** Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). `templateId`
@@ -888,6 +959,46 @@ export class QuotesService {
     return result;
   }
 
+  /** ibanAccounts.groupLogoUrl'i KAYDEDILMIS halinden degil, guncel
+   * IbanOptionGroup.logoKey'den her okumada taze uretir - logo snapshot'lanirsa
+   * (grup sonradan logo degistirir/silerse) eski tekliflerde kirik/bayat gorsel
+   * kalirdi (kullanici talebi - bkz. docs/VARSAYIMLAR.md). groupId (hangi gruba
+   * ait oldugu) yine de snapshot'ta kalir, sadece gorsel URL'i canli cozulur. */
+  private async refreshIbanLogoUrls(
+    ibanAccounts: unknown,
+  ): Promise<IbanAccountSnapshot[] | null> {
+    const accounts = ibanAccounts as IbanAccountSnapshot[] | null;
+    if (!accounts || accounts.length === 0) {
+      return accounts;
+    }
+    const groupIds = [
+      ...new Set(
+        accounts
+          .map((account) => account.groupId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    if (groupIds.length === 0) {
+      return accounts;
+    }
+    const groups = await this.prisma.ibanOptionGroup.findMany({
+      where: { id: { in: groupIds } },
+    });
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    return accounts.map((account) => {
+      if (!account.groupId) {
+        return account;
+      }
+      const group = groupById.get(account.groupId);
+      return {
+        ...account,
+        groupLogoUrl: group
+          ? this.fileUrl.build(group.logoKey, group.updatedAt)
+          : null,
+      };
+    });
+  }
+
   async getById(id: string): Promise<QuoteWithDetails> {
     const quote = await this.prisma.quote.findFirst({
       where: { id },
@@ -901,7 +1012,12 @@ export class QuotesService {
       );
     }
     const [withName] = await this.attachCreatedByNames([quote]);
-    return withName;
+    return {
+      ...withName,
+      ibanAccounts: (await this.refreshIbanLogoUrls(
+        withName.ibanAccounts,
+      )) as QuoteWithDetails['ibanAccounts'],
+    };
   }
 
   /** Ad-hoc: markali PDF yazdirma sayfasinin (quote-template-print-page.tsx) tek
@@ -1008,8 +1124,8 @@ export class QuotesService {
   ): Promise<QuoteWithDetails> {
     await this.assertValidPaymentMethod(dto.paymentMethod);
     const ibanSnapshot = await this.resolveIbanSnapshot(
-      dto.ibanOptionId,
-      dto.ibanOptionGroupId,
+      dto.ibanOptionIds,
+      dto.ibanOptionGroupIds,
     );
     const sender = await this.prisma.user.findFirst({
       where: { id: dto.senderId },
@@ -1230,9 +1346,12 @@ export class QuotesService {
       }
     }
     const ibanSelectionProvided =
-      dto.ibanOptionId !== undefined || dto.ibanOptionGroupId !== undefined;
+      dto.ibanOptionIds !== undefined || dto.ibanOptionGroupIds !== undefined;
     const ibanSnapshot = ibanSelectionProvided
-      ? await this.resolveIbanSnapshot(dto.ibanOptionId, dto.ibanOptionGroupId)
+      ? await this.resolveIbanSnapshot(
+          dto.ibanOptionIds,
+          dto.ibanOptionGroupIds,
+        )
       : null;
 
     const contactIdProvided = dto.contactId !== undefined;
