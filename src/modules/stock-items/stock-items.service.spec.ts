@@ -658,6 +658,7 @@ describe('StockItemsService', () => {
     it('StockMovement kayitlarini urun/depo/kullanici bilgisiyle birlikte dondurur', async () => {
       const prisma = {
         stockMovement: {
+          count: vi.fn().mockResolvedValue(1),
           findMany: vi.fn().mockResolvedValue([
             {
               id: 'mv-1',
@@ -688,8 +689,11 @@ describe('StockItemsService', () => {
         },
       };
       const service = new StockItemsService(prisma as never, fakeProductsCache);
-      const result = await service.listHistory({});
-      expect(result).toEqual([
+      const result = await service.listHistory({
+        page: 1,
+        pageSize: 25,
+      } as never);
+      expect(result.data).toEqual([
         {
           id: 'mv-1',
           productId: 'product-1',
@@ -716,15 +720,17 @@ describe('StockItemsService', () => {
     it('productId, warehouseId ve userId filtreleri StockMovement.findMany sorgusuna aktarilir', async () => {
       const findMany = vi.fn().mockResolvedValue([]);
       const prisma = {
-        stockMovement: { findMany },
+        stockMovement: { findMany, count: vi.fn().mockResolvedValue(0) },
         user: { findMany: vi.fn().mockResolvedValue([]) },
       };
       const service = new StockItemsService(prisma as never, fakeProductsCache);
       await service.listHistory({
+        page: 1,
+        pageSize: 25,
         productId: 'product-1',
         warehouseId: 'warehouse-1',
         userId: 'u1',
-      });
+      } as never);
       expect(findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
@@ -734,6 +740,146 @@ describe('StockItemsService', () => {
           },
         }),
       );
+    });
+  });
+
+  describe('listByWarehouse', () => {
+    it('depo bulunamazsa NOT_FOUND firlatir', async () => {
+      const prisma = {
+        warehouse: { findFirst: vi.fn().mockResolvedValue(null) },
+      };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await expect(
+        service.listByWarehouse('missing', { page: 1, pageSize: 25 } as never),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('depodaki urunleri miktariyla birlikte isme gore sirali dondurur', async () => {
+      const prisma = {
+        warehouse: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValue({ id: 'warehouse-1', name: 'Ana Depo' }),
+        },
+        stockItem: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              productId: 'product-2',
+              quantity: '3.000',
+              product: {
+                name: 'Vida',
+                sku: 'V-1',
+                unit: 'adet',
+                minStockLevel: 10,
+              },
+            },
+            {
+              productId: 'product-1',
+              quantity: '12.500',
+              product: {
+                name: 'Cevik',
+                sku: null,
+                unit: 'kg',
+                minStockLevel: null,
+              },
+            },
+          ]),
+        },
+      };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      const result = await service.listByWarehouse('warehouse-1', {
+        page: 1,
+        pageSize: 25,
+      } as never);
+      expect(prisma.stockItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { warehouseId: 'warehouse-1' } }),
+      );
+      expect(result.data).toEqual([
+        {
+          productId: 'product-1',
+          productName: 'Cevik',
+          sku: null,
+          unit: 'kg',
+          quantity: 12.5,
+          minStockLevel: null,
+        },
+        {
+          productId: 'product-2',
+          productName: 'Vida',
+          sku: 'V-1',
+          unit: 'adet',
+          quantity: 3,
+          minStockLevel: 10,
+        },
+      ]);
+    });
+
+    it('q verilirse urun adi/stok koduna gore eslesen urunlerle sinirlar', async () => {
+      const findMany = vi.fn().mockResolvedValue([]);
+      const prisma = {
+        warehouse: {
+          findFirst: vi
+            .fn()
+            .mockResolvedValue({ id: 'warehouse-1', name: 'Ana Depo' }),
+        },
+        stockItem: { findMany },
+        $queryRaw: vi.fn().mockResolvedValue([{ id: 'product-1' }]),
+      };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      await runInTenant(() =>
+        service.listByWarehouse('warehouse-1', {
+          page: 1,
+          pageSize: 25,
+          q: 'vida',
+        } as never),
+      );
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            warehouseId: 'warehouse-1',
+            productId: { in: ['product-1'] },
+          },
+        }),
+      );
+    });
+  });
+
+  describe('listHoldingCostLogs', () => {
+    it('sayfalanmis sekilde doner (skip/take ve toplam sayim)', async () => {
+      const findMany = vi.fn().mockResolvedValue([
+        {
+          id: 'log-1',
+          monthlyRatePct: new Prisma.Decimal(1.5),
+          productCount: 4,
+          totalCostDelta: new Prisma.Decimal(120.5),
+          createdAt: new Date('2026-10-01T00:00:00.000Z'),
+        },
+      ]);
+      const count = vi.fn().mockResolvedValue(30);
+      const prisma = { stockHoldingCostLog: { findMany, count } };
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+      const result = await service.listHoldingCostLogs({
+        page: 2,
+        pageSize: 10,
+      } as never);
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 }),
+      );
+      expect(result.meta).toEqual({
+        page: 2,
+        pageSize: 10,
+        total: 30,
+        totalPages: 3,
+      });
+      expect(result.data).toEqual([
+        {
+          id: 'log-1',
+          monthlyRatePct: 1.5,
+          productCount: 4,
+          totalCostDelta: 120.5,
+          createdAt: new Date('2026-10-01T00:00:00.000Z'),
+        },
+      ]);
     });
   });
 });

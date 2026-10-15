@@ -2,7 +2,13 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Product, StockItem, StockMovementType } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
-import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
+import {
+  findIdsBySql,
+  findIdsByTurkishSearch,
+  identifier,
+  qualifiedColumn,
+  turkishContains,
+} from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
   TENANT_PRISMA,
@@ -14,8 +20,10 @@ import type {
   DecreaseStockDto,
   IncreaseStockDto,
   StockHistoryQueryDto,
+  StockHoldingCostLogQueryDto,
   StockItemQueryDto,
   TransferStockDto,
+  WarehouseStockQueryDto,
 } from './dto/stock-item.dto';
 import { getStockStatus, STOCK_STATUS_SORT_ORDER } from './stock-status.util';
 
@@ -30,10 +38,6 @@ export type StockTx = Parameters<
  * ayni urune carpisirsa) Prisma'nin P2034 hatasiyla sinyallenir - Prisma'nin resmi onerisi
  * bu hatada islemi yeniden denemektir (bkz. docs/PLAN_STOK_MALIYET.md Faz 2). */
 const STOCK_WRITE_MAX_RETRIES = 3;
-
-/** AuditService.list'teki LIST_LIMIT ile ayni desen - stok gecmisi tek seferde tum
- * listeyi ister (sayfalama yok), asiri buyumeyi onlemek icin ust sinir. */
-const STOCK_HISTORY_LIST_LIMIT = 200;
 
 async function runSerializableStockWrite<T>(
   prisma: TenantPrismaClient,
@@ -82,6 +86,16 @@ export interface StockHoldingCostLogView {
   productCount: number;
   totalCostDelta: number;
   createdAt: Date;
+}
+
+/** /depolar/:id detay sayfasi icin: bir depodaki urun bazli miktar listesi. */
+export interface WarehouseStockRow {
+  productId: string;
+  productName: string;
+  sku: string | null;
+  unit: string;
+  quantity: number;
+  minStockLevel: number | null;
 }
 
 export interface StockMovementView {
@@ -295,6 +309,51 @@ export class StockItemsService {
     const total = sortedRows.length;
     const data = sortedRows.slice((page - 1) * pageSize, page * pageSize);
 
+    return {
+      data,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+  }
+
+  /** /depolar/:id detay sayfasi: bu depodaki (gercek StockItem kaydi olan) urunler
+   * ve miktarlari, urun adina gore siralanmis, sayfalanmis. `list()`'teki ayni
+   * "tum sonucu bellekte filtrele/sirala/sayfala" deseni (bkz. resolveRows). */
+  async listByWarehouse(
+    warehouseId: string,
+    query: WarehouseStockQueryDto,
+  ): Promise<PagedResult<WarehouseStockRow>> {
+    await this.requireWarehouse(warehouseId);
+    const { page, pageSize, q } = query;
+    const matchingIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_products',
+          ['name', 'sku'],
+          q,
+          {
+            softDelete: true,
+          },
+        )
+      : null;
+    const stockItems = await this.prisma.stockItem.findMany({
+      where: {
+        warehouseId,
+        ...(matchingIds ? { productId: { in: matchingIds } } : {}),
+      },
+      include: { product: true },
+    });
+    const rows = stockItems
+      .map((si) => ({
+        productId: si.productId,
+        productName: si.product.name,
+        sku: si.product.sku,
+        unit: si.product.unit,
+        quantity: Number(si.quantity),
+        minStockLevel: si.product.minStockLevel,
+      }))
+      .sort((a, b) => a.productName.localeCompare(b.productName, 'tr'));
+    const total = rows.length;
+    const data = rows.slice((page - 1) * pageSize, page * pageSize);
     return {
       data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
@@ -654,21 +713,54 @@ export class StockItemsService {
     return this.refreshRow(productId);
   }
 
+  /** `q` ile urun adi/stok kodu, depo adi, kullanici adi/e-postasi ve not alaninda
+   * serbest metin arar - bu alanlar farkli tablolarda oldugu icin (bkz.
+   * findIdsByTurkishSearch'un tek-tablo kisitlamasi) join'li ham SQL gerekiyor. */
+  private async findStockMovementIdsByQuery(q: string): Promise<string[]> {
+    const { tenantId } = TenantContext.getOrThrow();
+    const conditions = [
+      turkishContains(qualifiedColumn('p', 'name'), q),
+      turkishContains(qualifiedColumn('p', 'sku'), q),
+      turkishContains(qualifiedColumn('w', 'name'), q),
+      turkishContains(qualifiedColumn('u', 'name'), q),
+      turkishContains(qualifiedColumn('u', 'email'), q),
+      turkishContains(qualifiedColumn('sm', 'note'), q),
+    ].reduce((acc, cond) => Prisma.sql`${acc} OR ${cond}`);
+    const sql = Prisma.sql`
+      SELECT sm."id" FROM ${identifier('crm_stock_movements')} sm
+      JOIN ${identifier('crm_products')} p ON p."id" = sm."productId"
+      JOIN ${identifier('crm_warehouses')} w ON w."id" = sm."warehouseId"
+      JOIN ${identifier('users')} u ON u."id" = sm."createdById"
+      WHERE sm."tenantId" = ${tenantId}
+        AND (${conditions})
+    `;
+    return findIdsBySql(this.prisma, sql);
+  }
+
   /** Stok Gecmisi (/envanter?tab=stockHistory) - bkz. docs/PLAN_STOK_MALIYET.md Faz 3.
    * Eskiden AuditLog'un meta JSON'undan yeniden kuruluyordu; artik gercek StockMovement
    * tablosundan okur. Kullanici adi/e-postasi AuditService.hydrateUsers ile ayni desen:
-   * StockMovement sadece createdById tutar, isim/e-posta User tablosundan join'lenir. */
-  async listHistory(query: StockHistoryQueryDto): Promise<StockMovementView[]> {
+   * StockMovement sadece createdById tutar, isim/e-posta User tablosundan join'lenir.
+   * Sayfalanmis (eskiden sabit 200 satirla sinirliydi, bkz. CLAUDE.md). */
+  async listHistory(
+    query: StockHistoryQueryDto,
+  ): Promise<PagedResult<StockMovementView>> {
+    const { page, pageSize, q, productId, warehouseId, userId, types } = query;
+    const matchingIds = q ? await this.findStockMovementIdsByQuery(q) : null;
+    const where = {
+      ...(productId ? { productId } : {}),
+      ...(warehouseId ? { warehouseId } : {}),
+      ...(userId ? { createdById: userId } : {}),
+      ...(types?.length ? { type: { in: types } } : {}),
+      ...(matchingIds ? { id: { in: matchingIds } } : {}),
+    };
+    const total = await this.prisma.stockMovement.count({ where });
     const movements = await this.prisma.stockMovement.findMany({
-      where: {
-        ...(query.productId ? { productId: query.productId } : {}),
-        ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
-        ...(query.userId ? { createdById: query.userId } : {}),
-        ...(query.types?.length ? { type: { in: query.types } } : {}),
-      },
+      where,
       include: { product: true, warehouse: true },
       orderBy: { createdAt: 'desc' },
-      take: STOCK_HISTORY_LIST_LIMIT,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
 
     const userIds = [...new Set(movements.map((m) => m.createdById))];
@@ -677,7 +769,7 @@ export class StockItemsService {
     });
     const usersById = new Map(users.map((u) => [u.id, u]));
 
-    return movements.map((m) => {
+    const data = movements.map((m) => {
       const user = usersById.get(m.createdById);
       return {
         id: m.id,
@@ -701,22 +793,36 @@ export class StockItemsService {
         createdAt: m.createdAt,
       };
     });
+    return {
+      data,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
   }
 
   /** Stok Bekletme Maliyeti Geçmişi (/envanter?tab=stockHoldingCostLog) - tenant basina
    * gunluk TEK ozet satir (bkz. ApplyStockHoldingCostProcessor); urun bazinda
-   * StockMovement yazilmiyor, bkz. CLAUDE.md. */
-  async listHoldingCostLogs(): Promise<StockHoldingCostLogView[]> {
+   * StockMovement yazilmiyor, bkz. CLAUDE.md. Aranacak metinsel bir alan yok, sadece
+   * sayfalanmis (eskiden sabit 200 satirla sinirliydi). */
+  async listHoldingCostLogs(
+    query: StockHoldingCostLogQueryDto,
+  ): Promise<PagedResult<StockHoldingCostLogView>> {
+    const { page, pageSize } = query;
+    const total = await this.prisma.stockHoldingCostLog.count();
     const logs = await this.prisma.stockHoldingCostLog.findMany({
       orderBy: { createdAt: 'desc' },
-      take: STOCK_HISTORY_LIST_LIMIT,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
-    return logs.map((log) => ({
+    const data = logs.map((log) => ({
       id: log.id,
       monthlyRatePct: Number(log.monthlyRatePct),
       productCount: log.productCount,
       totalCostDelta: Number(log.totalCostDelta),
       createdAt: log.createdAt,
     }));
+    return {
+      data,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
   }
 }

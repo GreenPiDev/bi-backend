@@ -7,19 +7,24 @@ import {
   DecreaseStockSchema,
   IncreaseStockSchema,
   StockHistoryQuerySchema,
+  StockHoldingCostLogQuerySchema,
   StockItemQuerySchema,
   TransferStockSchema,
+  WarehouseStockQuerySchema,
   type DecreaseStockDto,
   type IncreaseStockDto,
   type StockHistoryQueryDto,
+  type StockHoldingCostLogQueryDto,
   type StockItemQueryDto,
   type TransferStockDto,
+  type WarehouseStockQueryDto,
 } from './dto/stock-item.dto';
 import {
   StockItemsService,
   type StockHoldingCostLogView,
   type StockItemWithProduct,
   type StockMovementView,
+  type WarehouseStockRow,
 } from './stock-items.service';
 
 @ModulePage('stock')
@@ -38,14 +43,27 @@ export class StockItemsController {
   listHistory(
     @Query(new ZodValidationPipe(StockHistoryQuerySchema))
     query: StockHistoryQueryDto,
-  ): Promise<StockMovementView[]> {
+  ): Promise<PagedResult<StockMovementView>> {
     return this.stockItems.listHistory(query);
+  }
+
+  @Get('by-warehouse/:warehouseId')
+  @RequiresPermission('stock', 'VIEW')
+  listByWarehouse(
+    @Param('warehouseId') warehouseId: string,
+    @Query(new ZodValidationPipe(WarehouseStockQuerySchema))
+    query: WarehouseStockQueryDto,
+  ): Promise<PagedResult<WarehouseStockRow>> {
+    return this.stockItems.listByWarehouse(warehouseId, query);
   }
 
   @Get('holding-cost-log')
   @RequiresPermission('stock', 'VIEW')
-  listHoldingCostLogs(): Promise<StockHoldingCostLogView[]> {
-    return this.stockItems.listHoldingCostLogs();
+  listHoldingCostLogs(
+    @Query(new ZodValidationPipe(StockHoldingCostLogQuerySchema))
+    query: StockHoldingCostLogQueryDto,
+  ): Promise<PagedResult<StockHoldingCostLogView>> {
+    return this.stockItems.listHoldingCostLogs(query);
   }
 
   @Get()

@@ -30,8 +30,9 @@ export const StockMovementTypeSchema = z.enum([
 ]);
 
 /** Stok Gecmisi filtre penceresi: urune, depoya, guncellemeyi yapan kullaniciya ve
- * (coklu secilebilen, virgulle ayrilmis) hareket turune gore. */
-export const StockHistoryQuerySchema = z.object({
+ * (coklu secilebilen, virgulle ayrilmis) hareket turune gore; `q` urun/depo/kullanici
+ * adi ve nota gore serbest metin arar (bkz. StockItemsService.findStockMovementIdsByQuery). */
+export const StockHistoryQuerySchema = ListQuerySchema.extend({
   productId: z.string().optional(),
   warehouseId: z.string().optional(),
   userId: z.string().optional(),
@@ -42,6 +43,16 @@ export const StockHistoryQuerySchema = z.object({
     .pipe(z.array(StockMovementTypeSchema).optional()),
 });
 export type StockHistoryQueryDto = z.infer<typeof StockHistoryQuerySchema>;
+
+/** Stok Bekletme Maliyeti Gecmisi - sadece sayfalama, aranacak metinsel bir alan yok. */
+export const StockHoldingCostLogQuerySchema = ListQuerySchema;
+export type StockHoldingCostLogQueryDto = z.infer<
+  typeof StockHoldingCostLogQuerySchema
+>;
+
+/** /depolar/:id detay sayfasi - urun adi/stok koduna gore arama. */
+export const WarehouseStockQuerySchema = ListQuerySchema;
+export type WarehouseStockQueryDto = z.infer<typeof WarehouseStockQuerySchema>;
 
 /**
  * Stok girisi (alim/parti) - bkz. docs/PLAN_STOK_MALIYET.md Faz 2. unitCost zorunlu:
