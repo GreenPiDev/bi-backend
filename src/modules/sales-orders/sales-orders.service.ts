@@ -86,7 +86,7 @@ export class SalesOrdersService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status, q } = query;
+    const { page, pageSize, accountId, status, q, from, to } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -116,6 +116,14 @@ export class SalesOrdersService {
       ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(status ? { status } : {}),
+      ...(from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([

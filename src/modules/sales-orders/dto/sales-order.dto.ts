@@ -58,5 +58,10 @@ export type CreateSalesOrderDto = z.infer<typeof CreateSalesOrderSchema>;
 export const SalesOrderQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: SalesOrderStatusSchema.optional(),
+  /** Olusturulma tarihi filtresi (liste sayfasi filtre penceresi) - hem tek tarih
+   * ("su tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de bu
+   * ayni from/to ciftine cevrilir - bkz. interaction.dto.ts'teki ayni desen. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 export type SalesOrderQueryDto = z.infer<typeof SalesOrderQuerySchema>;

@@ -47,5 +47,10 @@ export const PurchaseOrderQuerySchema = ListQuerySchema.extend({
   quoteId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
   status: PurchaseOrderStatusSchema.optional(),
+  /** Olusturulma tarihi filtresi (liste sayfasi filtre penceresi) - hem tek tarih
+   * ("su tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de bu
+   * ayni from/to ciftine cevrilir - bkz. interaction.dto.ts'teki ayni desen. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 export type PurchaseOrderQueryDto = z.infer<typeof PurchaseOrderQuerySchema>;
