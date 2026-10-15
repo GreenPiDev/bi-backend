@@ -5,6 +5,10 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import {
+  formatImportZodIssues,
+  type ImportFieldLabels,
+} from '../../core/validators/import-row-errors';
 import { CreateProductSchema } from '../products/dto/product.dto';
 import { ProductPriceHistoryCacheService } from '../products/product-price-history-cache.service';
 import { ProductsCacheService } from '../products/products-cache.service';
@@ -63,6 +67,21 @@ function rowsToRecords(
     return record;
   });
 }
+
+/** bi-frontend/src/i18n/tr.ts'teki tr.crm.products.fieldLabels ile kasitli olarak
+ * ayni (bkz. CLAUDE.md §3). */
+const PRODUCT_FIELD_LABELS: ImportFieldLabels = {
+  productListId: 'Urun Listesi',
+  name: 'Urun Adi',
+  sku: 'SKU',
+  unit: 'Birim',
+  price: 'Fiyat',
+  currency: 'Para Birimi',
+  description: 'Aciklama',
+  category: 'Kategori',
+  minStockLevel: 'Minimum Stok Seviyesi',
+  maxDiscountPct: 'Azami Iskonto Orani (%)',
+};
 
 function mappingIncompleteError(message: string): AppException {
   return new AppException(
@@ -201,8 +220,9 @@ export class ProductImportsService {
       if (!result.success) {
         errors.push({
           row: fileRow,
-          messages: result.error.issues.map(
-            (issue) => `${issue.path.join('.')}: ${issue.message}`,
+          messages: formatImportZodIssues(
+            result.error.issues,
+            PRODUCT_FIELD_LABELS,
           ),
         });
         return;

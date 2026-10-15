@@ -10,6 +10,11 @@ import {
 import { generateTemporaryPassword } from '../../core/security/temporary-password';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { parseFlexibleDate } from '../../core/validators/date';
+import {
+  formatImportZodIssues,
+  formatUnexpectedImportRowError,
+  type ImportFieldLabels,
+} from '../../core/validators/import-row-errors';
 import { AccountsCacheService } from '../accounts/accounts-cache.service';
 import { normalizeAccountName } from '../accounts/account-name.util';
 import { AuditService } from '../audit/audit.service';
@@ -61,6 +66,20 @@ function rowsToRecords(
     return record;
   });
 }
+
+/** bi-frontend/src/i18n/tr.ts'teki tr.crm.interactionImports.fieldLabels ile
+ * kasitli olarak ayni (bkz. CLAUDE.md §3). */
+const INTERACTION_FIELD_LABELS: ImportFieldLabels = {
+  occurredAt: 'Gorusme Tarihi',
+  accountName: 'Firma Adi',
+  subject: 'Konu',
+  externalParticipants: 'Firmadan Katilimcilar',
+  internalParticipants: 'Bizden Katilimcilar',
+  type: 'Gorusme Sekli',
+  ownerName: 'Bizden Ilgili (Kayit Sahibi)',
+  contactName: 'Gorusulen Kisi',
+  notes: 'Notlar',
+};
 
 function mappingIncompleteError(message: string): AppException {
   return new AppException(
@@ -445,8 +464,9 @@ export class InteractionImportsService {
       if (!result.success) {
         errors.push({
           row: fileRow,
-          messages: result.error.issues.map(
-            (issue) => `${issue.path.join('.')}: ${issue.message}`,
+          messages: formatImportZodIssues(
+            result.error.issues,
+            INTERACTION_FIELD_LABELS,
           ),
         });
         continue;
@@ -593,9 +613,7 @@ export class InteractionImportsService {
       } catch (error) {
         errors.push({
           row: fileRow,
-          messages: [
-            error instanceof Error ? error.message : 'Bilinmeyen hata.',
-          ],
+          messages: [formatUnexpectedImportRowError(error)],
         });
       }
     }

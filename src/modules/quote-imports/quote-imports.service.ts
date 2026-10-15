@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DataSourceType, Quote } from '@prisma/client';
-import { AppException } from '../../core/errors/app.exception';
+import { formatUnexpectedImportRowError } from '../../core/validators/import-row-errors';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
@@ -281,11 +281,7 @@ export class QuoteImportsService {
       } catch (error) {
         errors.push({
           row: row.fileRow,
-          messages: [
-            error instanceof AppException
-              ? error.message
-              : 'Satir ice aktarilirken beklenmeyen bir hata olustu.',
-          ],
+          messages: [formatUnexpectedImportRowError(error)],
         });
       }
     }

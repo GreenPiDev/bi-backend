@@ -2,6 +2,10 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { Account, Contact, DataSourceType } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import type { ExportFormat } from '../../core/export-format';
+import {
+  formatImportZodIssues,
+  type ImportFieldLabels,
+} from '../../core/validators/import-row-errors';
 import { ListPdfService } from '../../core/pdf/list-pdf.service';
 import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import {
@@ -108,6 +112,34 @@ function splitAccountSector(mapped: Record<string, unknown>): void {
     .filter(Boolean);
   mapped.sector = values.length > 0 ? values : undefined;
 }
+
+/** bi-frontend/src/i18n/tr.ts'teki tr.crm.accountImports.fieldLabels ile kasitli
+ * olarak ayni (bkz. CLAUDE.md §3 - ortak paket yok, tip/etiket iki kez tanimlanir). */
+const ACCOUNT_FIELD_LABELS: ImportFieldLabels = {
+  name: 'Firma Adi',
+  taxNumber: 'Vergi No / TC Kimlik No',
+  taxOffice: 'Vergi Dairesi',
+  sector: 'Sektor',
+  website: 'Web Sitesi',
+  phone: 'Telefon',
+  landlinePhone: 'Sabit Hat',
+  email: 'E-posta',
+  address: 'Adres',
+  city: 'Il',
+  district: 'Ilce',
+};
+
+/** bi-frontend/src/i18n/tr.ts'teki tr.crm.contactImports.fieldLabels ile ayni. */
+const CONTACT_FIELD_LABELS: ImportFieldLabels = {
+  firstName: 'Ad',
+  lastName: 'Soyad',
+  accountId: 'Firma',
+  department: 'Departman',
+  title: 'Unvan',
+  email: 'E-posta',
+  phone: 'Telefon',
+  extension: 'Dahili',
+};
 
 function mappingIncompleteError(message: string): AppException {
   return new AppException(
@@ -235,8 +267,9 @@ export class ImportsService {
       if (!result.success) {
         errors.push({
           row: fileRow,
-          messages: result.error.issues.map(
-            (issue) => `${issue.path.join('.')}: ${issue.message}`,
+          messages: formatImportZodIssues(
+            result.error.issues,
+            ACCOUNT_FIELD_LABELS,
           ),
         });
         return;
@@ -460,8 +493,9 @@ export class ImportsService {
       if (!result.success) {
         errors.push({
           row: fileRow,
-          messages: result.error.issues.map(
-            (issue) => `${issue.path.join('.')}: ${issue.message}`,
+          messages: formatImportZodIssues(
+            result.error.issues,
+            CONTACT_FIELD_LABELS,
           ),
         });
         continue;
@@ -474,7 +508,7 @@ export class ImportsService {
           errors.push({
             row: fileRow,
             messages: [
-              `accountId: firma bulunamadi (${result.data.accountId})`,
+              `${CONTACT_FIELD_LABELS.accountId}: eslesen bir firma bulunamadi.`,
             ],
           });
           continue;
