@@ -42,6 +42,11 @@ const QuoteItemInputSchema = z.object({
     .optional(),
   discountPct: z.number().min(0).max(100).default(0),
   vatPct: z.number().min(0).max(100).default(0),
+  /** Ayni urun bazen TRY, bazen USD olarak teklife giriliyor (ornegin sistemde
+   * dolar olarak kayitli bir urun bir teklifte liraya cevrilerek satiliyor) -
+   * verilmezse Product.currency'den alinir, verilirse manuel ezme sayilir
+   * (unitPrice ile ayni desen). */
+  currency: CurrencyCodeSchema.optional(),
 });
 
 /** O2: teklif olustururken isaretlenirse otomatik firsat olusturulur. */

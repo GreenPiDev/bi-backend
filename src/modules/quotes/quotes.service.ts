@@ -619,7 +619,7 @@ export class QuotesService {
         productId: item.productId,
         quantity: item.quantity,
         unitPrice,
-        currency: product.currency,
+        currency: item.currency ?? product.currency,
         discountPct: item.discountPct,
         vatPct: item.vatPct,
         discountNote:

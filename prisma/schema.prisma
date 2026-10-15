@@ -1410,8 +1410,10 @@ model QuoteItem {
   quantity        Decimal  @db.Decimal(14, 3)
   unitPrice       Decimal  @db.Decimal(14, 2)
   /**
-   * unitPrice ile ayni snapshot semantigi: satir olusturulurken/guncellenirken
-   * Product.currency'den kopyalanir, client'tan kabul edilmez (bkz. resolveItems).
+   * unitPrice ile ayni snapshot semantigi: varsayilan olarak satir olusturulurken/
+   * guncellenirken Product.currency'den kopyalanir, ama unitPrice gibi client
+   * tarafindan manuel ezilebilir (ayni urun bir teklifte USD, baska bir teklifte
+   * TRY olarak girilebilsin diye - bkz. resolveItems).
    */
   currency        String   @default("TRY")
   discountPct     Decimal  @default(0) @db.Decimal(5, 2)
