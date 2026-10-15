@@ -71,6 +71,8 @@ export const CreateQuoteSchema = z.object({
   quoteDate: z.coerce.date(),
   /** Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta". */
   leadTime: z.string().trim().max(200).optional(),
+  /** Serbest metin, orn. "15 gun", "1 ay", "30.11.2026'a kadar" - leadTime ile ayni desen. */
+  validityPeriod: z.string().trim().max(200).optional(),
   /** Tenant'in tanimladigi listeye karsi dogrulanir, bkz. QuotesService.assertValidPaymentMethod. */
   paymentMethod: z.string().trim().max(200).optional(),
   title: z.string().trim().max(200).optional(),
@@ -119,6 +121,7 @@ export const UpdateQuoteSchema = z
     quoteDate: z.coerce.date().optional(),
     /** null verilirse alan temizlenir, hic verilmezse mevcut deger korunur. */
     leadTime: z.string().trim().max(200).nullable().optional(),
+    validityPeriod: z.string().trim().max(200).nullable().optional(),
     paymentMethod: z.string().trim().max(200).nullable().optional(),
     title: z.string().trim().max(200).nullable().optional(),
     paymentTerms: z.string().trim().max(4000).nullable().optional(),

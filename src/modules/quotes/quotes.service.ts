@@ -1192,6 +1192,7 @@ export class QuotesService {
               quoteNumber,
               quoteDate: dto.quoteDate,
               leadTime: dto.leadTime ?? null,
+              validityPeriod: dto.validityPeriod ?? null,
               paymentMethod: dto.paymentMethod ?? null,
               title: dto.title ?? null,
               paymentTerms: dto.paymentTerms ?? null,
@@ -1359,6 +1360,9 @@ export class QuotesService {
       ...(contactIdProvided ? { contactId: dto.contactId ?? null } : {}),
       ...(dto.quoteDate !== undefined ? { quoteDate: dto.quoteDate } : {}),
       ...(dto.leadTime !== undefined ? { leadTime: dto.leadTime ?? null } : {}),
+      ...(dto.validityPeriod !== undefined
+        ? { validityPeriod: dto.validityPeriod ?? null }
+        : {}),
       ...(dto.paymentMethod !== undefined
         ? { paymentMethod: dto.paymentMethod ?? null }
         : {}),

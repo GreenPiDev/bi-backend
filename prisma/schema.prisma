@@ -1199,6 +1199,11 @@ model Quote {
    */
   leadTime              String?
   /**
+   * Teklif gecerlilik suresi. leadTime ile ayni desen: serbest metin,
+   * orn. "15 gun", "1 ay", "30.11.2026'a kadar".
+   */
+  validityPeriod        String?
+  /**
    * Tenant'in crm_payment_method_options listesine karsi dogrulanir (bkz.
    * QuotesService.assertValidPaymentMethod, sektor alaniyla ayni desen).
    */
