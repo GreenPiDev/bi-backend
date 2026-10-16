@@ -86,7 +86,8 @@ export class SalesOrdersService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status, q, from, to } = query;
+    const { page, pageSize, accountId, status, createdById, q, from, to } =
+      query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -116,6 +117,7 @@ export class SalesOrdersService {
       ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(status ? { status } : {}),
+      ...(createdById ? { createdById } : {}),
       ...(from || to
         ? {
             createdAt: {

@@ -75,7 +75,17 @@ export class PurchaseOrdersService {
       return cached;
     }
 
-    const { page, pageSize, quoteId, projectId, status, q, from, to } = query;
+    const {
+      page,
+      pageSize,
+      quoteId,
+      projectId,
+      status,
+      createdById,
+      q,
+      from,
+      to,
+    } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -110,6 +120,7 @@ export class PurchaseOrdersService {
       ...(quoteId ? { quoteId } : {}),
       ...(projectId ? { quote: { projectId } } : {}),
       ...(status ? { status } : {}),
+      ...(createdById ? { createdById } : {}),
       ...(from || to
         ? {
             createdAt: {

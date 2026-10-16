@@ -47,6 +47,10 @@ export const PurchaseOrderQuerySchema = ListQuerySchema.extend({
   quoteId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
   status: PurchaseOrderStatusSchema.optional(),
+  /** /settings/kullanicilar/:slug "Oluşturduğu Satın Alma Siparişleri" grafiginden
+   * filtrelenmis sekilde gelindiginde (bkz. UserStatsPage) tek bir kullaniciya
+   * daraltmak icin. */
+  createdById: z.string().optional(),
   /** Olusturulma tarihi filtresi (liste sayfasi filtre penceresi) - hem tek tarih
    * ("su tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de bu
    * ayni from/to ciftine cevrilir - bkz. interaction.dto.ts'teki ayni desen. */
