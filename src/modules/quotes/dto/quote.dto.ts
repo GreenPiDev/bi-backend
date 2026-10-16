@@ -48,6 +48,11 @@ const QuoteItemInputSchema = z.object({
    * verilmezse Product.currency'den alinir, verilirse manuel ezme sayilir
    * (unitPrice ile ayni desen). */
   currency: CurrencyCodeSchema.optional(),
+  /** Ayni urun bazen baska bir marka adiyla satiliyor (ornegin "kola" diye
+   * tanimli bir urun bir teklifte "Pepsi" olarak gorunsun) - verilmezse
+   * Product.brand'den alinir, verilirse (bos string dahil) manuel ezme
+   * sayilir; Product.brand'i kalici olarak degistirmez. */
+  brand: z.string().trim().max(120).optional(),
 });
 
 /** O2: teklif olustururken isaretlenirse otomatik firsat olusturulur. */

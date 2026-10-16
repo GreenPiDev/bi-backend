@@ -1435,6 +1435,14 @@ model QuoteItem {
    * (yeni stok girisiyle) bu teklifteki kar/maliyet hesabi degismez.
    */
   costPriceAtSale Decimal? @db.Decimal(14, 4)
+  /**
+   * unitPrice/currency ile ayni snapshot semantigi: varsayilan olarak satir
+   * olusturulurken/guncellenirken Product.brand'den kopyalanir, ama bu teklif
+   * icin manuel ezilebilir (ayni urun "kola" bir teklifte "Pepsi" baska bir
+   * teklifte "Coca-Cola" markasiyla gorunebilsin diye) - bkz. resolveItems.
+   * Product.brand'i KALICI olarak degistirmez, sadece bu satirin gorunumunu.
+   */
+  brand           String?
   createdAt       DateTime @default(now())
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)

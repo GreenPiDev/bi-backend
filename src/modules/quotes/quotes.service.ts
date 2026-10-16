@@ -181,6 +181,7 @@ interface ResolvedQuoteItem {
   vatPct: number;
   discountNote: string | null;
   costPriceAtSale: Prisma.Decimal | null;
+  brand: string | null;
 }
 
 type ItemResolutionTx = Pick<TenantPrismaClient, 'product'>;
@@ -627,6 +628,7 @@ export class QuotesService {
             ? `Iskonto uygulandi: %${item.discountPct}`
             : null,
         costPriceAtSale: product.avgCost,
+        brand: item.brand !== undefined ? item.brand || null : product.brand,
       };
     });
 
