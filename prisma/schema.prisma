@@ -146,6 +146,15 @@ enum CurrencyCode {
  */
 enum QuoteStatus {
   DRAFT
+  /**
+   * Ad-hoc: teklif musteriye gonderildi (kullanici istegi, bkz. CLAUDE.md). Durum
+   * dropdown'undan (quotes-list-page.tsx) elle setlenir, baska hicbir akis otomatik
+   * uretmez. SENT durumundaki bir teklif APPROVED/REJECTED'in aksine kilitli
+   * DEGILDIR - duzenlenebilir, icerigi guncellenebilir, revize edilebilir
+   * (REVIZE'a gecirilebilir) ve PDF'i goruntulenebilir; bkz. QuotesService.update
+   * duzenlenebilirlik kontrolu (sadece APPROVED/REJECTED engellenir).
+   */
+  SENT
   PENDING_APPROVAL
   APPROVED
   REJECTED

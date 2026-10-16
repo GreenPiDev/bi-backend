@@ -23,6 +23,7 @@ export type FxRatesQueryDto = z.infer<typeof FxRatesQuerySchema>;
 
 export const QuoteStatusSchema = z.enum([
   'DRAFT',
+  'SENT',
   'PENDING_APPROVAL',
   'APPROVED',
   'REJECTED',

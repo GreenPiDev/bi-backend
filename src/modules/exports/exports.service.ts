@@ -13,7 +13,7 @@ import { DashboardPdfService } from './dashboard-pdf.service';
 import { QuotePdfService } from './quote-pdf.service';
 import { isKnownReportTab, ReportPdfService } from './report-pdf.service';
 
-const QUOTE_EXPORTABLE_STATUSES = new Set(['DRAFT', 'APPROVED']);
+const QUOTE_EXPORTABLE_STATUSES = new Set(['DRAFT', 'SENT', 'APPROVED']);
 const QUOTE_PDF_COVER_TITLE = 'Fiyat Teklifi';
 const quotePdfDateFormatter = new Intl.DateTimeFormat('tr-TR');
 
