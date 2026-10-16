@@ -40,6 +40,9 @@ export const CreatePurchaseOrderSchema = z.object({
   quoteId: z.string().uuid().optional(),
   title: z.string().trim().max(200).optional(),
   items: z.array(CreatePurchaseOrderItemSchema).min(1).max(200),
+  /** Cift tiklama/tekrar denemede duplicate siparis acilmamasi icin - bkz.
+   * PurchaseOrdersService.create() ve schema.prisma'daki alan yorumu. */
+  clientRequestId: z.string().uuid().optional(),
 });
 export type CreatePurchaseOrderDto = z.infer<typeof CreatePurchaseOrderSchema>;
 

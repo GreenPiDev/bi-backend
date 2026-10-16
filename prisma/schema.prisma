@@ -1688,15 +1688,26 @@ model PurchaseOrder {
   quoteId     String?
   status      PurchaseOrderStatus @default(DRAFT)
   createdById String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  deletedAt   DateTime?
+  /**
+   * Ad-hoc (2026-10-16, cift-tiklama ile duplicate siparis bug'i): /siparisler/yeni
+   * formu sayfa acilirken bir kez uretilen bir UUID'i bu alanda gonderir. Ayni
+   * kiracida ayni key ile ikinci bir create istegi gelirse (cift tiklama veya agdan
+   * tekrar deneme) PurchaseOrdersService.create() yeni kayit acmaz, mevcut kaydi
+   * dondurur - bkz. docs/VARSAYIMLAR.md. Nullable + unique: eski kayitlar ve
+   * key gondermeyen cagrilar icin NULL serbest (Postgres NULL'lari unique'te
+   * esit saymaz).
+   */
+  clientRequestId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   tenant Tenant              @relation(fields: [tenantId], references: [id])
   quote  Quote?              @relation(fields: [quoteId], references: [id])
   items  PurchaseOrderItem[]
 
   @@unique([tenantId, orderNumber])
+  @@unique([tenantId, clientRequestId])
   @@index([tenantId, deletedAt])
   @@index([tenantId, quoteId])
   @@map("crm_purchase_orders")

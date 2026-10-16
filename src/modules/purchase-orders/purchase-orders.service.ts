@@ -168,11 +168,28 @@ export class PurchaseOrdersService {
   /** /siparisler/yeni: teklif zorunlu degil, quoteId opsiyonel bir baglantidir.
    * Kalemler her zaman EXTRA kaynaklidir (kaynak artik PATCH disinda hic
    * olusturulmuyor - teklif onerisiyle gelen kalemler de kullanici burada
-   * manuel kaydettigi icin EXTRA sayilir). */
+   * manuel kaydettigi icin EXTRA sayilir).
+   *
+   * Idempotent: `dto.clientRequestId` verilmisse (form her acildiginda bir kez
+   * uretilen UUID), ayni kiracida ayni key ile once olusturulmus bir siparis
+   * varsa onu dondurur, ikinci bir kayit ACMAZ - cift tiklama/agdan tekrar
+   * deneme kaynakli duplicate siparis bug'ina karsi (bkz. schema.prisma
+   * `PurchaseOrder.clientRequestId` yorumu). Es zamanli iki istek arasindaki
+   * yarisi (TOCTOU) `@@unique([tenantId, clientRequestId])` + asagidaki P2002
+   * yakalamasiyla kapatilir. */
   async create(
     createdById: string,
     dto: CreatePurchaseOrderDto,
   ): Promise<PurchaseOrderWithItems> {
+    if (dto.clientRequestId) {
+      const existing = await this.prisma.purchaseOrder.findFirst({
+        where: { clientRequestId: dto.clientRequestId },
+      });
+      if (existing) {
+        return this.getById(existing.id);
+      }
+    }
+
     if (dto.quoteId) {
       const quote = await this.prisma.quote.findFirst({
         where: { id: dto.quoteId },
@@ -207,20 +224,44 @@ export class PurchaseOrdersService {
       }
     }
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const order = await this.createWithGeneratedNumber(tx, {
-        quoteId: dto.quoteId ?? null,
-        title: dto.title ?? null,
-        createdById,
-        items: dto.items.map((item) => ({
-          productId: item.productId ?? null,
-          description: item.description,
-          quantity: item.quantity,
-          source: 'EXTRA' as const,
-        })),
+    let created: PurchaseOrder;
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const order = await this.createWithGeneratedNumber(tx, {
+          quoteId: dto.quoteId ?? null,
+          title: dto.title ?? null,
+          createdById,
+          clientRequestId: dto.clientRequestId ?? null,
+          items: dto.items.map((item) => ({
+            productId: item.productId ?? null,
+            description: item.description,
+            quantity: item.quantity,
+            source: 'EXTRA' as const,
+          })),
+        });
+        return order;
       });
-      return order;
-    });
+    } catch (error) {
+      // Iki es zamanli istek ayni clientRequestId ile yarisirsa (TOCTOU - yukaridaki
+      // findFirst her ikisinde de bos donmus olabilir), kaybeden tarafi hataya
+      // dusurmek yerine kazananin kaydini dondururuz - gercek idempotency budur.
+      if (
+        dto.clientRequestId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        (error.meta?.target as string[] | undefined)?.includes(
+          'clientRequestId',
+        )
+      ) {
+        const existing = await this.prisma.purchaseOrder.findFirst({
+          where: { clientRequestId: dto.clientRequestId },
+        });
+        if (existing) {
+          return this.getById(existing.id);
+        }
+      }
+      throw error;
+    }
 
     await this.audit.log({
       action: 'CREATE',
@@ -238,6 +279,7 @@ export class PurchaseOrdersService {
       quoteId: string | null;
       title?: string | null;
       createdById: string;
+      clientRequestId?: string | null;
       items: {
         productId: string | null;
         description: string;
@@ -263,13 +305,17 @@ export class PurchaseOrdersService {
             title: data.title ?? null,
             orderNumber,
             createdById: data.createdById,
+            clientRequestId: data.clientRequestId ?? null,
             items: { create: data.items },
           } as never,
         });
       } catch (error) {
         const isDuplicateNumber =
           error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002';
+          error.code === 'P2002' &&
+          !(error.meta?.target as string[] | undefined)?.includes(
+            'clientRequestId',
+          );
         if (
           !isDuplicateNumber ||
           attempt === PURCHASE_ORDER_NUMBER_CREATE_RETRIES - 1

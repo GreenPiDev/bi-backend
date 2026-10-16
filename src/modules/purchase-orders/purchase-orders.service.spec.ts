@@ -280,6 +280,56 @@ describe('PurchaseOrdersService', () => {
     ).rejects.toMatchObject({ code: 'PRODUCT_NOT_FOUND' });
   });
 
+  it('create: ayni clientRequestId ile zaten olusturulmus bir siparis varsa yeni kayit acmaz, mevcut kaydi dondurur (idempotent)', async () => {
+    const existing = createPurchaseOrderRow({ id: 'po-existing' });
+    const prisma = createPrisma({ purchaseOrderRow: existing });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    const result = await service.create('user-1', {
+      items: [{ description: 'Ek malzeme', quantity: 3 }],
+      clientRequestId: 'req-1',
+    } as never);
+
+    expect(result.id).toBe('po-existing');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(auditLog).not.toHaveBeenCalled();
+  });
+
+  it('create: es zamanli iki istek ayni clientRequestId ile yarisirsa (TOCTOU), kaybeden P2002 yerine kazananin kaydini dondurur (idempotent)', async () => {
+    const existing = createPurchaseOrderRow({ id: 'po-winner' });
+    const prisma = createPrisma({ purchaseOrderRow: null });
+    // ilk findFirst (idempotency on-kontrolu) bos donsun, create P2002 firlatsin,
+    // sonraki findFirst (race sonrasi tekrar kontrol + getById) kazananin kaydini
+    // dondursun.
+    prisma.purchaseOrder.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(existing);
+    const { Prisma } = await import('@prisma/client');
+    prisma.__tx.purchaseOrder.create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'x',
+        meta: { target: ['tenantId', 'clientRequestId'] },
+      }),
+    );
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    const result = await service.create('user-1', {
+      items: [{ description: 'Ek malzeme', quantity: 3 }],
+      clientRequestId: 'req-race',
+    } as never);
+
+    expect(result.id).toBe('po-winner');
+  });
+
   it('update: quoteId ile bulunamayan teklife baglanirsa NOT_FOUND firlatir', async () => {
     const prisma = createPrisma({ quoteRow: null });
     const service = new PurchaseOrdersService(
