@@ -713,10 +713,12 @@ export class QuotesService {
   async getRejectionReasonsSummary(
     from?: Date,
     to?: Date,
+    createdById?: string,
   ): Promise<{ reason: string | null; count: number }[]> {
     const rejectedQuotes = await this.prisma.quote.findMany({
       where: {
         status: 'REJECTED',
+        ...(createdById ? { createdById } : {}),
         ...(from || to
           ? {
               quoteDate: {

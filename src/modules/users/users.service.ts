@@ -44,12 +44,30 @@ export interface UserStats {
     opportunities: number;
     quotes: number;
     projects: number;
+    /** Satin alma siparisi (PurchaseOrder) - satis siparisinden (salesOrders) ayri bir
+     * model, /siparisler sayfasindaki "Satın Alma Siparişleri" sekmesine karsilik gelir. */
     purchaseOrders: number;
+    /** Satis siparisi (SalesOrder) - /siparisler sayfasindaki "Satış Siparişleri" sekmesi. */
+    salesOrders: number;
   };
   /** Bu kullanicinin "bizden ilgili" olarak atandigi projeler (ProjectResponsible
    * uzerinden - createdById'den bagimsiz, counts.projects'ten farkli bir kume). */
   responsibleProjects: { id: string; projectNumber: string; name: string }[];
 }
+
+/** /settings/kullanicilar/:id sayfasinda bir KPI kartina tiklaninca acilan tablonun
+ * hangi entity'yi istedigini belirtir - bkz. UsersService.getUserStatsEntityRows. */
+export const USER_STATS_ENTITY_KINDS = [
+  'accounts',
+  'contacts',
+  'interactions',
+  'opportunities',
+  'quotes',
+  'projects',
+  'purchaseOrders',
+  'salesOrders',
+] as const;
+export type UserStatsEntityKind = (typeof USER_STATS_ENTITY_KINDS)[number];
 
 @Injectable()
 export class UsersService {
@@ -456,6 +474,7 @@ export class UsersService {
       quotes,
       projects,
       purchaseOrders,
+      salesOrders,
     ] = await Promise.all([
       this.prisma.account.count({ where: { createdById: targetUserId } }),
       this.prisma.contact.count({ where: { createdById: targetUserId } }),
@@ -464,6 +483,7 @@ export class UsersService {
       this.prisma.quote.count({ where: { createdById: targetUserId } }),
       this.prisma.project.count({ where: { createdById: targetUserId } }),
       this.prisma.purchaseOrder.count({ where: { createdById: targetUserId } }),
+      this.prisma.salesOrder.count({ where: { createdById: targetUserId } }),
     ]);
 
     const responsibleRows = await this.prisma.projectResponsible.findMany({
@@ -488,9 +508,123 @@ export class UsersService {
         quotes,
         projects,
         purchaseOrders,
+        salesOrders,
       },
       responsibleProjects,
     };
+  }
+
+  /** Bir KPI kartina tiklaninca ilgili entity'nin "bu kullanicinin olusturdugu" satirlarini
+   * dondurur - /firmalar, /kisiler vb. liste sayfalarindaki kolonlarla aynı alanlari tasir
+   * ki frontend ayni render mantigini yeniden kullanabilsin. */
+  async getUserStatsEntityRows(
+    targetUserId: string,
+    entity: UserStatsEntityKind,
+  ) {
+    switch (entity) {
+      case 'accounts':
+        return this.prisma.account.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            sector: true,
+            phone: true,
+            email: true,
+            createdAt: true,
+          },
+        });
+      case 'contacts':
+        return this.prisma.contact.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+            createdAt: true,
+            account: { select: { name: true } },
+          },
+        });
+      case 'interactions':
+        return this.prisma.interaction.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { occurredAt: 'desc' },
+          select: {
+            id: true,
+            occurredAt: true,
+            type: true,
+            status: true,
+            account: { select: { name: true } },
+            contact: { select: { firstName: true, lastName: true } },
+          },
+        });
+      case 'opportunities':
+        return this.prisma.opportunity.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { occurredAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            stage: true,
+            estimatedValue: true,
+            estimatedValueCurrency: true,
+            occurredAt: true,
+          },
+        });
+      case 'quotes':
+        return this.prisma.quote.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { quoteDate: 'desc' },
+          select: {
+            id: true,
+            quoteNumber: true,
+            quoteDate: true,
+            status: true,
+            account: { select: { name: true } },
+          },
+        });
+      case 'projects':
+        return this.prisma.project.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            projectNumber: true,
+            name: true,
+            estimatedBudget: true,
+            account: { select: { name: true } },
+          },
+        });
+      case 'purchaseOrders':
+        return this.prisma.purchaseOrder.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            createdAt: true,
+            quote: { select: { quoteNumber: true } },
+          },
+        });
+      case 'salesOrders':
+        return this.prisma.salesOrder.findMany({
+          where: { createdById: targetUserId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            createdAt: true,
+            account: { select: { name: true } },
+            quote: { select: { quoteNumber: true } },
+          },
+        });
+    }
   }
 
   private toProfile(user: UserWithRoles): UserProfile {

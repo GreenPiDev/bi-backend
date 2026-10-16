@@ -35,8 +35,10 @@ import {
 import { UpdateActiveDto, UpdateActiveSchema } from './dto/update-active.dto';
 import { UpdateRoleDto, UpdateRoleSchema } from './dto/update-role.dto';
 import {
+  USER_STATS_ENTITY_KINDS,
   type UserProfile,
   type UserStats,
+  type UserStatsEntityKind,
   UsersService,
 } from './users.service';
 
@@ -56,6 +58,19 @@ export class UsersController {
   @RequiresPermission('settings', 'VIEW', 'users')
   getUserStats(@Param('id') id: string): Promise<UserStats> {
     return this.users.getUserStats(id);
+  }
+
+  @Get(':id/stats/:entity')
+  @RequiresPermission('settings', 'VIEW', 'users')
+  getUserStatsEntity(@Param('id') id: string, @Param('entity') entity: string) {
+    if (!USER_STATS_ENTITY_KINDS.includes(entity as UserStatsEntityKind)) {
+      throw new AppException(
+        'UNKNOWN_FIELD',
+        'Gecersiz istatistik kategorisi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.users.getUserStatsEntityRows(id, entity as UserStatsEntityKind);
   }
 
   @Get('me')

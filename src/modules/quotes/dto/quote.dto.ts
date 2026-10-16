@@ -203,9 +203,12 @@ export const QuoteQuerySchema = ListQuerySchema.extend({
 export type QuoteQueryDto = z.infer<typeof QuoteQuerySchema>;
 
 /** /teklifler?tab=reports filtre penceresi - KPI kartlari/grafikler icin ayni
- * tek-tarih/aralik deseni (bkz. QuoteQuerySchema.from/to), ama sayfalama/arama yok. */
+ * tek-tarih/aralik deseni (bkz. QuoteQuerySchema.from/to), ama sayfalama/arama yok.
+ * createdById: /settings/kullanicilar/:slug sayfasinda "Oluşturduğu Teklifler" karti
+ * acilinca ayni grafikleri tek bir kullaniciya daraltmak icin (bkz. UserStatsPage). */
 export const QuoteReportsQuerySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  createdById: z.string().optional(),
 });
 export type QuoteReportsQueryDto = z.infer<typeof QuoteReportsQuerySchema>;

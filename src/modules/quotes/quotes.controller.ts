@@ -108,7 +108,11 @@ export class QuotesController {
     @Query(new ZodValidationPipe(QuoteReportsQuerySchema))
     query: QuoteReportsQueryDto,
   ): Promise<{ reason: string | null; count: number }[]> {
-    return this.quotes.getRejectionReasonsSummary(query.from, query.to);
+    return this.quotes.getRejectionReasonsSummary(
+      query.from,
+      query.to,
+      query.createdById,
+    );
   }
 
   /** /teklifler?tab=reports "Reddedilme Notları" collapsible tablosu - `:id` route'undan
