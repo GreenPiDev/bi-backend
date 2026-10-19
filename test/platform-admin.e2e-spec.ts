@@ -2,15 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
+import type { Redis } from 'ioredis';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { HttpExceptionFilter } from '../src/core/filters/http-exception.filter';
 import { PrismaService } from '../src/core/prisma/prisma.service';
+import { REDIS_CLIENT } from '../src/core/redis/redis-client.token';
 import { cleanupTestTenants } from './support/cleanup-tenants';
 
 describe('Platform admin (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let redis: Redis;
 
   const emailSuffix = `-${randomUUID()}@test.com`;
   const adminEmail = `platform-admin${emailSuffix}`;
@@ -32,6 +35,7 @@ describe('Platform admin (e2e)', () => {
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
     prisma = app.get(PrismaService);
+    redis = app.get<Redis>(REDIS_CLIENT);
 
     const adminRegisterRes = await request(app.getHttpServer())
       .post('/api/v1/auth/register')
@@ -393,5 +397,37 @@ describe('Platform admin (e2e)', () => {
       where: { tenantId: adminTenantId, sourceKind: 'CRM_TABLE' },
     });
     expect(datasets).toHaveLength(0);
+  });
+
+  it('platform-admin olmayan kullanici tum kiracilarin onbellegini bosaltamaz (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/platform-admin/cache/flush-all')
+      .set('Cookie', normalCookies);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('platform-admin tum kiracilarin tenant:* onbellek anahtarlarini siler', async () => {
+    await redis.set(`tenant:${adminTenantId}:accounts:list:dummy`, '{}');
+    await redis.set('tenant:other-tenant:query:dummy:query:dummy', '{}');
+    await redis.set('not-a-tenant-key', 'should-survive');
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/platform-admin/cache/flush-all')
+      .set('Cookie', adminCookies);
+
+    expect(res.status).toBe(201);
+    expect(res.body.deletedKeyCount).toBeGreaterThanOrEqual(2);
+
+    expect(
+      await redis.get(`tenant:${adminTenantId}:accounts:list:dummy`),
+    ).toBeNull();
+    expect(
+      await redis.get('tenant:other-tenant:query:dummy:query:dummy'),
+    ).toBeNull();
+    expect(await redis.get('not-a-tenant-key')).toBe('should-survive');
+
+    await redis.del('not-a-tenant-key');
   });
 });

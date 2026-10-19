@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import type { Redis } from 'ioredis';
 import { AppException } from '../../core/errors/app.exception';
 import {
   MODULE_REGISTRY,
@@ -9,6 +10,7 @@ import {
   type PageModuleAssignment,
 } from '../../core/modules/page-modules.service';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { REDIS_CLIENT } from '../../core/redis/redis-client.token';
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import { DrawingLibraryProvisioningService } from '../drawing-library/drawing-library-provisioning.service';
 import { DrawingTemplatesProvisioningService } from '../drawing-templates/drawing-templates-provisioning.service';
@@ -30,6 +32,7 @@ export class PlatformAdminService {
     private readonly realtime: RealtimeService,
     private readonly drawingLibrary: DrawingLibraryProvisioningService,
     private readonly drawingTemplates: DrawingTemplatesProvisioningService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   listTenants(): Promise<TenantSummary[]> {
@@ -105,6 +108,23 @@ export class PlatformAdminService {
     );
     this.realtime.emitToAll('page-modules.updated', assignments);
     return assignments;
+  }
+
+  /**
+   * Tum cache servisleri (accounts, contacts, quotes, query vb.) `tenant:{id}:...`
+   * anahtar namespace'ini paylasir (bkz. CLAUDE.md SS6, accounts-cache.service.ts).
+   * Bu yuzden tek bir `tenant:*` pattern'i tum kiracilarin tum onbelleklerini kapsar.
+   */
+  async flushAllTenantCaches(): Promise<{ deletedKeyCount: number }> {
+    let deletedKeyCount = 0;
+    const stream = this.redis.scanStream({ match: 'tenant:*', count: 100 });
+    for await (const keys of stream as AsyncIterable<string[]>) {
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        deletedKeyCount += keys.length;
+      }
+    }
+    return { deletedKeyCount };
   }
 
   private async requireTenant(tenantId: string): Promise<void> {

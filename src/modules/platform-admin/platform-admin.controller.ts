@@ -89,4 +89,9 @@ export class PlatformAdminController {
   ): Promise<PageModuleAssignment[]> {
     return this.platformAdmin.setPageModule(pageKey, dto.moduleKeys);
   }
+
+  @Post('cache/flush-all')
+  flushAllTenantCaches(): Promise<{ deletedKeyCount: number }> {
+    return this.platformAdmin.flushAllTenantCaches();
+  }
 }
