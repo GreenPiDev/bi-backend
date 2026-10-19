@@ -9,6 +9,12 @@ const fakeCache = {
   set: vi.fn(),
   invalidate: cacheInvalidate,
 } as never;
+const surveyQueueAdd = vi.fn();
+const fakeSurveyQueue = { add: surveyQueueAdd } as never;
+const postSaleCasesCacheInvalidate = vi.fn();
+const fakePostSaleCasesCache = {
+  invalidate: postSaleCasesCacheInvalidate,
+} as never;
 
 function createSalesOrderRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -49,7 +55,13 @@ function createPrisma(salesOrderRow: unknown = createSalesOrderRow()) {
     product: {
       findMany: vi
         .fn()
-        .mockResolvedValue([{ id: 'product-1', currency: 'TRY' }]),
+        .mockResolvedValue([{ id: 'product-1', currency: 'TRY', brand: null }]),
+    },
+    tenantSetting: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    postSaleCase: {
+      create: vi.fn().mockResolvedValue({ id: 'psc-1', contactId: null }),
     },
   };
 }
@@ -58,6 +70,8 @@ describe('SalesOrdersService', () => {
   beforeEach(() => {
     auditLog.mockClear();
     cacheInvalidate.mockClear();
+    surveyQueueAdd.mockClear();
+    postSaleCasesCacheInvalidate.mockClear();
   });
 
   it('list: sonuclari sayfalanmis halde doner', async () => {
@@ -66,6 +80,8 @@ describe('SalesOrdersService', () => {
       prisma as never,
       fakeAudit,
       fakeCache,
+      fakeSurveyQueue,
+      fakePostSaleCasesCache,
     );
     const result = await service.list({ page: 1, pageSize: 25 } as never);
     expect(result.meta.total).toBe(1);
@@ -79,6 +95,8 @@ describe('SalesOrdersService', () => {
       prisma as never,
       fakeAudit,
       fakeCache,
+      fakeSurveyQueue,
+      fakePostSaleCasesCache,
     );
     await expect(service.getById('yok')).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -91,6 +109,8 @@ describe('SalesOrdersService', () => {
       prisma as never,
       fakeAudit,
       fakeCache,
+      fakeSurveyQueue,
+      fakePostSaleCasesCache,
     );
     await service.updateStatus('so-1', { status: 'SHIPPED' });
     expect(prisma.salesOrder.update).toHaveBeenCalledWith({
@@ -109,6 +129,8 @@ describe('SalesOrdersService', () => {
       prisma as never,
       fakeAudit,
       fakeCache,
+      fakeSurveyQueue,
+      fakePostSaleCasesCache,
     );
     await expect(
       service.updateStatus('yok', { status: 'COMPLETED' }),
@@ -129,6 +151,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await service.create('user-1', { quoteId: 'quote-1' });
@@ -147,6 +171,15 @@ describe('SalesOrdersService', () => {
         expect.objectContaining({ action: 'CREATE', entity: 'SalesOrder' }),
       );
       expect(cacheInvalidate).toHaveBeenCalled();
+      expect(prisma.postSaleCase.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          salesOrderId: 'so-1',
+          quoteId: 'quote-1',
+          accountId: 'account-1',
+          contactId: null,
+        }),
+      });
+      expect(postSaleCasesCacheInvalidate).toHaveBeenCalled();
     });
 
     it('teklif bulunamazsa NOT_FOUND firlatir', async () => {
@@ -156,6 +189,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await expect(
@@ -177,6 +212,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await expect(
@@ -192,6 +229,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await expect(
@@ -213,6 +252,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await service.create('user-1', {
@@ -234,6 +275,9 @@ describe('SalesOrdersService', () => {
                 quantity: 2,
                 unitPrice: 150,
                 currency: 'TRY',
+                discountPct: 0,
+                vatPct: 0,
+                brand: null,
               },
             ],
           },
@@ -243,6 +287,14 @@ describe('SalesOrdersService', () => {
         expect.objectContaining({ action: 'CREATE', entity: 'SalesOrder' }),
       );
       expect(cacheInvalidate).toHaveBeenCalled();
+      expect(prisma.postSaleCase.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          salesOrderId: 'so-1',
+          quoteId: null,
+          accountId: 'account-1',
+          contactId: null,
+        }),
+      });
     });
 
     it('firma bulunamazsa NOT_FOUND firlatir', async () => {
@@ -252,6 +304,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await expect(
@@ -271,6 +325,8 @@ describe('SalesOrdersService', () => {
         prisma as never,
         fakeAudit,
         fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
       );
 
       await expect(

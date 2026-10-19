@@ -54,6 +54,47 @@ describe('PostSaleCasesService', () => {
     surveyQueueAdd.mockClear();
   });
 
+  it('list: from/to verilince createdAt araligina gore filtreler', async () => {
+    const prisma = createPrisma();
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+    const from = new Date('2026-10-01T00:00:00.000Z');
+    const to = new Date('2026-10-31T23:59:59.999Z');
+    await service.list({ page: 1, pageSize: 25, from, to } as never);
+
+    expect(prisma.postSaleCase.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { gte: from, lte: to },
+        }),
+      }),
+    );
+  });
+
+  it('list: sadece from verilince tek tarafli (itibaren) filtreler', async () => {
+    const prisma = createPrisma();
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+    const from = new Date('2026-10-01T00:00:00.000Z');
+    await service.list({ page: 1, pageSize: 25, from } as never);
+
+    expect(prisma.postSaleCase.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { gte: from },
+        }),
+      }),
+    );
+  });
+
   it('getById: bulunamayan kayit icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
     const service = new PostSaleCasesService(

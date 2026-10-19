@@ -6,6 +6,7 @@ function createDueCase(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'psc-1',
     tenantId: 'tenant-1',
+    salesOrderId: 'so-1',
     quoteId: 'quote-1',
     reminderAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     reminderSentAt: null,
@@ -19,11 +20,12 @@ function createPrisma(overrides: Partial<Record<string, unknown>> = {}) {
       findMany: vi.fn().mockResolvedValue([createDueCase()]),
       update: vi.fn().mockResolvedValue({}),
     },
-    quote: {
+    salesOrder: {
       findUnique: vi.fn().mockResolvedValue({
-        id: 'quote-1',
-        quoteNumber: 'TEK-2026-09-06-001',
+        id: 'so-1',
+        orderNumber: 'SAT-2026-10-19-001',
         createdById: 'user-1',
+        quote: { quoteNumber: 'TEK-2026-09-06-001' },
       }),
     },
     user: {
@@ -57,6 +59,29 @@ describe('CheckPostSaleFollowupProcessor', () => {
     });
   });
 
+  it('teklifsiz (manuel) siparis icin de e-posta gonderir', async () => {
+    const prisma = createPrisma();
+    prisma.salesOrder.findUnique = vi.fn().mockResolvedValue({
+      id: 'so-1',
+      orderNumber: 'SAT-2026-10-19-001',
+      createdById: 'user-1',
+      quote: null,
+    });
+    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const processor = new CheckPostSaleFollowupProcessor(
+      prisma as never,
+      mail as never,
+      fakePostSaleCasesCache,
+    );
+    await processor.process();
+
+    expect(mail.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('SAT-2026-10-19-001'),
+      }),
+    );
+  });
+
   it('satis temsilcisi pasifse gondermez', async () => {
     const prisma = createPrisma();
     prisma.user.findUnique = vi.fn().mockResolvedValue({
@@ -77,7 +102,9 @@ describe('CheckPostSaleFollowupProcessor', () => {
 
   it('bir case hata verirse digerlerini etkilemez', async () => {
     const prisma = createPrisma();
-    prisma.quote.findUnique = vi.fn().mockRejectedValue(new Error('DB down'));
+    prisma.salesOrder.findUnique = vi
+      .fn()
+      .mockRejectedValue(new Error('DB down'));
     const mail = { send: vi.fn().mockResolvedValue(undefined) };
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,

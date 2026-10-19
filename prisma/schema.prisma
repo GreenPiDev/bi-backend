@@ -785,14 +785,18 @@ model IbanOptionGroup {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
-  /** Bir tenant'ta en fazla bir isDefault=true kaydi olur (QuoteTemplatesService
+  /**
+   * Bir tenant'ta en fazla bir isDefault=true kaydi olur (QuoteTemplatesService
    * ile ayni desen - create/update transaction icinde digerlerini once false
    * yapar). /teklifler/yeni'de IBAN secimi varsayilan olarak bu gruba onceden
-   * secili gelir (kullanici talebi). */
+   * secili gelir (kullanici talebi).
+   */
   isDefault Boolean  @default(false)
-  /** Banka logosu - Product/User avatar ile ayni R2 deseni (bkz.
+  /**
+   * Banka logosu - Product/User avatar ile ayni R2 deseni (bkz.
    * IbanOptionGroupsService.uploadLogo). Opsiyonel, teklif PDF'inde ve
-   * ayarlar listesinde kucuk bir onizleme olarak gosterilir. */
+   * ayarlar listesinde kucuk bir onizleme olarak gosterilir.
+   */
   logoKey   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -807,13 +811,17 @@ model IbanOptionGroup {
 model IbanOption {
   id                String   @id @default(uuid())
   tenantId          String
-  /** Opsiyonel - bos birakilirsa hesap teklif formunda tek basina secilebilir kalir. */
+  /**
+   * Opsiyonel - bos birakilirsa hesap teklif formunda tek basina secilebilir kalir.
+   */
   groupId           String?
   bankName          String
   accountHolderName String
   accountNumber     String?
   iban              String
-  /** TRY/USD/EUR - hesabin tutuldugu para birimi. */
+  /**
+   * TRY/USD/EUR - hesabin tutuldugu para birimi.
+   */
   currency          String   @default("TRY")
   createdAt         DateTime @default(now())
 
@@ -1188,40 +1196,40 @@ model ProductList {
  * basina benzersiz, gun icinde sirali (Q1).
  */
 model Quote {
-  id                    String              @id @default(uuid())
-  tenantId              String
-  accountId             String
+  id               String              @id @default(uuid())
+  tenantId         String
+  accountId        String
   /**
    * S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - teklif olustururken opsiyonel
    * secilir, PostSaleCase/FeedbackSurvey bunu teklif uzerinden miras alir.
    */
-  contactId             String?
-  quoteNumber           String
+  contactId        String?
+  quoteNumber      String
   /**
    * Kullanicinin teklife elle verdigi tarih - quoteNumber'in gun-icinde-sayaci
    * (sistemin "simdi"si) ile karistirilmamali, teklif belgesinde gorunen tarih
    * kullanici tarafindan gecmis/gelecek bir gune ayarlanabilir.
    */
-  quoteDate             DateTime            @default(now())
+  quoteDate        DateTime            @default(now())
   /**
    * Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta".
    */
-  leadTime              String?
+  leadTime         String?
   /**
    * Teklif gecerlilik suresi. leadTime ile ayni desen: serbest metin,
    * orn. "15 gun", "1 ay", "30.11.2026'a kadar".
    */
-  validityPeriod        String?
+  validityPeriod   String?
   /**
    * Tenant'in crm_payment_method_options listesine karsi dogrulanir (bkz.
    * QuotesService.assertValidPaymentMethod, sektor alaniyla ayni desen).
    */
-  paymentMethod         String?
-  title                 String?
-  paymentTerms          String?
-  salesTerms            String?
-  deliveryTerms         String?
-  generalTerms          String?
+  paymentMethod    String?
+  title            String?
+  paymentTerms     String?
+  salesTerms       String?
+  deliveryTerms    String?
+  generalTerms     String?
   /**
    * Secilen IbanOption(lar)'in alanlari olusturma/guncelleme aninda buraya
    * kopyalanir (bkz. IbanOption doc comment'i) - FK degil, snapshot. Bir grup
@@ -1230,39 +1238,39 @@ model Quote {
    * tek bir hesap secildiyse 1 elemanli array. Her eleman:
    * { bankName, accountHolderName, accountNumber, iban, currency }.
    */
-  ibanAccounts          Json?
-  status                QuoteStatus         @default(DRAFT)
-  approvedAt            DateTime?
-  approvedById          String?
+  ibanAccounts     Json?
+  status           QuoteStatus         @default(DRAFT)
+  approvedAt       DateTime?
+  approvedById     String?
   /**
    * Ad-hoc /teklifler ice aktarma (bkz. QuoteItemsEntryMode doc comment'i).
    * MANUAL_TOTAL oldugunda items bos olabilir, PDF/toplam hesaplayicilari
    * manualSubtotal/manualVatAmount/manualCurrency'den okur (bkz. bi-frontend
    * lib/quote-totals.ts getQuoteCurrencyTotals).
    */
-  itemsEntryMode        QuoteItemsEntryMode @default(ITEMIZED)
-  manualSubtotal        Decimal?            @db.Decimal(14, 2)
-  manualVatAmount       Decimal?            @db.Decimal(14, 2)
-  manualCurrency        String?
+  itemsEntryMode   QuoteItemsEntryMode @default(ITEMIZED)
+  manualSubtotal   Decimal?            @db.Decimal(14, 2)
+  manualVatAmount  Decimal?            @db.Decimal(14, 2)
+  manualCurrency   String?
   /**
    * Ad-hoc /teklifler ice aktarma - Product.attributes ile ayni "bilinen alana
    * eslenmeyen ama kaybedilmek istenmeyen kolon" catch-all deseni (bkz.
    * ProductImportsService). quote-imports disinda hic yazilmaz.
    */
-  attributes            Json?
+  attributes       Json?
   /**
    * Kalemler farkli para birimlerinde olabilir (Product.currency) - teklifin TEK bir
    * genel toplamini gosterebilmek icin kullanicinin sectigi hedef para birimi. Item
    * para birimlerinden biriyle ayni olmak zorunda degil.
    */
-  quoteCurrency         String              @default("TRY")
+  quoteCurrency    String              @default("TRY")
   /**
    * quoteCurrency disindaki her item para biriminin quoteCurrency'ye cevrim kuru
    * snapshot'i - `{ asOf: string, rates: { [currency]: number } }`. Kullanici FxService'ten
    * gelen guncel kuru duzenleyebilir; olusturma/guncelleme aninda buraya donmuslenir,
    * gecmis teklifler farkli gunun kurunu korur (unitPrice ile ayni "snapshot" deseni).
    */
-  exchangeRates         Json?
+  exchangeRates    Json?
   /**
    * Bir proje birden fazla teklifle iliskilendirilebilir (1 Project : N Quote), ama bir
    * teklif en fazla bir projeye baglidir - bu yuzden FK burada, Quote tarafinda (eskiden
@@ -1270,14 +1278,14 @@ model Quote {
    * olustururken setlenmez; proje duzenleme formundaki "Teklifler" cok-secimli alaniyla
    * (tam degisim/replace semantigi) ayarlanir (bkz. ProjectsService.update).
    */
-  projectId             String?
+  projectId        String?
   /**
    * Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Nullable ve
    * onDelete: SetNull - sablonsuz teklifler (null) mevcut sade export yolunu
    * degismeden kullanmaya devam eder, bir sablon silinirse onu kullanan teklifler
    * sessizce sablonsuz export'a duser.
    */
-  templateId            String?
+  templateId       String?
   /**
    * Ad-hoc revizyon takibi (kullanici istegi, bkz. CLAUDE.md). Teklif REVIZE
    * durumundayken kalemler kaydedilince: o ana kadarki kalemlerin/kurun JSON
@@ -1288,10 +1296,10 @@ model Quote {
    * firma bazli "X kere revize istedi" uyarisi icin (bkz. QuotesService.
    * getRevisionSummaryForAccount) tum tekliflerde toplanir.
    */
-  revisionNote          String?
-  revisionSnapshot      Json?
-  revisionCount         Int                 @default(0)
-  lastRevisedAt         DateTime?
+  revisionNote     String?
+  revisionSnapshot Json?
+  revisionCount    Int                 @default(0)
+  lastRevisedAt    DateTime?
   /**
    * Teklifin "gonderen"i (PDF'te gosterilen temsilci) - /teklifler/yeni'de
    * kullanici tarafindan secilir, varsayilan olarak teklifi olusturan kullanici
@@ -1299,11 +1307,11 @@ model Quote {
    * FK degil (bkz. createdById doc comment'i) - User.title/phone/email ile
    * birlikte QuotesService.getPrintData'da ayri bir sorguyla cozulur.
    */
-  senderId              String?
-  createdById           String
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  deletedAt             DateTime?
+  senderId         String?
+  createdById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime?
 
   tenant         Tenant               @relation(fields: [tenantId], references: [id])
   account        Account              @relation(fields: [accountId], references: [id])
@@ -1452,18 +1460,24 @@ model QuoteItem {
 }
 
 /**
- * S1 (bkz. docs/VARSAYIMLAR.md V28): Quote.status APPROVED'a ulastigi HER an (dogrudan
- * olusturma, approve endpoint'i, veya update() sirasinda iskonto siniri altina inme) tek bir
- * PostSaleCase acilir (quoteId @unique, idempotent upsert - bkz. QuotesService.ensurePostSaleCase).
+ * S1 (bkz. docs/VARSAYIMLAR.md V28, revize V68): tetikleyici artik "Quote APPROVED'a
+ * ulasti" degil, "bir SalesOrder olustu" (salesOrderId @unique, idempotent upsert -
+ * bkz. QuotesService.ensurePostSaleCase / SalesOrdersService.ensurePostSaleCase).
+ * SalesOrder teklifli (otomatik veya elle backfill) ya da teklifsiz (tamamen manuel,
+ * quoteId null) olabilir - bu yuzden quoteId artik NULLABLE: teklifsiz bir SalesOrder
+ * icin de PostSaleCase acilir, sadece quote/quoteId null kalir. quoteId dolu oldugunda
+ * dahi anlasma SalesOrder uzerinden kurulur (salesOrderId zorunlu), quoteId sadece
+ * ekranda teklif linkini gostermek icin tutulan bir kopya alandir.
  * status alani DB'de TUTULMAZ - Account.missingCriticalFields ile ayni "hesaplanan alan"
  * konvansiyonu (bkz. VARSAYIMLAR V18), reminderSentAt/feedbackReceivedAt'tan servis katmaninda
- * turetilir. reminderAt, onay anindaki TenantSetting(crm.postSaleFollowUpDays, varsayilan 14)
- * degeriyle hesaplanir (S2).
+ * turetilir. reminderAt, SalesOrder olusturulma anindaki TenantSetting(crm.postSaleFollowUpDays,
+ * varsayilan 14) degeriyle hesaplanir (S2).
  */
 model PostSaleCase {
   id                 String    @id @default(uuid())
   tenantId           String
-  quoteId            String    @unique
+  salesOrderId       String    @unique
+  quoteId            String?   @unique
   accountId          String
   contactId          String?
   reminderAt         DateTime
@@ -1474,7 +1488,8 @@ model PostSaleCase {
   updatedAt          DateTime  @updatedAt
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  quote          Quote           @relation(fields: [quoteId], references: [id])
+  salesOrder     SalesOrder      @relation(fields: [salesOrderId], references: [id])
+  quote          Quote?          @relation(fields: [quoteId], references: [id])
   account        Account         @relation(fields: [accountId], references: [id])
   contact        Contact?        @relation(fields: [contactId], references: [id])
   feedbackSurvey FeedbackSurvey?
@@ -1639,11 +1654,12 @@ model SalesOrder {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  tenant  Tenant            @relation(fields: [tenantId], references: [id])
-  quote   Quote?            @relation(fields: [quoteId], references: [id])
-  account Account           @relation(fields: [accountId], references: [id])
-  contact Contact?          @relation(fields: [contactId], references: [id])
-  items   SalesOrderItem[]
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  quote        Quote?           @relation(fields: [quoteId], references: [id])
+  account      Account          @relation(fields: [accountId], references: [id])
+  contact      Contact?         @relation(fields: [contactId], references: [id])
+  items        SalesOrderItem[]
+  postSaleCase PostSaleCase?
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId, status])
@@ -1655,8 +1671,11 @@ model SalesOrder {
  * Sadece quoteId'si NULL olan (teklifsiz, /satis-siparisleri/yeni'de manuel
  * olusturulan) SalesOrder'lar icin dolar - teklifli siparislerde kalemler
  * Quote.items'tan okunur, bu tablo bos kalir (bkz. SalesOrder doc comment'i).
- * QuoteItem'daki discountPct/vatPct/costPriceAtSale YOK - manuel siparis sadece
- * operasyonel bir kayit, teklifin fiyatlandirma/karlilik mantigini tasimaz.
+ * 2026-10-19'da kullanici istegiyle QuoteItem'la (fiyatlandirma alanlari
+ * bakimindan) esitlendi - discountPct/vatPct/brand eklendi, costPriceAtSale/
+ * discountNote/iskonto-onay akisi (maxDiscountPct) KASITLI OLARAK eklenmedi
+ * (manuel siparis hala teklifin karlilik/onay mantigini tasimaz, sadece
+ * gorunum/tutar alanlari genisledi).
  */
 model SalesOrderItem {
   id           String   @id @default(uuid())
@@ -1664,9 +1683,20 @@ model SalesOrderItem {
   productId    String
   quantity     Decimal  @db.Decimal(14, 3)
   unitPrice    Decimal  @db.Decimal(14, 2)
-  /** unitPrice ile ayni snapshot semantigi: satir olusturulurken Product.currency'den
-   * kopyalanir, client'tan kabul edilmez (QuoteItem.currency ile ayni gerekce). */
+  /**
+   * unitPrice ile ayni snapshot semantigi: varsayilan olarak Product.currency'den
+   * kopyalanir, ama QuoteItem.currency ile ayni gerekceyle client tarafindan
+   * manuel ezilebilir.
+   */
   currency     String   @default("TRY")
+  discountPct  Decimal  @default(0) @db.Decimal(5, 2)
+  vatPct       Decimal  @default(0) @db.Decimal(5, 2)
+  /**
+   * unitPrice/currency ile ayni snapshot semantigi: varsayilan olarak
+   * Product.brand'den kopyalanir, bu siparis icin manuel ezilebilir
+   * (QuoteItem.brand ile ayni gerekce).
+   */
+  brand        String?
   createdAt    DateTime @default(now())
 
   salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
@@ -1676,18 +1706,18 @@ model SalesOrderItem {
 }
 
 model PurchaseOrder {
-  id          String              @id @default(uuid())
-  tenantId    String
-  orderNumber String
+  id              String              @id @default(uuid())
+  tenantId        String
+  orderNumber     String
   /**
    * Ad-hoc (2026-10-05, kullanici istegiyle): opsiyonel, nullable baslik -
    * /siparisler listesinde ve arama kutusunda kullanilir (Quote.title ile ayni
    * desen).
    */
-  title       String?
-  quoteId     String?
-  status      PurchaseOrderStatus @default(DRAFT)
-  createdById String
+  title           String?
+  quoteId         String?
+  status          PurchaseOrderStatus @default(DRAFT)
+  createdById     String
   /**
    * Ad-hoc (2026-10-16, cift-tiklama ile duplicate siparis bug'i): /siparisler/yeni
    * formu sayfa acilirken bir kez uretilen bir UUID'i bu alanda gonderir. Ayni
@@ -1698,8 +1728,8 @@ model PurchaseOrder {
    * esit saymaz).
    */
   clientRequestId String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   deletedAt       DateTime?
 
   tenant Tenant              @relation(fields: [tenantId], references: [id])

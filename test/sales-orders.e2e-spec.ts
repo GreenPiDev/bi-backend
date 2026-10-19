@@ -252,8 +252,13 @@ describe('Sales Orders (e2e)', () => {
         items: [{ productId, quantity: 1, discountPct: 0, vatPct: 0 }],
       });
     const backfillQuoteId = backfillQuoteRes.body.id as string;
-    // SalesOrder, create() tx'inde ensureSalesOrder tarafindan otomatik acilir -
-    // bu testte "eski teklif" senaryosunu simule etmek icin elle siliyoruz.
+    // SalesOrder (+ PostSaleCase, V68'den itibaren) create() tx'inde ensureSalesOrder
+    // tarafindan otomatik acilir - bu testte "eski teklif" senaryosunu simule etmek
+    // icin elle siliyoruz. PostSaleCase.salesOrderId FK'si RESTRICT oldugundan once o
+    // silinmeli.
+    await prisma.postSaleCase.deleteMany({
+      where: { quoteId: backfillQuoteId },
+    });
     await prisma.salesOrder.deleteMany({ where: { quoteId: backfillQuoteId } });
 
     const res = await request(app.getHttpServer())
@@ -263,6 +268,14 @@ describe('Sales Orders (e2e)', () => {
     expect(res.status).toBe(201);
     expect(res.body.quoteId).toBe(backfillQuoteId);
     expect(res.body.orderNumber).toMatch(/^SAT-\d{4}-\d{2}-\d{2}-\d{3}$/);
+
+    // V68: PostSaleCase'in TEK tetikleyicisi artik "bir SalesOrder olustu" -
+    // backfill yolu da (createFromQuote) bunu acmali.
+    const postSaleCase = await prisma.postSaleCase.findFirst({
+      where: { salesOrderId: res.body.id as string },
+    });
+    expect(postSaleCase).not.toBeNull();
+    expect(postSaleCase?.quoteId).toBe(backfillQuoteId);
   });
 
   it('POST /sales-orders: accountId + items ile teklifsiz, manuel bir siparis olusturur', async () => {
@@ -271,6 +284,7 @@ describe('Sales Orders (e2e)', () => {
       .set('Cookie', cookiesA)
       .send({
         accountId: accountIdA,
+        contactId: contactIdA,
         items: [{ productId, quantity: 3, unitPrice: 12000 }],
       });
     expect(res.status).toBe(201);
@@ -280,6 +294,14 @@ describe('Sales Orders (e2e)', () => {
     expect(res.body.items[0].productId).toBe(productId);
     expect(res.body.items[0].quantity).toBe('3');
     expect(res.body.items[0].unitPrice).toBe('12000');
+
+    // V68: teklifsiz (manuel) SalesOrder da bir PostSaleCase acar, quoteId null kalir.
+    const postSaleCase = await prisma.postSaleCase.findFirst({
+      where: { salesOrderId: res.body.id as string },
+    });
+    expect(postSaleCase).not.toBeNull();
+    expect(postSaleCase?.quoteId).toBeNull();
+    expect(postSaleCase?.contactId).toBe(contactIdA);
   });
 
   it('POST /sales-orders: hem quoteId hem accountId verilirse 400 doner', async () => {

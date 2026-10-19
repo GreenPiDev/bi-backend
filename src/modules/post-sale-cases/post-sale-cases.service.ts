@@ -7,6 +7,7 @@ import type {
   FeedbackSurvey,
   PostSaleCase,
   Quote,
+  SalesOrder,
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
@@ -37,6 +38,7 @@ import type {
 const SORTABLE_FIELDS = ['reminderAt', 'createdAt'] as const;
 
 const POST_SALE_CASE_INCLUDE = {
+  salesOrder: true,
   quote: true,
   account: true,
   contact: true,
@@ -44,7 +46,8 @@ const POST_SALE_CASE_INCLUDE = {
 } as const;
 
 export type PostSaleCaseWithDetails = PostSaleCase & {
-  quote: Quote;
+  salesOrder: SalesOrder;
+  quote: Quote | null;
   account: Account;
   contact: Contact | null;
   feedbackSurvey: FeedbackSurvey | null;
@@ -88,7 +91,7 @@ export class PostSaleCasesService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status, q } = query;
+    const { page, pageSize, accountId, status, q, from, to } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
@@ -102,12 +105,14 @@ export class PostSaleCasesService {
           this.prisma,
           Prisma.sql`
             SELECT p."id" FROM "crm_post_sale_cases" p
+            LEFT JOIN "crm_sales_orders" so ON so."id" = p."salesOrderId"
             LEFT JOIN "crm_quotes" qt ON qt."id" = p."quoteId"
             LEFT JOIN "crm_accounts" a ON a."id" = p."accountId"
             LEFT JOIN "crm_contacts" c ON c."id" = p."contactId"
             WHERE p."tenantId" = ${TenantContext.getOrThrow().tenantId}
               AND (
-                ${turkishContains(qualifiedColumn('qt', 'quoteNumber'), q)}
+                ${turkishContains(qualifiedColumn('so', 'orderNumber'), q)}
+                OR ${turkishContains(qualifiedColumn('qt', 'quoteNumber'), q)}
                 OR ${turkishContains(qualifiedColumn('a', 'name'), q)}
                 OR ${turkishContains(qualifiedColumn('c', 'firstName'), q)}
                 OR ${turkishContains(qualifiedColumn('c', 'lastName'), q)}
@@ -120,6 +125,14 @@ export class PostSaleCasesService {
       ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(status ? STATUS_WHERE[status] : {}),
+      ...(from || to
+        ? {
+            createdAt: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
     };
 
     const [data, total] = await Promise.all([

@@ -170,7 +170,10 @@ type PostSaleCaseTx = Pick<
   'postSaleCase' | 'tenantSetting'
 >;
 
-type SalesOrderTx = Pick<TenantPrismaClient, 'salesOrder'>;
+type SalesOrderTx = Pick<
+  TenantPrismaClient,
+  'salesOrder' | 'postSaleCase' | 'tenantSetting'
+>;
 
 interface ResolvedQuoteItem {
   productId: string;
@@ -302,19 +305,30 @@ export class QuotesService {
   }
 
   /**
-   * S1 (bkz. docs/VARSAYIMLAR.md V28): Quote.status APPROVED'a ulastigi HER an
-   * (create/update/approve - ucu de bu metodu cagirir) idempotent bir PostSaleCase
-   * acar. reminderAt, tenant'in postSaleFollowUpDays ayariyla hesaplanir (S2).
+   * S1 (bkz. docs/VARSAYIMLAR.md V68, eski karar V28): tetikleyici artik "Quote
+   * APPROVED'a ulasti" degil, "bu SalesOrder icin bir PostSaleCase acilmamis" -
+   * salesOrderId @unique oldugundan idempotency findFirst ile saglanir (tenant-scoped
+   * extension upsert desteklemiyor, ayni gerekce). reminderAt, SalesOrder'in olusturulma
+   * aninda tenant'in postSaleFollowUpDays ayariyla hesaplanir (S2). quoteId varsa (teklifli
+   * SalesOrder) ekranda teklif linki gostermek icin PostSaleCase'e de kopyalanir, teklifsiz
+   * (manuel) SalesOrder'larda null kalir.
    */
   private async ensurePostSaleCase(
     tx: PostSaleCaseTx,
     params: {
-      quoteId: string;
+      salesOrderId: string;
+      quoteId: string | null;
       accountId: string;
       contactId: string | null;
-      approvedAt: Date;
     },
   ): Promise<EnsuredPostSaleCase> {
+    const existing = await tx.postSaleCase.findFirst({
+      where: { salesOrderId: params.salesOrderId },
+    });
+    if (existing) {
+      return { id: existing.id, contactId: existing.contactId };
+    }
+
     const setting = await tx.tenantSetting.findFirst({
       where: { key: POST_SALE_FOLLOW_UP_DAYS_KEY },
     });
@@ -323,21 +337,12 @@ export class QuotesService {
         ? setting.value
         : DEFAULT_POST_SALE_FOLLOW_UP_DAYS;
     const reminderAt = new Date(
-      params.approvedAt.getTime() + followUpDays * 24 * 60 * 60 * 1000,
+      Date.now() + followUpDays * 24 * 60 * 60 * 1000,
     );
-
-    // tenant-scoped extension yalnizca create/createMany'e tenantId enjekte
-    // eder (upsert desteklenmiyor) - bu yuzden findFirst + create kullanilir,
-    // Quote.postSaleCase 1:1 oldugu icin idempotency findFirst ile saglanir.
-    const existing = await tx.postSaleCase.findFirst({
-      where: { quoteId: params.quoteId },
-    });
-    if (existing) {
-      return { id: existing.id, contactId: existing.contactId };
-    }
 
     const postSaleCase = await tx.postSaleCase.create({
       data: {
+        salesOrderId: params.salesOrderId,
         quoteId: params.quoteId,
         accountId: params.accountId,
         contactId: params.contactId,
@@ -350,10 +355,13 @@ export class QuotesService {
 
   /**
    * Ad-hoc Satis Siparisi (bkz. CLAUDE.md, kullanici istegi): Quote.status
-   * APPROVED'a ulastigi HER an (ensurePostSaleCase ile ayni iki cagri noktasi -
-   * update/approve) idempotent bir SalesOrder acar. findFirst + create (upsert
-   * tenant-scoped extension'da desteklenmiyor - ensurePostSaleCase ile ayni
-   * gerekce), quoteId @unique oldugu icin idempotency findFirst ile saglanir.
+   * APPROVED'a ulastigi HER an idempotent bir SalesOrder acar, hemen ardindan
+   * (V68) o SalesOrder icin bir PostSaleCase acar - artik PostSaleCase'in TEK
+   * tetikleyicisi "bir SalesOrder olustu", "Quote APPROVED oldu" degil (bkz.
+   * SalesOrdersService.createFromQuote/createManual - teklifsiz/backfill
+   * SalesOrder'lar icin ayni ensurePostSaleCase deseni orada tekrarlanir).
+   * findFirst + create (upsert tenant-scoped extension'da desteklenmiyor),
+   * quoteId @unique oldugu icin SalesOrder idempotency'si findFirst ile saglanir.
    * orderNumber uretimi tek deneme (retry YOK) - bkz. SalesOrder model doc
    * comment'i, ayni tx icinde retry 25P02'ye carpar.
    */
@@ -365,28 +373,38 @@ export class QuotesService {
       contactId: string | null;
       createdById: string;
     },
-  ): Promise<void> {
+  ): Promise<EnsuredPostSaleCase> {
     const existing = await tx.salesOrder.findFirst({
       where: { quoteId: params.quoteId },
     });
+
+    let salesOrderId: string;
     if (existing) {
-      return;
+      salesOrderId = existing.id;
+    } else {
+      const prefix = salesOrderNumberPrefix(new Date());
+      const countToday = await tx.salesOrder.count({
+        where: { orderNumber: { startsWith: prefix } },
+      });
+      const orderNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
+
+      const created = await tx.salesOrder.create({
+        data: {
+          quoteId: params.quoteId,
+          accountId: params.accountId,
+          contactId: params.contactId,
+          orderNumber,
+          createdById: params.createdById,
+        } as never,
+      });
+      salesOrderId = created.id;
     }
 
-    const prefix = salesOrderNumberPrefix(new Date());
-    const countToday = await tx.salesOrder.count({
-      where: { orderNumber: { startsWith: prefix } },
-    });
-    const orderNumber = `${prefix}${String(countToday + 1).padStart(3, '0')}`;
-
-    await tx.salesOrder.create({
-      data: {
-        quoteId: params.quoteId,
-        accountId: params.accountId,
-        contactId: params.contactId,
-        orderNumber,
-        createdById: params.createdById,
-      } as never,
+    return this.ensurePostSaleCase(tx, {
+      salesOrderId,
+      quoteId: params.quoteId,
+      accountId: params.accountId,
+      contactId: params.contactId,
     });
   }
 
@@ -1500,17 +1518,11 @@ export class QuotesService {
         const resolvedContactId = contactIdProvided
           ? (dto.contactId ?? null)
           : existing.contactId;
-        await this.ensureSalesOrder(tx, {
+        return this.ensureSalesOrder(tx, {
           quoteId: id,
           accountId: existing.accountId,
           contactId: resolvedContactId,
           createdById: actingUserId,
-        });
-        return this.ensurePostSaleCase(tx, {
-          quoteId: id,
-          accountId: existing.accountId,
-          contactId: resolvedContactId,
-          approvedAt,
         });
       }
 
@@ -1614,17 +1626,11 @@ export class QuotesService {
         status: 'APPROVED',
         createdById: approvedById,
       });
-      await this.ensureSalesOrder(tx, {
+      return this.ensureSalesOrder(tx, {
         quoteId: id,
         accountId: existing.accountId,
         contactId: existing.contactId,
         createdById: approvedById,
-      });
-      return this.ensurePostSaleCase(tx, {
-        quoteId: id,
-        accountId: existing.accountId,
-        contactId: existing.contactId,
-        approvedAt,
       });
     });
     await this.audit.log({ action: 'APPROVE', entity: 'Quote', entityId: id });

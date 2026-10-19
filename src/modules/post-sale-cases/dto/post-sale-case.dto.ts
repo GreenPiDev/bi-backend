@@ -15,6 +15,11 @@ export type PostSaleCaseStatus = z.infer<typeof PostSaleCaseStatusSchema>;
 export const PostSaleCaseQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: PostSaleCaseStatusSchema.optional(),
+  /** Olusma tarihi (createdAt) filtresi (liste sayfasi filtre penceresi) - hem tek
+   * tarih ("su tarihten itibaren") hem aralik ("iki tarih arasi") secimi frontend'de
+   * bu ayni from/to ciftine cevrilir - bkz. quote.dto.ts'teki ayni desen. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 export type PostSaleCaseQueryDto = z.infer<typeof PostSaleCaseQuerySchema>;
 

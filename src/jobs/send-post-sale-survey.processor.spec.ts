@@ -6,6 +6,7 @@ function createCase(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'psc-1',
     tenantId: 'tenant-1',
+    salesOrder: { orderNumber: 'SAT-2026-10-19-001' },
     quote: { quoteNumber: 'TEK-2026-09-06-001' },
     contact: {
       id: 'contact-1',
@@ -88,6 +89,26 @@ describe('SendPostSaleSurveyProcessor', () => {
     await processor.process(createJob());
 
     expect(mail.send).not.toHaveBeenCalled();
+  });
+
+  it('teklifsiz (manuel) siparis icin siparis numarasini kullanir', async () => {
+    const prisma = createPrisma();
+    prisma.postSaleCase.findUnique = vi
+      .fn()
+      .mockResolvedValue(createCase({ quote: null }));
+    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const processor = new SendPostSaleSurveyProcessor(
+      prisma as never,
+      mail as never,
+      fakePostSaleCasesCache,
+    );
+    await processor.process(createJob());
+
+    expect(mail.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('SAT-2026-10-19-001'),
+      }),
+    );
   });
 
   it('resend: mevcut anket kaydinin sentAt degerini gunceller', async () => {

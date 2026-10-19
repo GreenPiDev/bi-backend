@@ -6,11 +6,13 @@ import { PostSaleCasesCacheService } from '../modules/post-sale-cases/post-sale-
 import { POST_SALE_FOLLOWUP_QUEUE } from './post-sale-followup-queue.constants';
 
 /**
- * S2 (bkz. docs/VARSAYIMLAR.md V28): reminderAt (case olusturulurken tenant'in
- * postSaleFollowUpDays ayariyla onceden hesaplandi) gecmis ve henuz hatirlatilmamis
- * PostSaleCase kayitlarini tarar, ilgili teklifi olusturan satis temsilcisine
- * (Quote.createdById) hatirlatma e-postasi gonderir. reminderSentAt idempotency
- * guard'i - send-interaction-reminders ile ayni desen.
+ * S2 (bkz. docs/VARSAYIMLAR.md V28, revize V68): reminderAt (case olusturulurken
+ * tenant'in postSaleFollowUpDays ayariyla onceden hesaplandi) gecmis ve henuz
+ * hatirlatilmamis PostSaleCase kayitlarini tarar, ilgili satis siparisini olusturan
+ * satis temsilcisine (SalesOrder.createdById) hatirlatma e-postasi gonderir.
+ * quoteId artik nullable (teklifsiz manuel SalesOrder'lar) - teklif numarasi varsa
+ * e-postada ek bilgi olarak gosterilir, yoksa sadece siparis numarasi kullanilir.
+ * reminderSentAt idempotency guard'i - send-interaction-reminders ile ayni desen.
  */
 @Processor(POST_SALE_FOLLOWUP_QUEUE)
 export class CheckPostSaleFollowupProcessor extends WorkerHost {
@@ -33,7 +35,7 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
       try {
         await this.notify(
           postSaleCase.id,
-          postSaleCase.quoteId,
+          postSaleCase.salesOrderId,
           postSaleCase.tenantId,
         );
       } catch (err) {
@@ -46,26 +48,31 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
 
   private async notify(
     postSaleCaseId: string,
-    quoteId: string,
+    salesOrderId: string,
     tenantId: string,
   ): Promise<void> {
-    const quote = await this.prisma.quote.findUnique({
-      where: { id: quoteId },
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { id: salesOrderId },
+      include: { quote: true },
     });
-    if (!quote) {
+    if (!salesOrder) {
       return;
     }
     const salesRep = await this.prisma.user.findUnique({
-      where: { id: quote.createdById },
+      where: { id: salesOrder.createdById },
     });
     if (!salesRep || !salesRep.isActive) {
       return;
     }
 
+    const referenceLabel = salesOrder.quote
+      ? `${salesOrder.orderNumber} (teklif ${salesOrder.quote.quoteNumber})`
+      : salesOrder.orderNumber;
+
     await this.mail.send({
       to: [salesRep.email],
-      subject: `PiLens - Satis Sonrasi Kontrol: ${quote.quoteNumber}`,
-      text: `${quote.quoteNumber} numarali teklif onaylandi. Musteri memnun mu, geri bildirim var mi kontrol ediniz.`,
+      subject: `PiLens - Satis Sonrasi Kontrol: ${salesOrder.orderNumber}`,
+      text: `${referenceLabel} numarali satis siparisi olustu. Musteri memnun mu, geri bildirim var mi kontrol ediniz.`,
     });
 
     await this.prisma.postSaleCase.update({

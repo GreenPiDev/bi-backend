@@ -17,12 +17,17 @@ export const UpdateSalesOrderSchema = z.object({
 export type UpdateSalesOrderDto = z.infer<typeof UpdateSalesOrderSchema>;
 
 /** Teklifsiz (manuel) siparis kalemi - bkz. SalesOrderItem model doc comment'i.
- * currency client'tan alinmaz, Product.currency'den kopyalanir (QuoteItem ile ayni
- * gerekce). */
+ * currency/discountPct/vatPct/brand QuoteItem ile ayni "bos birakilirsa urunden
+ * kopyalanir, verilirse ezilir" deseniyle opsiyonel (bkz. SalesOrdersService.
+ * resolveItems). */
 const CreateSalesOrderItemSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().positive(),
   unitPrice: z.number().nonnegative(),
+  currency: z.string().optional(),
+  discountPct: z.number().min(0).max(100).optional(),
+  vatPct: z.number().min(0).max(100).optional(),
+  brand: z.string().max(120).optional(),
 });
 export type CreateSalesOrderItemDto = z.infer<
   typeof CreateSalesOrderItemSchema

@@ -30,7 +30,7 @@ export class SendPostSaleSurveyProcessor extends WorkerHost {
   async process(job: Job<SendPostSaleSurveyJobPayload>): Promise<void> {
     const postSaleCase = await this.prisma.postSaleCase.findUnique({
       where: { id: job.data.postSaleCaseId },
-      include: { quote: true, contact: true },
+      include: { salesOrder: true, quote: true, contact: true },
     });
     if (!postSaleCase || !postSaleCase.contact?.email) {
       this.logger.warn(
@@ -39,10 +39,13 @@ export class SendPostSaleSurveyProcessor extends WorkerHost {
       return;
     }
 
+    const referenceNumber =
+      postSaleCase.quote?.quoteNumber ?? postSaleCase.salesOrder.orderNumber;
+
     await this.mail.send({
       to: [postSaleCase.contact.email],
-      subject: `PiLens - Degerlendirme Anketi: ${postSaleCase.quote.quoteNumber}`,
-      text: `Merhaba ${postSaleCase.contact.firstName} ${postSaleCase.contact.lastName}, ${postSaleCase.quote.quoteNumber} numarali teklifle ilgili hizmetimizden memnun kaldiniz mi? Geri bildiriminizi bizimle paylasmanizi rica ederiz.`,
+      subject: `PiLens - Degerlendirme Anketi: ${referenceNumber}`,
+      text: `Merhaba ${postSaleCase.contact.firstName} ${postSaleCase.contact.lastName}, ${referenceNumber} numarali siparisle ilgili hizmetimizden memnun kaldiniz mi? Geri bildiriminizi bizimle paylasmanizi rica ederiz.`,
     });
 
     const sentAt = new Date();

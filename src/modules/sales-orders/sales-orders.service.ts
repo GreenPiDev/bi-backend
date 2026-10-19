@@ -1,3 +1,4 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
@@ -10,6 +11,7 @@ import type {
   SalesOrder,
   SalesOrderItem,
 } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
 import {
   findIdsBySql,
@@ -23,6 +25,15 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
+import {
+  POST_SALE_SURVEY_QUEUE,
+  SEND_POST_SALE_SURVEY_JOB,
+} from '../../jobs/post-sale-survey-queue.constants';
+import { PostSaleCasesCacheService } from '../post-sale-cases/post-sale-cases-cache.service';
+import {
+  DEFAULT_POST_SALE_FOLLOW_UP_DAYS,
+  POST_SALE_FOLLOW_UP_DAYS_KEY,
+} from '../tenant-settings/tenant-settings.constants';
 import { SalesOrdersCacheService } from './sales-orders-cache.service';
 import type {
   CreateSalesOrderDto,
@@ -76,6 +87,9 @@ export class SalesOrdersService {
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
     private readonly cache: SalesOrdersCacheService,
+    @InjectQueue(POST_SALE_SURVEY_QUEUE)
+    private readonly surveyQueue: Queue,
+    private readonly postSaleCasesCache: PostSaleCasesCacheService,
   ) {}
 
   async list(
@@ -228,6 +242,12 @@ export class SalesOrdersService {
       meta: { quoteId: quote.id, orderNumber: salesOrder.orderNumber },
     });
     await this.cache.invalidate();
+    await this.ensurePostSaleCase({
+      salesOrderId: salesOrder.id,
+      quoteId: quote.id,
+      accountId: quote.accountId,
+      contactId: quote.contactId,
+    });
     return this.getById(salesOrder.id);
   }
 
@@ -252,7 +272,7 @@ export class SalesOrdersService {
     const productIds = [...new Set(items.map((item) => item.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, currency: true },
+      select: { id: true, currency: true, brand: true },
     });
     if (products.length !== productIds.length) {
       throw new AppException(
@@ -261,21 +281,25 @@ export class SalesOrdersService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const currencyByProductId = new Map(
-      products.map((p) => [p.id, p.currency]),
-    );
+    const productById = new Map(products.map((p) => [p.id, p]));
 
     const salesOrder = await this.createWithGeneratedNumber({
       quoteId: null,
       accountId,
       contactId: dto.contactId ?? null,
       createdById,
-      items: items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        currency: currencyByProductId.get(item.productId) as string,
-      })),
+      items: items.map((item) => {
+        const product = productById.get(item.productId)!;
+        return {
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          currency: item.currency ?? product.currency,
+          discountPct: item.discountPct ?? 0,
+          vatPct: item.vatPct ?? 0,
+          brand: item.brand !== undefined ? item.brand || null : product.brand,
+        };
+      }),
     });
     await this.audit.log({
       action: 'CREATE',
@@ -284,7 +308,55 @@ export class SalesOrdersService {
       meta: { accountId, orderNumber: salesOrder.orderNumber },
     });
     await this.cache.invalidate();
+    await this.ensurePostSaleCase({
+      salesOrderId: salesOrder.id,
+      quoteId: null,
+      accountId,
+      contactId: dto.contactId ?? null,
+    });
     return this.getById(salesOrder.id);
+  }
+
+  /**
+   * Ad-hoc (bkz. CLAUDE.md, kullanici istegi, docs/VARSAYIMLAR.md V68): PostSaleCase'in
+   * TEK tetikleyicisi artik "bir SalesOrder olustu" - teklifli (quoteId dolu) veya
+   * teklifsiz (manuel, quoteId null) farketmez. salesOrder.id yeni olusturuldugundan
+   * (bu metod SADECE basariyla olusturulan bir SalesOrder'in hemen ardindan cagrilir)
+   * idempotency/findFirst gerekmez - QuotesService.ensurePostSaleCase'in aksine (orada
+   * ayni quoteId icin birden fazla APPROVED gecis denemesi olabiliyor).
+   */
+  private async ensurePostSaleCase(params: {
+    salesOrderId: string;
+    quoteId: string | null;
+    accountId: string;
+    contactId: string | null;
+  }): Promise<void> {
+    const setting = await this.prisma.tenantSetting.findFirst({
+      where: { key: POST_SALE_FOLLOW_UP_DAYS_KEY },
+    });
+    const followUpDays =
+      typeof setting?.value === 'number'
+        ? setting.value
+        : DEFAULT_POST_SALE_FOLLOW_UP_DAYS;
+    const reminderAt = new Date(
+      Date.now() + followUpDays * 24 * 60 * 60 * 1000,
+    );
+
+    const postSaleCase = await this.prisma.postSaleCase.create({
+      data: {
+        salesOrderId: params.salesOrderId,
+        quoteId: params.quoteId,
+        accountId: params.accountId,
+        contactId: params.contactId,
+        reminderAt,
+      } as never,
+    });
+    await this.postSaleCasesCache.invalidate();
+    if (postSaleCase.contactId) {
+      await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
+        postSaleCaseId: postSaleCase.id,
+      });
+    }
   }
 
   /** manuel yol ayri bir transaction'da calistigindan (ensureSalesOrder'daki gibi
@@ -301,6 +373,9 @@ export class SalesOrdersService {
       quantity: number;
       unitPrice: number;
       currency: string;
+      discountPct: number;
+      vatPct: number;
+      brand: string | null;
     }[];
   }): Promise<SalesOrder> {
     for (
