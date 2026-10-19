@@ -1460,6 +1460,13 @@ model QuoteItem {
    * kismi/parcali giris sonraki bir adimda eklenecek.
    */
   deliveredQuantity Decimal @default(0) @db.Decimal(14, 3)
+  /**
+   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalem siparis icinde
+   * kalmaya devam eder ama "musteriye gonderilmeyecek" olarak isaretlenir -
+   * deliveredQuantity'den BAGIMSIZ (iptal, teslimat miktarini degistirmez).
+   * Geri alinabilir (bkz. SalesOrdersService.setItemCancelled doc comment'i).
+   */
+  isCancelled     Boolean  @default(false)
   createdAt       DateTime @default(now())
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
@@ -1709,6 +1716,9 @@ model SalesOrderItem {
   /** Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md) - QuoteItem.deliveredQuantity
    * ile ayni amac/semantik, teklifsiz (manuel) siparisler icin. */
   deliveredQuantity Decimal @default(0) @db.Decimal(14, 3)
+  /** Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md) - QuoteItem.isCancelled
+   * ile ayni amac/semantik, teklifsiz (manuel) siparisler icin. */
+  isCancelled  Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)

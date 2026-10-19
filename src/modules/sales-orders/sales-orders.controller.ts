@@ -18,10 +18,12 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateSalesOrderSchema,
   SalesOrderQuerySchema,
+  SetSalesOrderItemCancelledSchema,
   SetSalesOrderItemDeliveredQuantitySchema,
   UpdateSalesOrderSchema,
   type CreateSalesOrderDto,
   type SalesOrderQueryDto,
+  type SetSalesOrderItemCancelledDto,
   type SetSalesOrderItemDeliveredQuantityDto,
   type UpdateSalesOrderDto,
 } from './dto/sales-order.dto';
@@ -91,5 +93,16 @@ export class SalesOrdersController {
       itemId,
       dto.deliveredQuantity,
     );
+  }
+
+  @Patch(':id/items/:itemId/cancelled')
+  @RequiresPermission('sales-orders', 'UPDATE')
+  setItemCancelled(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(SetSalesOrderItemCancelledSchema))
+    dto: SetSalesOrderItemCancelledDto,
+  ): Promise<SalesOrderWithQuote> {
+    return this.salesOrders.setItemCancelled(id, itemId, dto.isCancelled);
   }
 }

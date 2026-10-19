@@ -466,4 +466,80 @@ describe('SalesOrdersService', () => {
       } satisfies Partial<AppException>);
     });
   });
+
+  describe('setItemCancelled', () => {
+    it('teklifli siparislerde quoteItem.isCancelled gunceller', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quote: {
+          id: 'quote-1',
+          quoteNumber: 'TEK-2026-10-13-001',
+          items: [{ id: 'qi-1', quantity: '5', isCancelled: false }],
+        },
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemCancelled('so-1', 'qi-1', true);
+
+      expect(prisma.quoteItem.update).toHaveBeenCalledWith({
+        where: { id: 'qi-1' },
+        data: { isCancelled: true },
+      });
+      expect(prisma.salesOrderItem.update).not.toHaveBeenCalled();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'UPDATE', entity: 'SalesOrder' }),
+      );
+      expect(cacheInvalidate).toHaveBeenCalled();
+    });
+
+    it('teklifsiz siparislerde salesOrderItem.isCancelled gunceller (geri alma dahil)', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '3', isCancelled: true }],
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemCancelled('so-1', 'soi-1', false);
+
+      expect(prisma.salesOrderItem.update).toHaveBeenCalledWith({
+        where: { id: 'soi-1' },
+        data: { isCancelled: false },
+      });
+      expect(prisma.quoteItem.update).not.toHaveBeenCalled();
+    });
+
+    it('kalem bulunamazsa NOT_FOUND firlatir', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quote: { id: 'quote-1', items: [] },
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await expect(
+        service.setItemCancelled('so-1', 'yok', true),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      } satisfies Partial<AppException>);
+    });
+  });
 });

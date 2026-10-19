@@ -81,6 +81,10 @@ export type SalesOrderWithQuote = SalesOrder & {
   items: SalesOrderItemWithProduct[];
 };
 
+type QuoteItemWithProduct = NonNullable<
+  SalesOrderWithQuote['quote']
+>['items'][number];
+
 @Injectable()
 export class SalesOrdersService {
   constructor(
@@ -438,6 +442,40 @@ export class SalesOrdersService {
   }
 
   /**
+   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): itemId'nin teklifli
+   * (QuoteItem) mi yoksa teklifsiz (SalesOrderItem) mi oldugunu salesOrder.
+   * quoteId'ye gore cozer - setItemDeliveredQuantity/setItemCancelled'in
+   * paylastigi tek kalem-bulma mantigi.
+   */
+  private resolveItem(
+    salesOrder: SalesOrderWithQuote,
+    itemId: string,
+  ):
+    | { kind: 'quote'; item: QuoteItemWithProduct }
+    | { kind: 'salesOrder'; item: SalesOrderItemWithProduct } {
+    if (salesOrder.quoteId) {
+      const item = salesOrder.quote?.items.find((i) => i.id === itemId);
+      if (!item) {
+        throw new AppException(
+          'NOT_FOUND',
+          'Siparis kalemi bulunamadi.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      return { kind: 'quote', item };
+    }
+    const item = salesOrder.items.find((i) => i.id === itemId);
+    if (!item) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Siparis kalemi bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return { kind: 'salesOrder', item };
+  }
+
+  /**
    * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalemin
    * deliveredQuantity'sini dogrudan verilen degere esitler - hem kismi sevkiyat
    * ("10 adetten 5'i gonderildi") hem kismi geri alma ("gonderilen 5'in 1'i geri
@@ -453,30 +491,20 @@ export class SalesOrdersService {
     deliveredQuantity: number,
   ): Promise<SalesOrderWithQuote> {
     const salesOrder = await this.getById(id);
+    const resolved = this.resolveItem(salesOrder, itemId);
 
-    const quoteItem = salesOrder.quoteId
-      ? salesOrder.quote?.items.find((i) => i.id === itemId)
-      : undefined;
-    const salesOrderItem = !salesOrder.quoteId
-      ? salesOrder.items.find((i) => i.id === itemId)
-      : undefined;
-    const item = quoteItem ?? salesOrderItem;
-    if (!item) {
-      throw new AppException(
-        'NOT_FOUND',
-        'Siparis kalemi bulunamadi.',
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    if (deliveredQuantity < 0 || deliveredQuantity > Number(item.quantity)) {
+    if (
+      deliveredQuantity < 0 ||
+      deliveredQuantity > Number(resolved.item.quantity)
+    ) {
       throw new AppException(
         'INVALID_DELIVERED_QUANTITY',
-        `Teslim edilen miktar 0 ile ${item.quantity} arasinda olmalidir.`,
+        `Teslim edilen miktar 0 ile ${resolved.item.quantity} arasinda olmalidir.`,
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    if (quoteItem) {
+    if (resolved.kind === 'quote') {
       await this.prisma.quoteItem.update({
         where: { id: itemId },
         data: { deliveredQuantity },
@@ -493,6 +521,42 @@ export class SalesOrdersService {
       entity: 'SalesOrder',
       entityId: id,
       meta: { itemId, deliveredQuantity },
+    });
+    await this.cache.invalidate();
+    return this.getById(id);
+  }
+
+  /**
+   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalemi "musteriye
+   * gonderilmeyecek" olarak isaretler/isareti geri alir. Kalem siparis icinde
+   * kalmaya devam eder, deliveredQuantity'den BAGIMSIZDIR (iptal, teslimat
+   * miktarini degistirmez) - geri alinabilir (isCancelled: false ile).
+   */
+  async setItemCancelled(
+    id: string,
+    itemId: string,
+    isCancelled: boolean,
+  ): Promise<SalesOrderWithQuote> {
+    const salesOrder = await this.getById(id);
+    const resolved = this.resolveItem(salesOrder, itemId);
+
+    if (resolved.kind === 'quote') {
+      await this.prisma.quoteItem.update({
+        where: { id: itemId },
+        data: { isCancelled },
+      });
+    } else {
+      await this.prisma.salesOrderItem.update({
+        where: { id: itemId },
+        data: { isCancelled },
+      });
+    }
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'SalesOrder',
+      entityId: id,
+      meta: { itemId, isCancelled },
     });
     await this.cache.invalidate();
     return this.getById(id);

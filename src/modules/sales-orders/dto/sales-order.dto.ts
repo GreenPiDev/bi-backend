@@ -70,6 +70,16 @@ export type SetSalesOrderItemDeliveredQuantityDto = z.infer<
   typeof SetSalesOrderItemDeliveredQuantitySchema
 >;
 
+/** Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalemi "musteriye
+ * gonderilmeyecek" olarak isaretleme/geri alma (bkz. SalesOrdersService.
+ * setItemCancelled doc comment'i). */
+export const SetSalesOrderItemCancelledSchema = z.object({
+  isCancelled: z.boolean(),
+});
+export type SetSalesOrderItemCancelledDto = z.infer<
+  typeof SetSalesOrderItemCancelledSchema
+>;
+
 export const SalesOrderQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: SalesOrderStatusSchema.optional(),
