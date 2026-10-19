@@ -63,6 +63,12 @@ function createPrisma(salesOrderRow: unknown = createSalesOrderRow()) {
     postSaleCase: {
       create: vi.fn().mockResolvedValue({ id: 'psc-1', contactId: null }),
     },
+    quoteItem: {
+      update: vi.fn().mockResolvedValue({}),
+    },
+    salesOrderItem: {
+      update: vi.fn().mockResolvedValue({}),
+    },
   };
 }
 
@@ -336,6 +342,82 @@ describe('SalesOrdersService', () => {
         }),
       ).rejects.toMatchObject({
         code: 'PRODUCT_NOT_FOUND',
+      } satisfies Partial<AppException>);
+    });
+  });
+
+  describe('markItemFullyDelivered', () => {
+    it('teklifli siparislerde quoteItem.deliveredQuantity=quantity olarak gunceller', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quote: {
+          id: 'quote-1',
+          quoteNumber: 'TEK-2026-10-13-001',
+          items: [{ id: 'qi-1', quantity: '5', deliveredQuantity: '0' }],
+        },
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.markItemFullyDelivered('so-1', 'qi-1');
+
+      expect(prisma.quoteItem.update).toHaveBeenCalledWith({
+        where: { id: 'qi-1' },
+        data: { deliveredQuantity: '5' },
+      });
+      expect(prisma.salesOrderItem.update).not.toHaveBeenCalled();
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'UPDATE', entity: 'SalesOrder' }),
+      );
+      expect(cacheInvalidate).toHaveBeenCalled();
+    });
+
+    it('teklifsiz siparislerde salesOrderItem.deliveredQuantity=quantity olarak gunceller', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '3', deliveredQuantity: '0' }],
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.markItemFullyDelivered('so-1', 'soi-1');
+
+      expect(prisma.salesOrderItem.update).toHaveBeenCalledWith({
+        where: { id: 'soi-1' },
+        data: { deliveredQuantity: '3' },
+      });
+      expect(prisma.quoteItem.update).not.toHaveBeenCalled();
+    });
+
+    it('kalem bulunamazsa NOT_FOUND firlatir', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quote: { id: 'quote-1', items: [] },
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await expect(
+        service.markItemFullyDelivered('so-1', 'yok'),
+      ).rejects.toMatchObject({
+        code: 'NOT_FOUND',
       } satisfies Partial<AppException>);
     });
   });

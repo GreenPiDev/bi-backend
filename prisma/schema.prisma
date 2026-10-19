@@ -1451,6 +1451,15 @@ model QuoteItem {
    * Product.brand'i KALICI olarak degistirmez, sadece bu satirin gorunumunu.
    */
   brand           String?
+  /**
+   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kismi sevkiyat takibi.
+   * quantity ile ayni birimde, "bu kalemden musteriye kac adet fiilen teslim edildi"
+   * - SalesOrder bir teklife 1:1 bagli oldugundan (quoteId @unique) delivered-quantity
+   * teklifli siparislerde dogrudan burada tutulur, ayri bir mirror satir acilmaz.
+   * Su an icin sadece "Tamami Gonderildi" (quantity'e esitleme) destekleniyor -
+   * kismi/parcali giris sonraki bir adimda eklenecek.
+   */
+  deliveredQuantity Decimal @default(0) @db.Decimal(14, 3)
   createdAt       DateTime @default(now())
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
@@ -1697,6 +1706,9 @@ model SalesOrderItem {
    * (QuoteItem.brand ile ayni gerekce).
    */
   brand        String?
+  /** Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md) - QuoteItem.deliveredQuantity
+   * ile ayni amac/semantik, teklifsiz (manuel) siparisler icin. */
+  deliveredQuantity Decimal @default(0) @db.Decimal(14, 3)
   createdAt    DateTime @default(now())
 
   salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)

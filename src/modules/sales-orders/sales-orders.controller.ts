@@ -75,4 +75,13 @@ export class SalesOrdersController {
   ): Promise<SalesOrderWithQuote> {
     return this.salesOrders.updateStatus(id, dto);
   }
+
+  @Post(':id/items/:itemId/deliver')
+  @RequiresPermission('sales-orders', 'UPDATE')
+  markItemFullyDelivered(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ): Promise<SalesOrderWithQuote> {
+    return this.salesOrders.markItemFullyDelivered(id, itemId);
+  }
 }

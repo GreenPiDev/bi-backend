@@ -436,4 +436,56 @@ export class SalesOrdersService {
     await this.cache.invalidate();
     return this.getById(id);
   }
+
+  /**
+   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalemin tamamini
+   * "teslim edildi" olarak isaretler (deliveredQuantity = quantity). itemId,
+   * teklifli siparislerde bir QuoteItem.id, teklifsiz siparislerde bir
+   * SalesOrderItem.id'dir - hangisi oldugu salesOrder.quoteId'ye gore belirlenir
+   * (bkz. SalesOrder model doc comment'i, DisplayItem frontend deseni). Kismi
+   * miktar girisi bu adimda YOK, sonraki bir istekte eklenecek.
+   */
+  async markItemFullyDelivered(
+    id: string,
+    itemId: string,
+  ): Promise<SalesOrderWithQuote> {
+    const salesOrder = await this.getById(id);
+
+    if (salesOrder.quoteId) {
+      const item = salesOrder.quote?.items.find((i) => i.id === itemId);
+      if (!item) {
+        throw new AppException(
+          'NOT_FOUND',
+          'Siparis kalemi bulunamadi.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      await this.prisma.quoteItem.update({
+        where: { id: itemId },
+        data: { deliveredQuantity: item.quantity },
+      });
+    } else {
+      const item = salesOrder.items.find((i) => i.id === itemId);
+      if (!item) {
+        throw new AppException(
+          'NOT_FOUND',
+          'Siparis kalemi bulunamadi.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      await this.prisma.salesOrderItem.update({
+        where: { id: itemId },
+        data: { deliveredQuantity: item.quantity },
+      });
+    }
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'SalesOrder',
+      entityId: id,
+      meta: { itemId, deliveredFully: true },
+    });
+    await this.cache.invalidate();
+    return this.getById(id);
+  }
 }
