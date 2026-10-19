@@ -60,6 +60,16 @@ export const CreateSalesOrderSchema = z
   );
 export type CreateSalesOrderDto = z.infer<typeof CreateSalesOrderSchema>;
 
+/** Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kismi sevkiyat/geri
+ * alma - tek bir "deliveredQuantity'yi su degere esitle" uzerinden (bkz.
+ * SalesOrdersService.setItemDeliveredQuantity doc comment'i). */
+export const SetSalesOrderItemDeliveredQuantitySchema = z.object({
+  deliveredQuantity: z.number().min(0),
+});
+export type SetSalesOrderItemDeliveredQuantityDto = z.infer<
+  typeof SetSalesOrderItemDeliveredQuantitySchema
+>;
+
 export const SalesOrderQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: SalesOrderStatusSchema.optional(),

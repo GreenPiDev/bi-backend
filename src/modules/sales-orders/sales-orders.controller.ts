@@ -18,9 +18,11 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateSalesOrderSchema,
   SalesOrderQuerySchema,
+  SetSalesOrderItemDeliveredQuantitySchema,
   UpdateSalesOrderSchema,
   type CreateSalesOrderDto,
   type SalesOrderQueryDto,
+  type SetSalesOrderItemDeliveredQuantityDto,
   type UpdateSalesOrderDto,
 } from './dto/sales-order.dto';
 import {
@@ -76,12 +78,18 @@ export class SalesOrdersController {
     return this.salesOrders.updateStatus(id, dto);
   }
 
-  @Post(':id/items/:itemId/deliver')
+  @Patch(':id/items/:itemId/delivered-quantity')
   @RequiresPermission('sales-orders', 'UPDATE')
-  markItemFullyDelivered(
+  setItemDeliveredQuantity(
     @Param('id') id: string,
     @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(SetSalesOrderItemDeliveredQuantitySchema))
+    dto: SetSalesOrderItemDeliveredQuantityDto,
   ): Promise<SalesOrderWithQuote> {
-    return this.salesOrders.markItemFullyDelivered(id, itemId);
+    return this.salesOrders.setItemDeliveredQuantity(
+      id,
+      itemId,
+      dto.deliveredQuantity,
+    );
   }
 }

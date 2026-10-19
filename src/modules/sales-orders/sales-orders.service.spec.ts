@@ -346,13 +346,13 @@ describe('SalesOrdersService', () => {
     });
   });
 
-  describe('markItemFullyDelivered', () => {
-    it('teklifli siparislerde quoteItem.deliveredQuantity=quantity olarak gunceller', async () => {
+  describe('setItemDeliveredQuantity', () => {
+    it('teklifli siparislerde quoteItem.deliveredQuantity gunceller (kismi sevkiyat)', async () => {
       const salesOrderRow = createSalesOrderRow({
         quote: {
           id: 'quote-1',
           quoteNumber: 'TEK-2026-10-13-001',
-          items: [{ id: 'qi-1', quantity: '5', deliveredQuantity: '0' }],
+          items: [{ id: 'qi-1', quantity: '10', deliveredQuantity: '0' }],
         },
       });
       const prisma = createPrisma(salesOrderRow);
@@ -364,11 +364,11 @@ describe('SalesOrdersService', () => {
         fakePostSaleCasesCache,
       );
 
-      await service.markItemFullyDelivered('so-1', 'qi-1');
+      await service.setItemDeliveredQuantity('so-1', 'qi-1', 5);
 
       expect(prisma.quoteItem.update).toHaveBeenCalledWith({
         where: { id: 'qi-1' },
-        data: { deliveredQuantity: '5' },
+        data: { deliveredQuantity: 5 },
       });
       expect(prisma.salesOrderItem.update).not.toHaveBeenCalled();
       expect(auditLog).toHaveBeenCalledWith(
@@ -377,11 +377,11 @@ describe('SalesOrdersService', () => {
       expect(cacheInvalidate).toHaveBeenCalled();
     });
 
-    it('teklifsiz siparislerde salesOrderItem.deliveredQuantity=quantity olarak gunceller', async () => {
+    it('teklifsiz siparislerde salesOrderItem.deliveredQuantity gunceller (kismi geri alma)', async () => {
       const salesOrderRow = createSalesOrderRow({
         quoteId: null,
         quote: null,
-        items: [{ id: 'soi-1', quantity: '3', deliveredQuantity: '0' }],
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '5' }],
       });
       const prisma = createPrisma(salesOrderRow);
       const service = new SalesOrdersService(
@@ -392,13 +392,58 @@ describe('SalesOrdersService', () => {
         fakePostSaleCasesCache,
       );
 
-      await service.markItemFullyDelivered('so-1', 'soi-1');
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 4);
 
       expect(prisma.salesOrderItem.update).toHaveBeenCalledWith({
         where: { id: 'soi-1' },
-        data: { deliveredQuantity: '3' },
+        data: { deliveredQuantity: 4 },
       });
       expect(prisma.quoteItem.update).not.toHaveBeenCalled();
+    });
+
+    it('deliveredQuantity, quantity degerini asarsa INVALID_DELIVERED_QUANTITY firlatir', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '0' }],
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await expect(
+        service.setItemDeliveredQuantity('so-1', 'soi-1', 6),
+      ).rejects.toMatchObject({
+        code: 'INVALID_DELIVERED_QUANTITY',
+      } satisfies Partial<AppException>);
+      expect(prisma.salesOrderItem.update).not.toHaveBeenCalled();
+    });
+
+    it('deliveredQuantity negatifse INVALID_DELIVERED_QUANTITY firlatir', async () => {
+      const salesOrderRow = createSalesOrderRow({
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '0' }],
+      });
+      const prisma = createPrisma(salesOrderRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await expect(
+        service.setItemDeliveredQuantity('so-1', 'soi-1', -1),
+      ).rejects.toMatchObject({
+        code: 'INVALID_DELIVERED_QUANTITY',
+      } satisfies Partial<AppException>);
     });
 
     it('kalem bulunamazsa NOT_FOUND firlatir', async () => {
@@ -415,7 +460,7 @@ describe('SalesOrdersService', () => {
       );
 
       await expect(
-        service.markItemFullyDelivered('so-1', 'yok'),
+        service.setItemDeliveredQuantity('so-1', 'yok', 1),
       ).rejects.toMatchObject({
         code: 'NOT_FOUND',
       } satisfies Partial<AppException>);

@@ -438,44 +438,53 @@ export class SalesOrdersService {
   }
 
   /**
-   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalemin tamamini
-   * "teslim edildi" olarak isaretler (deliveredQuantity = quantity). itemId,
-   * teklifli siparislerde bir QuoteItem.id, teklifsiz siparislerde bir
+   * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kalemin
+   * deliveredQuantity'sini dogrudan verilen degere esitler - hem kismi sevkiyat
+   * ("10 adetten 5'i gonderildi") hem kismi geri alma ("gonderilen 5'in 1'i geri
+   * alindi, 4 kaldi") AYNI bu tek uc uzerinden yapilir, ayri "tam gonder"/"geri
+   * al" aksiyonlari YOK (frontend tek bir miktar-duzenleme modali sunuyor).
+   * itemId, teklifli siparislerde bir QuoteItem.id, teklifsiz siparislerde bir
    * SalesOrderItem.id'dir - hangisi oldugu salesOrder.quoteId'ye gore belirlenir
-   * (bkz. SalesOrder model doc comment'i, DisplayItem frontend deseni). Kismi
-   * miktar girisi bu adimda YOK, sonraki bir istekte eklenecek.
+   * (bkz. SalesOrder model doc comment'i, DisplayItem frontend deseni).
    */
-  async markItemFullyDelivered(
+  async setItemDeliveredQuantity(
     id: string,
     itemId: string,
+    deliveredQuantity: number,
   ): Promise<SalesOrderWithQuote> {
     const salesOrder = await this.getById(id);
 
-    if (salesOrder.quoteId) {
-      const item = salesOrder.quote?.items.find((i) => i.id === itemId);
-      if (!item) {
-        throw new AppException(
-          'NOT_FOUND',
-          'Siparis kalemi bulunamadi.',
-          HttpStatus.NOT_FOUND,
-        );
-      }
+    const quoteItem = salesOrder.quoteId
+      ? salesOrder.quote?.items.find((i) => i.id === itemId)
+      : undefined;
+    const salesOrderItem = !salesOrder.quoteId
+      ? salesOrder.items.find((i) => i.id === itemId)
+      : undefined;
+    const item = quoteItem ?? salesOrderItem;
+    if (!item) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Siparis kalemi bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (deliveredQuantity < 0 || deliveredQuantity > Number(item.quantity)) {
+      throw new AppException(
+        'INVALID_DELIVERED_QUANTITY',
+        `Teslim edilen miktar 0 ile ${item.quantity} arasinda olmalidir.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (quoteItem) {
       await this.prisma.quoteItem.update({
         where: { id: itemId },
-        data: { deliveredQuantity: item.quantity },
+        data: { deliveredQuantity },
       });
     } else {
-      const item = salesOrder.items.find((i) => i.id === itemId);
-      if (!item) {
-        throw new AppException(
-          'NOT_FOUND',
-          'Siparis kalemi bulunamadi.',
-          HttpStatus.NOT_FOUND,
-        );
-      }
       await this.prisma.salesOrderItem.update({
         where: { id: itemId },
-        data: { deliveredQuantity: item.quantity },
+        data: { deliveredQuantity },
       });
     }
 
@@ -483,7 +492,7 @@ export class SalesOrdersService {
       action: 'UPDATE',
       entity: 'SalesOrder',
       entityId: id,
-      meta: { itemId, deliveredFully: true },
+      meta: { itemId, deliveredQuantity },
     });
     await this.cache.invalidate();
     return this.getById(id);
