@@ -83,10 +83,30 @@ function createPrisma({
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
       findFirst: vi.fn().mockResolvedValue(purchaseOrderRow),
+      update: vi.fn().mockResolvedValue(purchaseOrderRow),
       delete: vi.fn().mockResolvedValue(purchaseOrderRow),
+    },
+    purchaseOrderItem: {
+      update: vi.fn().mockResolvedValue({}),
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx)),
     __tx: tx,
+  };
+}
+
+function createPurchaseOrderItemRow(
+  overrides: Partial<Record<string, unknown>> = {},
+) {
+  return {
+    id: 'poi-1',
+    purchaseOrderId: 'po-1',
+    productId: 'product-1',
+    description: 'Sunucu',
+    quantity: '5.000',
+    receivedQuantity: '0.000',
+    isCancelled: false,
+    source: 'EXTRA',
+    ...overrides,
   };
 }
 
@@ -417,6 +437,323 @@ describe('PurchaseOrdersService', () => {
       ],
     });
     expect(auditLog).toHaveBeenCalled();
+  });
+
+  it('setItemReceivedQuantity: kalem bulunamazsa NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma({
+      purchaseOrderRow: createPurchaseOrderRow({ items: [] }),
+    });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await expect(
+      service.setItemReceivedQuantity('po-1', 'yok', 1),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('setItemReceivedQuantity: miktar araligin disindaysa INVALID_RECEIVED_QUANTITY firlatir', async () => {
+    const prisma = createPrisma({
+      purchaseOrderRow: createPurchaseOrderRow({
+        status: 'CONFIRMED',
+        items: [createPurchaseOrderItemRow({ quantity: '5.000' })],
+      }),
+    });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+    await expect(
+      service.setItemReceivedQuantity('po-1', 'poi-1', 6),
+    ).rejects.toMatchObject({ code: 'INVALID_RECEIVED_QUANTITY' });
+  });
+
+  it('otomatik durum senkronizasyonu (teslim alma bazli): iptal olmayan tum kalemler tam teslim alinirsa durum FULLY_RECEIVED olur', async () => {
+    const initial = createPurchaseOrderRow({
+      status: 'CONFIRMED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+        }),
+        createPurchaseOrderItemRow({
+          id: 'poi-2',
+          quantity: '2.000',
+          receivedQuantity: '2.000',
+        }),
+      ],
+    });
+    const updated = createPurchaseOrderRow({
+      status: 'CONFIRMED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '5.000',
+        }),
+        createPurchaseOrderItemRow({
+          id: 'poi-2',
+          quantity: '2.000',
+          receivedQuantity: '2.000',
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: initial });
+    prisma.purchaseOrder.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(updated);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemReceivedQuantity('po-1', 'poi-1', 5);
+
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: 'po-1' },
+      data: { status: 'FULLY_RECEIVED' },
+    });
+  });
+
+  it('otomatik durum senkronizasyonu: bazi kalemler teslim alinip bazilari alinmazsa durum PARTIALLY_RECEIVED olur', async () => {
+    const initial = createPurchaseOrderRow({
+      status: 'CONFIRMED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+        }),
+        createPurchaseOrderItemRow({
+          id: 'poi-2',
+          quantity: '2.000',
+          receivedQuantity: '0.000',
+        }),
+      ],
+    });
+    const updated = createPurchaseOrderRow({
+      status: 'CONFIRMED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '3.000',
+        }),
+        createPurchaseOrderItemRow({
+          id: 'poi-2',
+          quantity: '2.000',
+          receivedQuantity: '0.000',
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: initial });
+    prisma.purchaseOrder.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(updated);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemReceivedQuantity('po-1', 'poi-1', 3);
+
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: 'po-1' },
+      data: { status: 'PARTIALLY_RECEIVED' },
+    });
+  });
+
+  it('otomatik durum senkronizasyonu: FULLY_RECEIVED siparisteki bir kalem geri alinirsa durum CONFIRMED olur', async () => {
+    const initial = createPurchaseOrderRow({
+      status: 'FULLY_RECEIVED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '5.000',
+        }),
+      ],
+    });
+    const updated = createPurchaseOrderRow({
+      status: 'FULLY_RECEIVED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: initial });
+    prisma.purchaseOrder.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(updated);
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemReceivedQuantity('po-1', 'poi-1', 0);
+
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: 'po-1' },
+      data: { status: 'CONFIRMED' },
+    });
+  });
+
+  it('otomatik durum senkronizasyonu: CANCELLED siparislerde kalem degisse de durumu degistirmez', async () => {
+    const order = createPurchaseOrderRow({
+      status: 'CANCELLED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: order });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemReceivedQuantity('po-1', 'poi-1', 5);
+
+    expect(prisma.purchaseOrder.update).not.toHaveBeenCalled();
+  });
+
+  it('otomatik durum senkronizasyonu: COMPLETED siparislerde kalem degisse de durumu degistirmez', async () => {
+    const order = createPurchaseOrderRow({
+      status: 'COMPLETED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: order });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemReceivedQuantity('po-1', 'poi-1', 5);
+
+    expect(prisma.purchaseOrder.update).not.toHaveBeenCalled();
+  });
+
+  it('otomatik durum senkronizasyonu: tum kalemler iptal edilmisse durumu degistirmez', async () => {
+    const order = createPurchaseOrderRow({
+      status: 'CONFIRMED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+          isCancelled: true,
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: order });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemCancelled('po-1', 'poi-1', true);
+
+    expect(prisma.purchaseOrder.update).not.toHaveBeenCalled();
+  });
+
+  it('otomatik durum senkronizasyonu: hesaplanan durum zaten mevcut durumla ayniysa guncelleme yapmaz (idempotent)', async () => {
+    const order = createPurchaseOrderRow({
+      status: 'PARTIALLY_RECEIVED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '3.000',
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: order });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.setItemReceivedQuantity('po-1', 'poi-1', 3);
+
+    expect(prisma.purchaseOrder.update).not.toHaveBeenCalled();
+  });
+
+  it('update: durum FULLY_RECEIVED secilince iptal olmayan tum kalemleri tam teslim alinmis isaretler', async () => {
+    const order = createPurchaseOrderRow({
+      status: 'CONFIRMED',
+      items: [
+        createPurchaseOrderItemRow({
+          id: 'poi-1',
+          quantity: '5.000',
+          receivedQuantity: '0.000',
+        }),
+        createPurchaseOrderItemRow({
+          id: 'poi-2',
+          quantity: '2.000',
+          receivedQuantity: '0.000',
+          isCancelled: true,
+        }),
+      ],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: order });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.update('po-1', { status: 'FULLY_RECEIVED' } as never);
+
+    expect(prisma.purchaseOrderItem.update).toHaveBeenCalledWith({
+      where: { id: 'poi-1' },
+      data: { receivedQuantity: '5.000' },
+    });
+    expect(prisma.purchaseOrderItem.update).not.toHaveBeenCalledWith({
+      where: { id: 'poi-2' },
+      data: expect.anything(),
+    });
+  });
+
+  it('update: durum FULLY_RECEIVED disindaki bir degere gecince kalemlere dokunmaz', async () => {
+    const order = createPurchaseOrderRow({
+      status: 'DRAFT',
+      items: [createPurchaseOrderItemRow({ id: 'poi-1' })],
+    });
+    const prisma = createPrisma({ purchaseOrderRow: order });
+    const service = new PurchaseOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+    );
+
+    await service.update('po-1', { status: 'CONFIRMED' } as never);
+
+    expect(prisma.purchaseOrderItem.update).not.toHaveBeenCalled();
   });
 
   it('remove: siparisi siler ve audit log yazar', async () => {

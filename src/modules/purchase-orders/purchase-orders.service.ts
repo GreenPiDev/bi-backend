@@ -471,10 +471,172 @@ export class PurchaseOrdersService {
       }
     });
 
+    // Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): dto.items ve dto.status
+    // mevcut frontend cagri yerlerinde (duzenleme formu vs. liste/detay durum
+    // dropdown'u) birbirini DISLAR, bu yuzden ikisi ayni cagrida gelmez - bkz.
+    // SalesOrdersService.updateStatus/setItemDeliveredQuantity ile ayni ikili kural:
+    // kalemler degisince durum otomatik yeniden hesaplanir, durum elle FULLY_RECEIVED'a
+    // cekilince kalemler otomatik tam teslim alinmis isaretlenir.
+    if (dto.status === 'FULLY_RECEIVED') {
+      await this.markActiveItemsFullyReceived(id);
+    } else if (dto.items) {
+      await this.syncStatusWithReceivingState(id);
+    }
+
     await this.audit.log({
       action: 'UPDATE',
       entity: 'PurchaseOrder',
       entityId: id,
+    });
+    await this.cache.invalidate();
+    return this.getById(id);
+  }
+
+  /**
+   * Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): siparis elle "Tamamen
+   * Teslim Alındı" (FULLY_RECEIVED) durumuna cekildiginde, iptal olmayan TUM
+   * kalemlerin receivedQuantity'si kendi quantity'sine esitlenir -
+   * syncStatusWithReceivingState ile AYNI kuralin ters yonu (bkz.
+   * SalesOrdersService.markActiveItemsFullyDelivered ile ayni desen).
+   */
+  private async markActiveItemsFullyReceived(id: string): Promise<void> {
+    const purchaseOrder = await this.getById(id);
+    const activeItems = purchaseOrder.items.filter((item) => !item.isCancelled);
+    await Promise.all(
+      activeItems.map((item) =>
+        this.prisma.purchaseOrderItem.update({
+          where: { id: item.id },
+          data: { receivedQuantity: item.quantity },
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): kalem teslim alma/iptal
+   * durumu her degistiginde siparisin durumunu kalemlerin toplu durumuna gore
+   * otomatik yeniden hesaplar - iptal olmayan kalemlerin TUMU teslim alindiysa
+   * FULLY_RECEIVED ("Tamamen Teslim Alındı"), HICBIRI teslim alinmadiysa CONFIRMED
+   * ("Onaylandı"), aksi halde (karisik) PARTIALLY_RECEIVED ("Kısmen Teslim
+   * Alındı"). CANCELLED/COMPLETED siparislerde calismaz (bunlar nihai, kullanici
+   * bilincli sectigi durumlar - frontend zaten bu durumlarda kalem
+   * duzenlemelerini engelliyor, burasi ayni kurali savunma amacli tekrarliyor;
+   * bkz. SalesOrdersService.syncStatusWithDeliveryState ile ayni desen). Hicbir
+   * iptal-olmayan kalem yoksa durum degistirilmez.
+   */
+  private async syncStatusWithReceivingState(id: string): Promise<void> {
+    const purchaseOrder = await this.getById(id);
+    if (
+      purchaseOrder.status === 'CANCELLED' ||
+      purchaseOrder.status === 'COMPLETED'
+    ) {
+      return;
+    }
+
+    const activeItems = purchaseOrder.items.filter((item) => !item.isCancelled);
+    if (activeItems.length === 0) {
+      return;
+    }
+
+    const allReceived = activeItems.every(
+      (item) => Number(item.receivedQuantity) >= Number(item.quantity),
+    );
+    const noneReceived = activeItems.every(
+      (item) => Number(item.receivedQuantity) <= 0,
+    );
+    const autoStatus = allReceived
+      ? 'FULLY_RECEIVED'
+      : noneReceived
+        ? 'CONFIRMED'
+        : 'PARTIALLY_RECEIVED';
+
+    if (autoStatus === purchaseOrder.status) {
+      return;
+    }
+    await this.prisma.purchaseOrder.update({
+      where: { id },
+      data: { status: autoStatus },
+    });
+  }
+
+  /**
+   * Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): kalemin
+   * receivedQuantity'sini dogrudan verilen degere esitler - hem kismi teslim
+   * alma hem kismi geri alma AYNI bu tek uc uzerinden yapilir (bkz.
+   * SalesOrdersService.setItemDeliveredQuantity ile ayni desen).
+   */
+  async setItemReceivedQuantity(
+    id: string,
+    itemId: string,
+    receivedQuantity: number,
+  ): Promise<PurchaseOrderWithItems> {
+    const purchaseOrder = await this.getById(id);
+    const item = purchaseOrder.items.find((i) => i.id === itemId);
+    if (!item) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Siparis kalemi bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    if (receivedQuantity < 0 || receivedQuantity > Number(item.quantity)) {
+      throw new AppException(
+        'INVALID_RECEIVED_QUANTITY',
+        `Teslim alinan miktar 0 ile ${item.quantity} arasinda olmalidir.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await this.prisma.purchaseOrderItem.update({
+      where: { id: itemId },
+      data: { receivedQuantity },
+    });
+
+    await this.syncStatusWithReceivingState(id);
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'PurchaseOrder',
+      entityId: id,
+      meta: { itemId, receivedQuantity },
+    });
+    await this.cache.invalidate();
+    return this.getById(id);
+  }
+
+  /**
+   * Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): kalemi "tedarikciden
+   * beklenmeyecek" olarak isaretler/isareti geri alir - receivedQuantity'den
+   * BAGIMSIZDIR (bkz. SalesOrdersService.setItemCancelled ile ayni desen).
+   */
+  async setItemCancelled(
+    id: string,
+    itemId: string,
+    isCancelled: boolean,
+  ): Promise<PurchaseOrderWithItems> {
+    const purchaseOrder = await this.getById(id);
+    const item = purchaseOrder.items.find((i) => i.id === itemId);
+    if (!item) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Siparis kalemi bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    await this.prisma.purchaseOrderItem.update({
+      where: { id: itemId },
+      data: { isCancelled },
+    });
+
+    await this.syncStatusWithReceivingState(id);
+
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'PurchaseOrder',
+      entityId: id,
+      meta: { itemId, isCancelled },
     });
     await this.cache.invalidate();
     return this.getById(id);

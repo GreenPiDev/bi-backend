@@ -20,9 +20,13 @@ import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreatePurchaseOrderSchema,
   PurchaseOrderQuerySchema,
+  SetPurchaseOrderItemCancelledSchema,
+  SetPurchaseOrderItemReceivedQuantitySchema,
   UpdatePurchaseOrderSchema,
   type CreatePurchaseOrderDto,
   type PurchaseOrderQueryDto,
+  type SetPurchaseOrderItemCancelledDto,
+  type SetPurchaseOrderItemReceivedQuantityDto,
   type UpdatePurchaseOrderDto,
 } from './dto/purchase-order.dto';
 import {
@@ -76,6 +80,32 @@ export class PurchaseOrdersController {
     dto: UpdatePurchaseOrderDto,
   ): Promise<PurchaseOrderWithItems> {
     return this.purchaseOrders.update(id, dto);
+  }
+
+  @Patch(':id/items/:itemId/received-quantity')
+  @RequiresPermission('purchase-orders', 'UPDATE')
+  setItemReceivedQuantity(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(SetPurchaseOrderItemReceivedQuantitySchema))
+    dto: SetPurchaseOrderItemReceivedQuantityDto,
+  ): Promise<PurchaseOrderWithItems> {
+    return this.purchaseOrders.setItemReceivedQuantity(
+      id,
+      itemId,
+      dto.receivedQuantity,
+    );
+  }
+
+  @Patch(':id/items/:itemId/cancelled')
+  @RequiresPermission('purchase-orders', 'UPDATE')
+  setItemCancelled(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(SetPurchaseOrderItemCancelledSchema))
+    dto: SetPurchaseOrderItemCancelledDto,
+  ): Promise<PurchaseOrderWithItems> {
+    return this.purchaseOrders.setItemCancelled(id, itemId, dto.isCancelled);
   }
 
   @Delete(':id')

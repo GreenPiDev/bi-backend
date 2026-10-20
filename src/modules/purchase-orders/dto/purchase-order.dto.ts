@@ -1,8 +1,31 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 
-export const PurchaseOrderStatusSchema = z.enum(['DRAFT', 'CONFIRMED']);
+export const PurchaseOrderStatusSchema = z.enum([
+  'DRAFT',
+  'CONFIRMED',
+  'PARTIALLY_RECEIVED',
+  'FULLY_RECEIVED',
+  'COMPLETED',
+  'CANCELLED',
+]);
 export const PurchaseOrderItemSourceSchema = z.enum(['QUOTE', 'EXTRA']);
+
+/** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): SalesOrdersService ile ayni
+ * desen - kismi teslim alma/geri alma AYNI bu tek uc uzerinden yapilir. */
+export const SetPurchaseOrderItemReceivedQuantitySchema = z.object({
+  receivedQuantity: z.number().min(0),
+});
+export type SetPurchaseOrderItemReceivedQuantityDto = z.infer<
+  typeof SetPurchaseOrderItemReceivedQuantitySchema
+>;
+
+export const SetPurchaseOrderItemCancelledSchema = z.object({
+  isCancelled: z.boolean(),
+});
+export type SetPurchaseOrderItemCancelledDto = z.infer<
+  typeof SetPurchaseOrderItemCancelledSchema
+>;
 
 const PurchaseOrderItemInputSchema = z
   .object({
