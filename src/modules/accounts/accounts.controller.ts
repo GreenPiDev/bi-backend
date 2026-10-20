@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import type { Account } from '@prisma/client';
+import type { Response } from 'express';
 import {
   CurrentUser,
   type RequestUser,
@@ -18,11 +20,14 @@ import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
+import { sendExportFile } from '../../core/http/export-response.util';
 import { AccountsService, type AccountWithMeta } from './accounts.service';
 import {
+  AccountExportQuerySchema,
   AccountQuerySchema,
   CreateAccountSchema,
   UpdateAccountSchema,
+  type AccountExportQueryDto,
   type AccountQueryDto,
   type CreateAccountDto,
   type UpdateAccountDto,
@@ -39,6 +44,17 @@ export class AccountsController {
     @Query(new ZodValidationPipe(AccountQuerySchema)) query: AccountQueryDto,
   ): Promise<PagedResult<AccountWithMeta>> {
     return this.accounts.list(query);
+  }
+
+  @Get('export')
+  @RequiresPermission('accounts', 'EXPORT')
+  async export(
+    @Query(new ZodValidationPipe(AccountExportQuerySchema))
+    query: AccountExportQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.accounts.exportFiltered(query);
+    sendExportFile(res, buffer, 'xlsx', 'firmalar');
   }
 
   @Get(':id')

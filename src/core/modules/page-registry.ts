@@ -105,8 +105,9 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     /** SalesOrder normalde Quote APPROVED olunca otomatik olusur (bkz.
      * QuotesService.ensureSalesOrder). CREATE sadece bu otomasyondan ONCE
      * onaylanmis (bu yuzden SalesOrder'i hic olmayan) teklifler icin elle
-     * tamamlama (backfill) amaciyla var - DELETE hala yok. */
-    supportedActions: ['CREATE', 'UPDATE'],
+     * tamamlama (backfill) amaciyla var - DELETE hala yok. EXPORT, 2026-10-20'de
+     * eklenen "Excel'e Aktar" butonu icin. */
+    supportedActions: ['CREATE', 'UPDATE', 'EXPORT'],
   },
   {
     key: 'purchase-orders',

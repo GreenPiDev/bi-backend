@@ -25,9 +25,11 @@ import {
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateInteractionSchema,
+  InteractionExportQuerySchema,
   InteractionQuerySchema,
   UpdateInteractionSchema,
   type CreateInteractionDto,
+  type InteractionExportQueryDto,
   type InteractionQueryDto,
   type UpdateInteractionDto,
 } from './dto/interaction.dto';
@@ -66,6 +68,21 @@ export class InteractionsController {
     const format = parseExportFormat(formatRaw);
     const buffer = await this.interactions.exportInteractions(format);
     sendExportFile(res, buffer, format, 'gorusmeler');
+  }
+
+  /** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): accounts/contacts/
+   * sales-orders'taki ayni merkezi "filtre+gorunur kolon" Excel export yapisi -
+   * yukaridaki export() (PDF+Excel, tum kayit, sabit kolon) kasitli olarak
+   * DOKUNULMADI, bu YENI ve ayri bir uc. */
+  @Get('export-filtered')
+  @RequiresPermission('interactions', 'EXPORT')
+  async exportFiltered(
+    @Query(new ZodValidationPipe(InteractionExportQuerySchema))
+    query: InteractionExportQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.interactions.exportFiltered(query);
+    sendExportFile(res, buffer, 'xlsx', 'gorusmeler');
   }
 
   @Get(':id')

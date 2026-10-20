@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isValidTaxNumber } from '../../../core/validators/tax';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
+import { ExportColumnsQuerySchema } from '../../../core/xlsx/list-export.util';
 
 export const AccountTypeSchema = z.enum([
   'CUSTOMER',
@@ -71,3 +72,16 @@ export const AccountQuerySchema = ListQuerySchema.extend({
   notContactedDays: z.coerce.number().int().positive().optional(),
 });
 export type AccountQueryDto = z.infer<typeof AccountQuerySchema>;
+
+/** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /firmalar sayfasindaki
+ * "Excel'e Aktar" butonu - sales-orders'taki ayni merkezi yapi (bkz.
+ * core/xlsx/list-export.util.ts, AccountsService.exportFiltered). page/pageSize/sort
+ * yok (sayfalama uygulanmaz, tum eslesen kayitlar disa aktarilir). */
+export const AccountExportQuerySchema = AccountQuerySchema.omit({
+  page: true,
+  pageSize: true,
+  sort: true,
+}).extend({
+  columns: ExportColumnsQuerySchema,
+});
+export type AccountExportQueryDto = z.infer<typeof AccountExportQuerySchema>;

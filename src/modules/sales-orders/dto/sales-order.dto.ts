@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
+import { ExportColumnsQuerySchema } from '../../../core/xlsx/list-export.util';
 
 export const SalesOrderStatusSchema = z.enum([
   'PENDING',
@@ -95,3 +96,35 @@ export const SalesOrderQuerySchema = ListQuerySchema.extend({
   to: z.coerce.date().optional(),
 });
 export type SalesOrderQueryDto = z.infer<typeof SalesOrderQuerySchema>;
+
+/** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /siparisler?tab=salesOrders
+ * sayfasindaki "Excel'e Aktar" butonu - o anda ekranda ACIK olan filtreyle eslesen
+ * TUM kayitlari (sayfalama yok), o anda GORUNUR olan kolonlarla disa aktarir. `columns`,
+ * frontend'deki ColumnVisibilityPicker'in gorunur birakip sirayla gonderdigi kolon
+ * anahtarlaridir - gecersiz/bilinmeyen bir anahtar sessizce atlanir (bkz.
+ * core/xlsx/list-export.util.ts, SalesOrdersService.exportSalesOrders). Ayni desen
+ * accounts/contacts/interactions export'larinda da kullanilir (merkezi yapi). */
+export const SALES_ORDER_EXPORT_COLUMNS = [
+  'orderNumber',
+  'account',
+  'quote',
+  'project',
+  'product',
+  'status',
+  'createdAt',
+] as const;
+export type SalesOrderExportColumn =
+  (typeof SALES_ORDER_EXPORT_COLUMNS)[number];
+
+export const SalesOrderExportQuerySchema = z.object({
+  accountId: z.string().uuid().optional(),
+  status: SalesOrderStatusSchema.optional(),
+  createdById: z.string().optional(),
+  q: z.string().trim().min(1).optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  columns: ExportColumnsQuerySchema,
+});
+export type SalesOrderExportQueryDto = z.infer<
+  typeof SalesOrderExportQuerySchema
+>;

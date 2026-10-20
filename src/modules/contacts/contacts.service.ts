@@ -12,9 +12,15 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import {
+  buildExportRows,
+  type ExportColumnDef,
+} from '../../core/xlsx/list-export.util';
+import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import { AuditService } from '../audit/audit.service';
 import { ContactsCacheService } from './contacts-cache.service';
 import type {
+  ContactExportQueryDto,
   ContactQueryDto,
   CreateContactDto,
   UpdateContactDto,
@@ -47,6 +53,43 @@ const SORT_ACCESSORS: Record<string, (row: SortableContactRow) => string> = {
 };
 
 export type ContactWithMeta = Contact & { createdByName: string | null };
+
+type ContactExportRow = ContactWithMeta & {
+  account: { id: string; name: string } | null;
+};
+
+/** Frontend i18n/tr.ts'teki tr.crm.contacts.statusActive/statusInactive ile
+ * birebir ayni metinler - bkz. ContactsService.exportFiltered. */
+const CONTACT_STATUS_LABELS: Record<Contact['status'], string> = {
+  ACTIVE: 'Aktif',
+  INACTIVE: 'Pasif',
+};
+
+/** Frontend contacts-list-page.tsx'teki ALL_COLUMNS ile birebir ayni kolon
+ * basliklari/degerleri. */
+type ContactExportColumn =
+  | 'name'
+  | 'account'
+  | 'department'
+  | 'phone'
+  | 'email'
+  | 'status'
+  | 'createdByName';
+const CONTACT_EXPORT_COLUMN_DEFS: Record<
+  ContactExportColumn,
+  ExportColumnDef<ContactExportRow>
+> = {
+  name: {
+    header: 'Ad Soyad',
+    value: (c) => `${c.firstName} ${c.lastName}`.trim(),
+  },
+  account: { header: 'Firma', value: (c) => c.account?.name ?? '' },
+  department: { header: 'Departman', value: (c) => c.department ?? '' },
+  phone: { header: 'Telefon', value: (c) => c.phone ?? '' },
+  email: { header: 'E-posta', value: (c) => c.email ?? '' },
+  status: { header: 'Durum', value: (c) => CONTACT_STATUS_LABELS[c.status] },
+  createdByName: { header: 'Oluşturan', value: (c) => c.createdByName ?? '' },
+};
 
 function normalize<T extends object>(dto: T): T {
   const result = { ...dto } as Record<string, unknown>;
@@ -92,18 +135,15 @@ export class ContactsService {
     }));
   }
 
-  async list(query: ContactQueryDto): Promise<PagedResult<ContactWithMeta>> {
-    const cached = await this.cache.get(query);
-    if (cached) {
-      return cached;
-    }
-
-    const { page, pageSize, q, accountId, ownerId, status, createdById } =
-      query;
-    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
-      field: 'lastName',
-      direction: 'asc',
-    });
+  /** list() ve exportFiltered() ayni filtre alanlarini (q/accountId/ownerId/status/
+   * createdById) paylasiyor - tek yerde tutuluyor. */
+  private async buildWhere(
+    query: Pick<
+      ContactQueryDto,
+      'q' | 'accountId' | 'ownerId' | 'status' | 'createdById'
+    >,
+  ) {
+    const { q, accountId, ownerId, status, createdById } = query;
 
     // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
     // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
@@ -129,13 +169,49 @@ export class ContactsService {
         )
       : null;
 
-    const where = {
+    return {
       ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(ownerId ? { ownerId } : {}),
       ...(status ? { status } : {}),
       ...(createdById ? { createdById } : {}),
     };
+  }
+
+  /** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /kisiler sayfasindaki
+   * "Excel'e Aktar" butonu - sayfalama YOK, o anki filtreyle eslesen tum kayitlar,
+   * sadece `query.columns`'ta istenen (frontend'de o an gorunur olan) kolonlarla disa
+   * aktarilir - bkz. core/xlsx/list-export.util.ts. */
+  async exportFiltered(query: ContactExportQueryDto): Promise<Buffer> {
+    const where = await this.buildWhere(query);
+    const contacts = await this.prisma.contact.findMany({
+      where,
+      orderBy: { lastName: 'asc' },
+      include: { account: { select: { id: true, name: true } } },
+    });
+    const rows = await this.attachCreatedByNames(contacts);
+
+    const exportRows = buildExportRows(
+      rows,
+      query.columns,
+      (key) => CONTACT_EXPORT_COLUMN_DEFS[key as ContactExportColumn],
+    );
+    return rowsToXlsxBuffer(exportRows, 'Kişiler');
+  }
+
+  async list(query: ContactQueryDto): Promise<PagedResult<ContactWithMeta>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
+    const { page, pageSize } = query;
+    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
+      field: 'lastName',
+      direction: 'asc',
+    });
+
+    const where = await this.buildWhere(query);
 
     if (CASE_INSENSITIVE_SORT_FIELDS.has(field)) {
       const accessor = SORT_ACCESSORS[field];

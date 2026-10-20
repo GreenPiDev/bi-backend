@@ -6,7 +6,9 @@ import {
   Post,
   Body,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   CurrentUser,
   type RequestUser,
@@ -14,14 +16,17 @@ import {
 import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import type { PagedResult } from '../../core/dto/list-query.dto';
+import { sendExportFile } from '../../core/http/export-response.util';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateSalesOrderSchema,
+  SalesOrderExportQuerySchema,
   SalesOrderQuerySchema,
   SetSalesOrderItemCancelledSchema,
   SetSalesOrderItemDeliveredQuantitySchema,
   UpdateSalesOrderSchema,
   type CreateSalesOrderDto,
+  type SalesOrderExportQueryDto,
   type SalesOrderQueryDto,
   type SetSalesOrderItemCancelledDto,
   type SetSalesOrderItemDeliveredQuantityDto,
@@ -62,6 +67,17 @@ export class SalesOrdersController {
     query: SalesOrderQueryDto,
   ): Promise<PagedResult<SalesOrderWithQuote>> {
     return this.salesOrders.list(query);
+  }
+
+  @Get('export')
+  @RequiresPermission('sales-orders', 'EXPORT')
+  async export(
+    @Query(new ZodValidationPipe(SalesOrderExportQuerySchema))
+    query: SalesOrderExportQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.salesOrders.exportSalesOrders(query);
+    sendExportFile(res, buffer, 'xlsx', 'satis-siparisleri');
   }
 
   @Get(':id')

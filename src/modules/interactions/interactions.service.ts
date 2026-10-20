@@ -17,6 +17,10 @@ import type { ExportFormat } from '../../core/export-format';
 import { ListPdfService } from '../../core/pdf/list-pdf.service';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { isPastCalendarDay } from '../../core/validators/date';
+import {
+  buildExportRows,
+  type ExportColumnDef,
+} from '../../core/xlsx/list-export.util';
 import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
 import {
@@ -32,6 +36,7 @@ import { AuditService } from '../audit/audit.service';
 import { InteractionsCacheService } from './interactions-cache.service';
 import type {
   CreateInteractionDto,
+  InteractionExportQueryDto,
   InteractionQueryDto,
   UpdateInteractionDto,
 } from './dto/interaction.dto';
@@ -89,6 +94,43 @@ type InteractionRow = Interaction & {
   contact: Contact | null;
   participants: InteractionParticipant[];
   opportunity: Opportunity | null;
+};
+
+/** Frontend i18n/tr.ts'teki tr.crm.interactions.statusOptions ile birebir ayni
+ * metinler - bkz. InteractionsService.exportFiltered. */
+const INTERACTION_STATUS_LABELS: Record<Interaction['status'], string> = {
+  OPEN: 'Açık',
+  CLOSED: 'Kapalı',
+};
+
+/** Frontend interactions-list-page.tsx'teki ALL_COLUMNS ile birebir ayni kolon
+ * basliklari/degerleri. */
+type InteractionExportColumn =
+  'occurredAt' | 'account' | 'contact' | 'type' | 'status' | 'createdByName';
+const INTERACTION_EXPORT_COLUMN_DEFS: Record<
+  InteractionExportColumn,
+  ExportColumnDef<InteractionWithDetails>
+> = {
+  occurredAt: {
+    header: 'Tarih',
+    value: (i) =>
+      new Intl.DateTimeFormat('tr-TR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(i.occurredAt),
+  },
+  account: { header: 'Firma', value: (i) => i.account?.name ?? '' },
+  contact: {
+    header: 'Görüşülen Kişi',
+    value: (i) =>
+      i.contact ? `${i.contact.firstName} ${i.contact.lastName}` : '',
+  },
+  type: { header: 'Tür', value: (i) => i.type },
+  status: {
+    header: 'Durum',
+    value: (i) => INTERACTION_STATUS_LABELS[i.status],
+  },
+  createdByName: { header: 'Oluşturan', value: (i) => i.createdByName ?? '' },
 };
 
 @Injectable()
@@ -159,17 +201,24 @@ export class InteractionsService {
     });
   }
 
-  async list(
-    query: InteractionQueryDto,
-  ): Promise<PagedResult<InteractionWithDetails>> {
-    const cached = await this.interactionsCache.get(query);
-    if (cached) {
-      return cached;
-    }
-
+  /** list() ve exportFiltered() ayni filtre alanlarini (q/accountId/contactId/
+   * createdById/type/status/from-to/parentInteractionId) paylasiyor - tek yerde
+   * tutuluyor. */
+  private async buildWhere(
+    query: Pick<
+      InteractionQueryDto,
+      | 'q'
+      | 'accountId'
+      | 'contactId'
+      | 'createdById'
+      | 'type'
+      | 'status'
+      | 'from'
+      | 'to'
+      | 'parentInteractionId'
+    >,
+  ) {
     const {
-      page,
-      pageSize,
       q,
       accountId,
       contactId,
@@ -180,10 +229,6 @@ export class InteractionsService {
       to,
       parentInteractionId,
     } = query;
-    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
-      field: 'occurredAt',
-      direction: 'desc',
-    });
 
     // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
     // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
@@ -207,7 +252,7 @@ export class InteractionsService {
         )
       : null;
 
-    const where = {
+    return {
       // "Bagli Gorusme Ekle" ile olusturulan ek kayitlar varsayilan olarak ana listede
       // gorunmez; sadece parentInteractionId acikca istendiginde (detay sayfasindaki
       // kartlar) gosterilir - bkz. schema.prisma Interaction.parentInteractionId yorumu.
@@ -227,6 +272,45 @@ export class InteractionsService {
           }
         : {}),
     };
+  }
+
+  /** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /gorusmeler sayfasindaki
+   * "Excel'e Aktar" butonu - sayfalama YOK, o anki filtreyle eslesen tum kayitlar,
+   * sadece `query.columns`'ta istenen (frontend'de o an gorunur olan) kolonlarla disa
+   * aktarilir - bkz. core/xlsx/list-export.util.ts. Mevcut exportInteractions()
+   * (PDF+Excel, tum kayit, sabit kolon) kasitli olarak DOKUNULMADI. */
+  async exportFiltered(query: InteractionExportQueryDto): Promise<Buffer> {
+    const where = await this.buildWhere(query);
+    const rows = await this.prisma.interaction.findMany({
+      where,
+      orderBy: { occurredAt: 'desc' },
+      include: INTERACTION_INCLUDE,
+    });
+    const withNames = await this.attachCreatedByNames(rows);
+
+    const exportRows = buildExportRows(
+      withNames,
+      query.columns,
+      (key) => INTERACTION_EXPORT_COLUMN_DEFS[key as InteractionExportColumn],
+    );
+    return rowsToXlsxBuffer(exportRows, 'Görüşmeler');
+  }
+
+  async list(
+    query: InteractionQueryDto,
+  ): Promise<PagedResult<InteractionWithDetails>> {
+    const cached = await this.interactionsCache.get(query);
+    if (cached) {
+      return cached;
+    }
+
+    const { page, pageSize } = query;
+    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
+      field: 'occurredAt',
+      direction: 'desc',
+    });
+
+    const where = await this.buildWhere(query);
 
     const [data, total] = await Promise.all([
       this.prisma.interaction.findMany({

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
+import { ExportColumnsQuerySchema } from '../../../core/xlsx/list-export.util';
 
 export const ContactStatusSchema = z.enum(['ACTIVE', 'INACTIVE']);
 
@@ -35,3 +36,15 @@ export const ContactQuerySchema = ListQuerySchema.extend({
   createdById: z.string().optional(),
 });
 export type ContactQueryDto = z.infer<typeof ContactQuerySchema>;
+
+/** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /kisiler sayfasindaki
+ * "Excel'e Aktar" butonu - accounts/sales-orders'taki ayni merkezi yapi (bkz.
+ * core/xlsx/list-export.util.ts, ContactsService.exportFiltered). */
+export const ContactExportQuerySchema = ContactQuerySchema.omit({
+  page: true,
+  pageSize: true,
+  sort: true,
+}).extend({
+  columns: ExportColumnsQuerySchema,
+});
+export type ContactExportQueryDto = z.infer<typeof ContactExportQuerySchema>;

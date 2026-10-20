@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
+import { ExportColumnsQuerySchema } from '../../../core/xlsx/list-export.util';
 import {
   CurrencyCodeSchema,
   OpportunityStageSchema,
@@ -139,3 +140,19 @@ export const InteractionQuerySchema = ListQuerySchema.extend({
   parentInteractionId: z.string().uuid().optional(),
 });
 export type InteractionQueryDto = z.infer<typeof InteractionQuerySchema>;
+
+/** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /gorusmeler sayfasindaki
+ * "Excel'e Aktar" butonu - accounts/contacts/sales-orders'taki ayni merkezi yapi
+ * (bkz. core/xlsx/list-export.util.ts, InteractionsService.exportFiltered). Mevcut
+ * /interactions/export ucu (tum kayit, sabit kolon, PDF+Excel) kasitli olarak
+ * DOKUNULMADI - bu yeni, ayri bir uc (bkz. InteractionsController.exportFiltered). */
+export const InteractionExportQuerySchema = InteractionQuerySchema.omit({
+  page: true,
+  pageSize: true,
+  sort: true,
+}).extend({
+  columns: ExportColumnsQuerySchema,
+});
+export type InteractionExportQueryDto = z.infer<
+  typeof InteractionExportQuerySchema
+>;

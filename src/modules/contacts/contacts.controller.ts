@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import type { Contact } from '@prisma/client';
+import type { Response } from 'express';
 import {
   CurrentUser,
   type RequestUser,
@@ -18,11 +20,14 @@ import { ModulePage } from '../../core/decorators/module-page.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import type { PagedResult } from '../../core/dto/list-query.dto';
+import { sendExportFile } from '../../core/http/export-response.util';
 import { ContactsService, type ContactWithMeta } from './contacts.service';
 import {
+  ContactExportQuerySchema,
   ContactQuerySchema,
   CreateContactSchema,
   UpdateContactSchema,
+  type ContactExportQueryDto,
   type ContactQueryDto,
   type CreateContactDto,
   type UpdateContactDto,
@@ -39,6 +44,17 @@ export class ContactsController {
     @Query(new ZodValidationPipe(ContactQuerySchema)) query: ContactQueryDto,
   ): Promise<PagedResult<ContactWithMeta>> {
     return this.contacts.list(query);
+  }
+
+  @Get('export')
+  @RequiresPermission('contacts', 'EXPORT')
+  async export(
+    @Query(new ZodValidationPipe(ContactExportQuerySchema))
+    query: ContactExportQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.contacts.exportFiltered(query);
+    sendExportFile(res, buffer, 'xlsx', 'kisiler');
   }
 
   @Get(':id')

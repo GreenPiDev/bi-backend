@@ -24,6 +24,11 @@ import {
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
+import {
+  buildExportRows,
+  type ExportColumnDef,
+} from '../../core/xlsx/list-export.util';
+import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import { AuditService } from '../audit/audit.service';
 import {
   POST_SALE_SURVEY_QUEUE,
@@ -37,12 +42,63 @@ import {
 import { SalesOrdersCacheService } from './sales-orders-cache.service';
 import type {
   CreateSalesOrderDto,
+  SalesOrderExportColumn,
+  SalesOrderExportQueryDto,
   SalesOrderQueryDto,
   UpdateSalesOrderDto,
 } from './dto/sales-order.dto';
 
 const SORTABLE_FIELDS = ['orderNumber', 'createdAt'] as const;
 const SALES_ORDER_NUMBER_CREATE_RETRIES = 3;
+
+/** Frontend i18n/tr.ts'teki tr.crm.salesOrders.statusOptions ile birebir ayni metinler -
+ * bkz. SalesOrdersService.exportSalesOrders. */
+const SALES_ORDER_STATUS_LABELS: Record<SalesOrder['status'], string> = {
+  PENDING: 'Beklemede',
+  PROCESSING: 'İşlemde',
+  READY_FOR_SHIPMENT: 'Sevkiyata Hazır',
+  SHIPPED: 'Sevk Edildi',
+  PARTIALLY_DELIVERED: 'Kısmen Teslim Edildi',
+  DELIVERED: 'Tamamen Teslim Edildi',
+  COMPLETED: 'Tamamlandı',
+  CANCELLED: 'İptal Edildi',
+};
+
+/** Frontend sales-order-list-page.tsx'teki ALL_COLUMNS ile birebir ayni kolon
+ * basliklari/degerleri - bkz. SalesOrdersService.exportSalesOrders. */
+const SALES_ORDER_EXPORT_COLUMN_DEFS: Record<
+  SalesOrderExportColumn,
+  ExportColumnDef<SalesOrderWithQuote>
+> = {
+  orderNumber: { header: 'Sipariş No', value: (order) => order.orderNumber },
+  account: { header: 'Firma', value: (order) => order.account?.name ?? '' },
+  quote: { header: 'Teklif', value: (order) => order.quote?.quoteNumber ?? '' },
+  project: {
+    header: 'Proje',
+    value: (order) => order.quote?.project?.name ?? '—',
+  },
+  product: {
+    header: 'Ürün',
+    value: (order) => {
+      const count = order.quoteId
+        ? (order.quote?.items.length ?? 0)
+        : order.items.length;
+      return `${count} ürün`;
+    },
+  },
+  status: {
+    header: 'Durum',
+    value: (order) => SALES_ORDER_STATUS_LABELS[order.status],
+  },
+  createdAt: {
+    header: 'Oluşturulma Tarihi',
+    value: (order) =>
+      new Intl.DateTimeFormat('tr-TR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(order.createdAt),
+  },
+};
 
 function salesOrderNumberPrefix(date: Date): string {
   const yyyy = date.getFullYear();
@@ -104,12 +160,42 @@ export class SalesOrdersService {
       return cached;
     }
 
-    const { page, pageSize, accountId, status, createdById, q, from, to } =
-      query;
+    const { page, pageSize } = query;
     const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
       field: 'createdAt',
       direction: 'desc',
     });
+
+    const where = await this.buildWhere(query);
+
+    const [data, total] = await Promise.all([
+      this.prisma.salesOrder.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { [field]: direction },
+        include: SALES_ORDER_INCLUDE,
+      }),
+      this.prisma.salesOrder.count({ where }),
+    ]);
+
+    const result = {
+      data,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+    await this.cache.set(query, result);
+    return result;
+  }
+
+  /** list() ve exportSalesOrders() ayni filtre alanlarini (accountId/status/
+   * createdById/q/from-to) paylasiyor - tek yerde tutuluyor. */
+  private async buildWhere(
+    query: Pick<
+      SalesOrderQueryDto | SalesOrderExportQueryDto,
+      'accountId' | 'status' | 'createdById' | 'q' | 'from' | 'to'
+    >,
+  ): Promise<Prisma.SalesOrderWhereInput> {
+    const { accountId, status, createdById, q, from, to } = query;
 
     // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
     // Turkce aksanli karakterlerde yanlis sonuc veriyor - bkz. core/db/turkish-search.ts
@@ -131,7 +217,7 @@ export class SalesOrdersService {
         )
       : null;
 
-    const where = {
+    return {
       ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(accountId ? { accountId } : {}),
       ...(status ? { status } : {}),
@@ -145,24 +231,26 @@ export class SalesOrdersService {
           }
         : {}),
     };
+  }
 
-    const [data, total] = await Promise.all([
-      this.prisma.salesOrder.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { [field]: direction },
-        include: SALES_ORDER_INCLUDE,
-      }),
-      this.prisma.salesOrder.count({ where }),
-    ]);
+  /** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /siparisler?tab=salesOrders
+   * sayfasindaki "Excel'e Aktar" butonu - sayfalama YOK, o anki filtreyle eslesen tum
+   * kayitlar, sadece `query.columns`'ta istenen (frontend'de o an gorunur olan)
+   * kolonlarla disa aktarilir. */
+  async exportSalesOrders(query: SalesOrderExportQueryDto): Promise<Buffer> {
+    const where = await this.buildWhere(query);
+    const orders = await this.prisma.salesOrder.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: SALES_ORDER_INCLUDE,
+    });
 
-    const result = {
-      data,
-      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
-    };
-    await this.cache.set(query, result);
-    return result;
+    const exportRows = buildExportRows(
+      orders,
+      query.columns,
+      (key) => SALES_ORDER_EXPORT_COLUMN_DEFS[key as SalesOrderExportColumn],
+    );
+    return rowsToXlsxBuffer(exportRows, 'Satış Siparişleri');
   }
 
   async getById(id: string): Promise<SalesOrderWithQuote> {

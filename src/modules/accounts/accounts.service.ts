@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { Account } from '@prisma/client';
+import type { Account, AccountType } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
@@ -7,10 +7,16 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import {
+  buildExportRows,
+  type ExportColumnDef,
+} from '../../core/xlsx/list-export.util';
+import { rowsToXlsxBuffer } from '../../core/xlsx/xlsx-export.util';
 import { AuditService } from '../audit/audit.service';
 import { normalizeAccountName } from './account-name.util';
 import { AccountsCacheService } from './accounts-cache.service';
 import type {
+  AccountExportQueryDto,
   AccountQueryDto,
   CreateAccountDto,
   UpdateAccountDto,
@@ -60,6 +66,50 @@ export type AccountWithMeta = Account & {
   createdByName: string | null;
   interactionCount: number;
   quoteCount: number;
+};
+
+/** Frontend i18n/tr.ts'teki tr.crm.accounts.accountTypeOptions ile birebir ayni
+ * metinler - bkz. AccountsService.exportFiltered. */
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  CUSTOMER: 'Müşteri',
+  SUPPLIER: 'Tedarikçi',
+  CONTRACTOR: 'Yüklenici',
+  SUBCONTRACTOR: 'Alt Yüklenici',
+};
+
+/** Frontend accounts-list-page.tsx'teki ALL_COLUMNS ile birebir ayni kolon
+ * basliklari/degerleri (sabit kolonlar - dinamik `attr:<key>` kolonlari
+ * AccountsService.exportFiltered icinde ayrica cozumlenir). */
+type AccountExportColumn =
+  | 'name'
+  | 'city'
+  | 'phone'
+  | 'email'
+  | 'sector'
+  | 'accountTypes'
+  | 'interactionCount'
+  | 'quoteCount'
+  | 'createdByName';
+const ACCOUNT_EXPORT_COLUMN_DEFS: Record<
+  AccountExportColumn,
+  ExportColumnDef<AccountWithMeta>
+> = {
+  name: { header: 'Ad', value: (a) => a.name },
+  city: { header: 'Şehir', value: (a) => a.city ?? '' },
+  phone: { header: 'Telefon', value: (a) => a.phone ?? '' },
+  email: { header: 'E-posta', value: (a) => a.email ?? '' },
+  sector: { header: 'Sektör', value: (a) => (a.sector ?? []).join(', ') },
+  accountTypes: {
+    header: 'Firma Türü',
+    value: (a) =>
+      a.accountTypes.map((type) => ACCOUNT_TYPE_LABELS[type]).join(', '),
+  },
+  interactionCount: {
+    header: 'Görüşme',
+    value: (a) => String(a.interactionCount),
+  },
+  quoteCount: { header: 'Teklif', value: (a) => String(a.quoteCount) },
+  createdByName: { header: 'Oluşturan', value: (a) => a.createdByName ?? '' },
 };
 
 function withMissingCriticalFields<T extends Account>(
@@ -171,15 +221,22 @@ export class AccountsService {
     }));
   }
 
-  async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
-    const cached = await this.cache.get(query);
-    if (cached) {
-      return cached;
-    }
-
+  /** list() ve exportFiltered() ayni filtre alanlarini (q/city/sector/ownerId/
+   * createdById/from-to/notContactedDays) paylasiyor - tek yerde tutuluyor. */
+  private async buildWhere(
+    query: Pick<
+      AccountQueryDto,
+      | 'q'
+      | 'city'
+      | 'sector'
+      | 'ownerId'
+      | 'createdById'
+      | 'from'
+      | 'to'
+      | 'notContactedDays'
+    >,
+  ) {
     const {
-      page,
-      pageSize,
       q,
       city,
       sector,
@@ -189,10 +246,6 @@ export class AccountsService {
       to,
       notContactedDays,
     } = query;
-    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
-      field: 'name',
-      direction: 'asc',
-    });
 
     // Postgres'in bu projede LC_CTYPE=C olmasi yuzunden `contains`/`mode: 'insensitive'`
     // Turkce aksanli karakterlerde (Ü, Ö, Ş, Ç, İ/ı) yanlis sonuc veriyor - bkz.
@@ -208,7 +261,7 @@ export class AccountsService {
         )
       : null;
 
-    const where = {
+    return {
       ...(matchingIds ? { id: { in: matchingIds } } : {}),
       ...(city ? { city } : {}),
       ...(sector ? { sector: { has: sector } } : {}),
@@ -237,6 +290,69 @@ export class AccountsService {
           }
         : {}),
     };
+  }
+
+  /** Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): /firmalar sayfasindaki
+   * "Excel'e Aktar" butonu - sayfalama YOK, o anki filtreyle eslesen tum kayitlar,
+   * sadece `query.columns`'ta istenen (frontend'de o an gorunur olan) kolonlarla disa
+   * aktarilir. Sabit kolonlarin yaninda, ice aktarmada "ozel alan olarak sakla"
+   * secilen `attr:<key>` kolonlari da (accounts-list-page.tsx'teki attributeColumns
+   * deseniyle ayni) desteklenir - bu yuzden sabit bir enum yerine serbest anahtar
+   * kullanan merkezi buildExportRows cozumleyicisi kullaniliyor (bkz.
+   * core/xlsx/list-export.util.ts). */
+  async exportFiltered(query: AccountExportQueryDto): Promise<Buffer> {
+    const where = await this.buildWhere(query);
+    const accounts = await this.prisma.account.findMany({
+      where,
+      orderBy: { name: 'asc' },
+    });
+    const withNames = await this.attachCreatedByNames(accounts);
+    const withCounts = await this.attachCounts(withNames);
+    const rows = withCounts.map(withMissingCriticalFields);
+
+    const resolveColumn = (
+      key: string,
+    ): ExportColumnDef<(typeof rows)[number]> | undefined => {
+      if (key.startsWith('attr:')) {
+        const attributeKey = key.slice('attr:'.length);
+        return {
+          header: attributeKey,
+          value: (account) => {
+            const customFields = account.customFields;
+            if (
+              !customFields ||
+              typeof customFields !== 'object' ||
+              Array.isArray(customFields)
+            ) {
+              return '';
+            }
+            const value = (customFields as Record<string, unknown>)[
+              attributeKey
+            ];
+            return value == null ? '' : String(value);
+          },
+        };
+      }
+      return ACCOUNT_EXPORT_COLUMN_DEFS[key as AccountExportColumn];
+    };
+
+    const exportRows = buildExportRows(rows, query.columns, resolveColumn);
+    return rowsToXlsxBuffer(exportRows, 'Firmalar');
+  }
+
+  async list(query: AccountQueryDto): Promise<PagedResult<AccountWithMeta>> {
+    const cached = await this.cache.get(query);
+    if (cached) {
+      return cached;
+    }
+
+    const { page, pageSize } = query;
+    const { field, direction } = parseSort(query.sort, SORTABLE_FIELDS, {
+      field: 'name',
+      direction: 'asc',
+    });
+
+    const where = await this.buildWhere(query);
 
     if (COMPUTED_SORT_FIELDS.has(field)) {
       const sortField = field as 'interactionCount' | 'quoteCount';
