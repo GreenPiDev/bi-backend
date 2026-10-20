@@ -128,6 +128,84 @@ describe('SalesOrdersService', () => {
     );
   });
 
+  it('updateStatus: DELIVERED secilince iptal olmayan tum kalemleri tam teslim edilmis isaretler', async () => {
+    const salesOrderRow = createSalesOrderRow({
+      status: 'PARTIALLY_DELIVERED',
+      quoteId: null,
+      quote: null,
+      items: [
+        {
+          id: 'soi-1',
+          quantity: '10',
+          deliveredQuantity: '4',
+          isCancelled: false,
+        },
+        {
+          id: 'soi-2',
+          quantity: '3',
+          deliveredQuantity: '0',
+          isCancelled: false,
+        },
+        {
+          id: 'soi-3',
+          quantity: '2',
+          deliveredQuantity: '0',
+          isCancelled: true,
+        },
+      ],
+    });
+    const prisma = createPrisma(salesOrderRow);
+    const service = new SalesOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeSurveyQueue,
+      fakePostSaleCasesCache,
+    );
+
+    await service.updateStatus('so-1', { status: 'DELIVERED' });
+
+    expect(prisma.salesOrderItem.update).toHaveBeenCalledWith({
+      where: { id: 'soi-1' },
+      data: { deliveredQuantity: '10' },
+    });
+    expect(prisma.salesOrderItem.update).toHaveBeenCalledWith({
+      where: { id: 'soi-2' },
+      data: { deliveredQuantity: '3' },
+    });
+    expect(prisma.salesOrderItem.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'soi-3' } }),
+    );
+  });
+
+  it('updateStatus: DELIVERED disindaki bir duruma gecince kalemlere dokunmaz', async () => {
+    const salesOrderRow = createSalesOrderRow({
+      status: 'PARTIALLY_DELIVERED',
+      quoteId: null,
+      quote: null,
+      items: [
+        {
+          id: 'soi-1',
+          quantity: '10',
+          deliveredQuantity: '4',
+          isCancelled: false,
+        },
+      ],
+    });
+    const prisma = createPrisma(salesOrderRow);
+    const service = new SalesOrdersService(
+      prisma as never,
+      fakeAudit,
+      fakeCache,
+      fakeSurveyQueue,
+      fakePostSaleCasesCache,
+    );
+
+    await service.updateStatus('so-1', { status: 'SHIPPED' });
+
+    expect(prisma.salesOrderItem.update).not.toHaveBeenCalled();
+  });
+
   it('updateStatus: bulunamayan siparis icin NOT_FOUND firlatir', async () => {
     const prisma = createPrisma();
     prisma.salesOrder.findFirst = vi.fn().mockResolvedValue(null);
@@ -540,6 +618,248 @@ describe('SalesOrdersService', () => {
       ).rejects.toMatchObject({
         code: 'NOT_FOUND',
       } satisfies Partial<AppException>);
+    });
+  });
+
+  describe('otomatik durum senkronizasyonu (teslimat bazli)', () => {
+    it('tum aktif kalemler teslim edilince durumu DELIVERED yapar', async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'PROCESSING',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '10', deliveredQuantity: '5' }],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'PROCESSING',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '10', deliveredQuantity: '10' }],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 10);
+
+      expect(prisma.salesOrder.update).toHaveBeenCalledWith({
+        where: { id: 'so-1' },
+        data: { status: 'DELIVERED' },
+      });
+    });
+
+    it('bazi aktif kalemler teslim edilince durumu PARTIALLY_DELIVERED yapar', async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'PROCESSING',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '10', deliveredQuantity: '0' }],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'PROCESSING',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '10', deliveredQuantity: '4' }],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 4);
+
+      expect(prisma.salesOrder.update).toHaveBeenCalledWith({
+        where: { id: 'so-1' },
+        data: { status: 'PARTIALLY_DELIVERED' },
+      });
+    });
+
+    it("DELIVERED siparisin tum kalemleri teslim edilmedi'ye cekilince PROCESSING'e doner", async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'DELIVERED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '5' }],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'DELIVERED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '0' }],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 0);
+
+      expect(prisma.salesOrder.update).toHaveBeenCalledWith({
+        where: { id: 'so-1' },
+        data: { status: 'PROCESSING' },
+      });
+    });
+
+    it('CANCELLED siparislerde durumu degistirmez', async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'CANCELLED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '0' }],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'CANCELLED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '5' }],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 5);
+
+      expect(prisma.salesOrder.update).not.toHaveBeenCalled();
+    });
+
+    it('COMPLETED siparislerde durumu degistirmez', async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'COMPLETED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '5' }],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'COMPLETED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '0' }],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 0);
+
+      expect(prisma.salesOrder.update).not.toHaveBeenCalled();
+    });
+
+    it('tum aktif kalemler iptal edilmisse (hic aktif kalem yoksa) durumu degistirmez', async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'PROCESSING',
+        quoteId: null,
+        quote: null,
+        items: [
+          {
+            id: 'soi-1',
+            quantity: '5',
+            deliveredQuantity: '0',
+            isCancelled: false,
+          },
+        ],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'PROCESSING',
+        quoteId: null,
+        quote: null,
+        items: [
+          {
+            id: 'soi-1',
+            quantity: '5',
+            deliveredQuantity: '0',
+            isCancelled: true,
+          },
+        ],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemCancelled('so-1', 'soi-1', true);
+
+      expect(prisma.salesOrder.update).not.toHaveBeenCalled();
+    });
+
+    it('hesaplanan durum zaten mevcut durumsa gereksiz guncelleme yapmaz', async () => {
+      const initialRow = createSalesOrderRow({
+        status: 'DELIVERED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '4' }],
+      });
+      const updatedRow = createSalesOrderRow({
+        status: 'DELIVERED',
+        quoteId: null,
+        quote: null,
+        items: [{ id: 'soi-1', quantity: '5', deliveredQuantity: '5' }],
+      });
+      const prisma = createPrisma(initialRow);
+      prisma.salesOrder.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(initialRow)
+        .mockResolvedValue(updatedRow);
+      const service = new SalesOrdersService(
+        prisma as never,
+        fakeAudit,
+        fakeCache,
+        fakeSurveyQueue,
+        fakePostSaleCasesCache,
+      );
+
+      await service.setItemDeliveredQuantity('so-1', 'soi-1', 5);
+
+      expect(prisma.salesOrder.update).not.toHaveBeenCalled();
     });
   });
 });

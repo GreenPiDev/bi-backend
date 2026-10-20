@@ -426,11 +426,16 @@ export class SalesOrdersService {
     id: string,
     dto: UpdateSalesOrderDto,
   ): Promise<SalesOrderWithQuote> {
-    await this.getById(id);
+    const salesOrder = await this.getById(id);
     await this.prisma.salesOrder.update({
       where: { id },
       data: { status: dto.status },
     });
+
+    if (dto.status === 'DELIVERED') {
+      await this.markActiveItemsFullyDelivered(salesOrder);
+    }
+
     await this.audit.log({
       action: 'UPDATE',
       entity: 'SalesOrder',
@@ -439,6 +444,43 @@ export class SalesOrdersService {
     });
     await this.cache.invalidate();
     return this.getById(id);
+  }
+
+  /**
+   * Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): siparis elle "Tamamen
+   * Teslim Edildi" (DELIVERED) durumuna cekildiginde, tek tek kalem secip bulk
+   * aksiyona basmaya gerek kalmadan, iptal olmayan TUM kalemlerin
+   * deliveredQuantity'si kendi quantity'sine esitlenir - syncStatusWithDeliveryState
+   * ile AYNI kuralin ters yonu (orada kalemler durumu belirler, burada durum
+   * kalemleri belirler).
+   */
+  private async markActiveItemsFullyDelivered(
+    salesOrder: SalesOrderWithQuote,
+  ): Promise<void> {
+    const items = salesOrder.quoteId
+      ? (salesOrder.quote?.items ?? [])
+      : salesOrder.items;
+    const activeItems = items.filter((item) => !item.isCancelled);
+
+    if (salesOrder.quoteId) {
+      await Promise.all(
+        activeItems.map((item) =>
+          this.prisma.quoteItem.update({
+            where: { id: item.id },
+            data: { deliveredQuantity: item.quantity },
+          }),
+        ),
+      );
+    } else {
+      await Promise.all(
+        activeItems.map((item) =>
+          this.prisma.salesOrderItem.update({
+            where: { id: item.id },
+            data: { deliveredQuantity: item.quantity },
+          }),
+        ),
+      );
+    }
   }
 
   /**
@@ -473,6 +515,55 @@ export class SalesOrdersService {
       );
     }
     return { kind: 'salesOrder', item };
+  }
+
+  /**
+   * Ad-hoc (2026-10-20, kullanici istegi, bkz. CLAUDE.md): kalem teslimat/iptal
+   * durumu her degistiginde siparisin durumunu kalemlerin toplu durumuna gore
+   * otomatik yeniden hesaplar - iptal olmayan kalemlerin TUMU teslim edildiyse
+   * DELIVERED ("Tamamen Teslim Edildi"), HICBIRI teslim edilmediyse PROCESSING
+   * ("Islemde"), aksi halde (karisik) PARTIALLY_DELIVERED ("Kismen Teslim
+   * Edildi"). CANCELLED/COMPLETED siparislerde calismaz (bunlar nihai, kullanici
+   * bilincli sectigi durumlar - frontend zaten bu durumlarda kalem
+   * duzenlemelerini engelliyor, burasi ayni kurali savunma amacli tekrarliyor).
+   * Hicbir iptal-olmayan kalem yoksa (tumu iptal) durum degistirilmez.
+   */
+  private async syncStatusWithDeliveryState(id: string): Promise<void> {
+    const salesOrder = await this.getById(id);
+    if (
+      salesOrder.status === 'CANCELLED' ||
+      salesOrder.status === 'COMPLETED'
+    ) {
+      return;
+    }
+
+    const items = salesOrder.quoteId
+      ? (salesOrder.quote?.items ?? [])
+      : salesOrder.items;
+    const activeItems = items.filter((item) => !item.isCancelled);
+    if (activeItems.length === 0) {
+      return;
+    }
+
+    const allDelivered = activeItems.every(
+      (item) => Number(item.deliveredQuantity) >= Number(item.quantity),
+    );
+    const noneDelivered = activeItems.every(
+      (item) => Number(item.deliveredQuantity) <= 0,
+    );
+    const autoStatus = allDelivered
+      ? 'DELIVERED'
+      : noneDelivered
+        ? 'PROCESSING'
+        : 'PARTIALLY_DELIVERED';
+
+    if (autoStatus === salesOrder.status) {
+      return;
+    }
+    await this.prisma.salesOrder.update({
+      where: { id },
+      data: { status: autoStatus },
+    });
   }
 
   /**
@@ -516,6 +607,8 @@ export class SalesOrdersService {
       });
     }
 
+    await this.syncStatusWithDeliveryState(id);
+
     await this.audit.log({
       action: 'UPDATE',
       entity: 'SalesOrder',
@@ -551,6 +644,8 @@ export class SalesOrdersService {
         data: { isCancelled },
       });
     }
+
+    await this.syncStatusWithDeliveryState(id);
 
     await this.audit.log({
       action: 'UPDATE',
