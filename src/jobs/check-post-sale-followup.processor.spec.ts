@@ -7,7 +7,7 @@ function createDueCase(overrides: Partial<Record<string, unknown>> = {}) {
     id: 'psc-1',
     tenantId: 'tenant-1',
     salesOrderId: 'so-1',
-    quoteId: 'quote-1',
+    account: { name: 'ACME' },
     reminderAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     reminderSentAt: null,
     ...overrides,
@@ -25,7 +25,6 @@ function createPrisma(overrides: Partial<Record<string, unknown>> = {}) {
         id: 'so-1',
         orderNumber: 'SAT-2026-10-19-001',
         createdById: 'user-1',
-        quote: { quoteNumber: 'TEK-2026-09-06-001' },
       }),
     },
     user: {
@@ -35,23 +34,44 @@ function createPrisma(overrides: Partial<Record<string, unknown>> = {}) {
         isActive: true,
       }),
     },
+    notification: {
+      create: vi.fn().mockResolvedValue({}),
+    },
     ...overrides,
   };
 }
 
+function createRealtime() {
+  return { emitToTenant: vi.fn(), emitToAll: vi.fn() };
+}
+
 describe('CheckPostSaleFollowupProcessor', () => {
-  it('vadesi gelmis ve hatirlatilmamis case icin e-posta gonderir ve reminderSentAt gunceller', async () => {
+  it('vadesi gelmis ve hatirlatilmamis case icin in-app bildirim olusturur ve reminderSentAt gunceller', async () => {
     const prisma = createPrisma();
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
       fakePostSaleCasesCache,
     );
     await processor.process();
 
-    expect(mail.send).toHaveBeenCalledWith(
-      expect.objectContaining({ to: ['satis@acme.com'] }),
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenantId: 'tenant-1',
+          recipientUserId: 'user-1',
+          type: 'POST_SALE_SURVEY_REMINDER',
+          title: expect.stringContaining('ACME'),
+          relatedEntityType: 'PostSaleCase',
+          relatedEntityId: 'psc-1',
+        }),
+      }),
+    );
+    expect(realtime.emitToTenant).toHaveBeenCalledWith(
+      'tenant-1',
+      'notifications.notification.created',
+      { recipientUserId: 'user-1' },
     );
     expect(prisma.postSaleCase.update).toHaveBeenCalledWith({
       where: { id: 'psc-1' },
@@ -59,45 +79,35 @@ describe('CheckPostSaleFollowupProcessor', () => {
     });
   });
 
-  it('teklifsiz (manuel) siparis icin de e-posta gonderir', async () => {
+  it('teklifsiz (manuel) siparis icin de bildirim olusturur', async () => {
     const prisma = createPrisma();
-    prisma.salesOrder.findUnique = vi.fn().mockResolvedValue({
-      id: 'so-1',
-      orderNumber: 'SAT-2026-10-19-001',
-      createdById: 'user-1',
-      quote: null,
-    });
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
       fakePostSaleCasesCache,
     );
     await processor.process();
 
-    expect(mail.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        subject: expect.stringContaining('SAT-2026-10-19-001'),
-      }),
-    );
+    expect(prisma.notification.create).toHaveBeenCalled();
   });
 
-  it('satis temsilcisi pasifse gondermez', async () => {
+  it('satis temsilcisi pasifse bildirim olusturmaz', async () => {
     const prisma = createPrisma();
     prisma.user.findUnique = vi.fn().mockResolvedValue({
       id: 'user-1',
       email: 'x@acme.com',
       isActive: false,
     });
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
       fakePostSaleCasesCache,
     );
     await processor.process();
 
-    expect(mail.send).not.toHaveBeenCalled();
+    expect(prisma.notification.create).not.toHaveBeenCalled();
   });
 
   it('bir case hata verirse digerlerini etkilemez', async () => {
@@ -105,10 +115,10 @@ describe('CheckPostSaleFollowupProcessor', () => {
     prisma.salesOrder.findUnique = vi
       .fn()
       .mockRejectedValue(new Error('DB down'));
-    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const realtime = createRealtime();
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
-      mail as never,
+      realtime as never,
       fakePostSaleCasesCache,
     );
     await expect(processor.process()).resolves.toBeUndefined();

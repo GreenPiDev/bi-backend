@@ -95,6 +95,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['UPDATE'],
   },
   {
+    key: 'surveys',
+    label: 'Anketler',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
     key: 'projects',
     label: 'Projeler',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],

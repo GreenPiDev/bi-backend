@@ -52,6 +52,7 @@ import { ProductImportsModule } from './modules/product-imports/product-imports.
 import { ProductListsModule } from './modules/product-lists/product-lists.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { PublicSurveysModule } from './modules/public-surveys/public-surveys.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { QueryModule } from './modules/query/query.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
@@ -62,6 +63,7 @@ import { SalesOrdersModule } from './modules/sales-orders/sales-orders.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
+import { SurveysModule } from './modules/surveys/surveys.module';
 import { StockItemsModule } from './modules/stock-items/stock-items.module';
 import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -128,6 +130,8 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     QuoteImportsModule,
     QuoteTemplatesModule,
     PostSaleCasesModule,
+    SurveysModule,
+    PublicSurveysModule,
     ProjectsModule,
     PurchaseOrdersModule,
     SalesOrdersModule,

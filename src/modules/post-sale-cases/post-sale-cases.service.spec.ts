@@ -42,6 +42,9 @@ function createPrisma(row: unknown = createCaseRow()) {
         .fn()
         .mockResolvedValue({ id: 'contact-1', accountId: 'account-1' }),
     },
+    survey: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'survey-1', isActive: true }),
+    },
     feedbackSurvey: {
       update: vi.fn().mockResolvedValue({}),
     },
@@ -149,21 +152,27 @@ describe('PostSaleCasesService', () => {
     expect(result.status).toBe('GERI_BILDIRIM_ALINDI');
   });
 
-  it('sendSurvey: contactId hic verilmemisse CONTACT_REQUIRED firlatir', async () => {
-    const prisma = createPrisma(createCaseRow({ contactId: null }));
+  it('sendSurvey: secilen anket bulunamaz/pasifse SURVEY_NOT_FOUND firlatir', async () => {
+    const prisma = createPrisma(createCaseRow());
+    prisma.survey.findFirst.mockResolvedValue(null);
     const service = new PostSaleCasesService(
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
       fakeCache,
     );
-    await expect(service.sendSurvey('psc-1', {})).rejects.toMatchObject({
-      code: 'CONTACT_REQUIRED',
-    });
+    await expect(
+      service.sendSurvey('psc-1', {
+        surveyId: 'survey-1',
+        recipientKind: 'EMAIL',
+        recipientName: 'Ahmet',
+        recipientEmail: 'ahmet@example.com',
+      }),
+    ).rejects.toMatchObject({ code: 'SURVEY_NOT_FOUND' });
   });
 
-  it('sendSurvey: verilen contactId baska bir firmaya aitse CONTACT_ACCOUNT_MISMATCH firlatir', async () => {
-    const prisma = createPrisma(createCaseRow({ contactId: null }));
+  it('sendSurvey: CONTACT modunda verilen contactId baska bir firmaya aitse CONTACT_ACCOUNT_MISMATCH firlatir', async () => {
+    const prisma = createPrisma(createCaseRow());
     prisma.contact.findFirst.mockResolvedValue({
       id: 'contact-2',
       accountId: 'baska-firma',
@@ -175,43 +184,89 @@ describe('PostSaleCasesService', () => {
       fakeCache,
     );
     await expect(
-      service.sendSurvey('psc-1', { contactId: 'contact-2' }),
+      service.sendSurvey('psc-1', {
+        surveyId: 'survey-1',
+        recipientKind: 'CONTACT',
+        contactId: 'contact-2',
+        recipientName: 'Ahmet',
+        recipientEmail: 'ahmet@example.com',
+      }),
     ).rejects.toMatchObject({ code: 'CONTACT_ACCOUNT_MISMATCH' });
   });
 
-  it('sendSurvey: gecerli contactId verilince case guncellenir ve anket kuyruguna eklenir', async () => {
-    const prisma = createPrisma(createCaseRow({ contactId: null }));
+  it('sendSurvey: CONTACT modunda gecerli kisiyle anket kuyruguna eklenir', async () => {
+    const prisma = createPrisma(createCaseRow());
     const service = new PostSaleCasesService(
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
       fakeCache,
     );
-    await service.sendSurvey('psc-1', { contactId: 'contact-1' });
-
-    expect(prisma.postSaleCase.update).toHaveBeenCalledWith({
-      where: { id: 'psc-1' },
-      data: { contactId: 'contact-1' },
+    await service.sendSurvey('psc-1', {
+      surveyId: 'survey-1',
+      recipientKind: 'CONTACT',
+      contactId: 'contact-1',
+      recipientName: 'Ahmet',
+      recipientEmail: 'ahmet@example.com',
     });
+
     expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
       postSaleCaseId: 'psc-1',
+      surveyId: 'survey-1',
+      recipientKind: 'CONTACT',
+      contactId: 'contact-1',
+      recipientName: 'Ahmet',
+      recipientEmail: 'ahmet@example.com',
+      fromEmail: null,
     });
   });
 
-  it('sendSurvey: case zaten contactId tasiyorsa resend sayilir, tekrar dogrulama yapmaz', async () => {
-    const prisma = createPrisma(createCaseRow({ contactId: 'contact-1' }));
+  it('sendSurvey: fromEmail verilince oldugu gibi kuyruga tasinir', async () => {
+    const prisma = createPrisma(createCaseRow());
     const service = new PostSaleCasesService(
       prisma as never,
       fakeAudit,
       fakeSurveyQueue,
       fakeCache,
     );
-    await service.sendSurvey('psc-1', {});
+    await service.sendSurvey('psc-1', {
+      surveyId: 'survey-1',
+      recipientKind: 'EMAIL',
+      recipientName: 'Ahmet',
+      recipientEmail: 'ahmet@example.com',
+      fromEmail: 'ozel@acme.com',
+    });
+
+    expect(surveyQueueAdd).toHaveBeenCalledWith(
+      'send-post-sale-survey',
+      expect.objectContaining({ fromEmail: 'ozel@acme.com' }),
+    );
+  });
+
+  it('sendSurvey: EMAIL modunda kisi dogrulamasi yapilmadan anket kuyruguna eklenir', async () => {
+    const prisma = createPrisma(createCaseRow());
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+    await service.sendSurvey('psc-1', {
+      surveyId: 'survey-1',
+      recipientKind: 'EMAIL',
+      recipientName: 'Ahmet',
+      recipientEmail: 'ahmet@example.com',
+    });
 
     expect(prisma.contact.findFirst).not.toHaveBeenCalled();
-    expect(prisma.postSaleCase.update).not.toHaveBeenCalled();
     expect(surveyQueueAdd).toHaveBeenCalledWith('send-post-sale-survey', {
       postSaleCaseId: 'psc-1',
+      surveyId: 'survey-1',
+      recipientKind: 'EMAIL',
+      contactId: null,
+      recipientName: 'Ahmet',
+      recipientEmail: 'ahmet@example.com',
+      fromEmail: null,
     });
   });
 

@@ -615,7 +615,17 @@ async function main(): Promise<void> {
           pageSize: 20,
         });
         if (postSaleList.data.length > 0) {
-          await postSaleCases.sendSurvey(postSaleList.data[0]!.id, {});
+          const demoSurvey = await prisma.survey.findFirst({
+            where: { tenantId: TENANT_ID, isActive: true },
+          });
+          if (demoSurvey) {
+            await postSaleCases.sendSurvey(postSaleList.data[0]!.id, {
+              surveyId: demoSurvey.id,
+              recipientKind: 'EMAIL',
+              recipientName: 'Demo Musteri',
+              recipientEmail: 'demo-musteri@example.com',
+            });
+          }
           if (postSaleList.data.length > 1) {
             await postSaleCases.markFeedback(postSaleList.data[1]!.id, {
               responseNote: 'Musteri memnun, tekrar is birligi yapmak istiyor.',

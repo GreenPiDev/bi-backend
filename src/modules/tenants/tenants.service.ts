@@ -109,6 +109,27 @@ export const DEFAULT_REMINDER_TYPE_OPTIONS = [
   'TOPLANTI',
 ] as const;
 
+/** Anket sablonlari genislemesi (kullanici talebi, 2026-10-20): her yeni tenant
+ * bos bir /satis-sonrasi?tab=surveys ile degil, 3 soru tipini (LIKERT/MULTIPLE_CHOICE/
+ * OPEN_ENDED) gosteren hazir bir ornek anketle baslar - DEFAULT_*_OPTIONS listeleriyle
+ * ayni "bos ekran yerine ornek" gerekcesi. */
+export const DEFAULT_SURVEY_NAME = 'Memnuniyet Anketi';
+export const DEFAULT_SURVEY_QUESTIONS = [
+  {
+    type: 'LIKERT' as const,
+    text: 'Genel olarak hizmetimizden ne kadar memnun kaldınız?',
+  },
+  {
+    type: 'MULTIPLE_CHOICE' as const,
+    text: 'Siparişiniz zamanında teslim edildi mi?',
+    options: ['Evet, zamanında', 'Hafif gecikme oldu', 'Önemli gecikme oldu'],
+  },
+  {
+    type: 'OPEN_ENDED' as const,
+    text: 'Eklemek istediğiniz görüş veya önerileriniz var mı?',
+  },
+];
+
 export interface TenantSummary {
   id: string;
   name: string;
@@ -241,7 +262,7 @@ export class TenantsService {
             isBasic: true,
           },
         });
-        await tx.user.create({
+        const adminUser = await tx.user.create({
           data: {
             tenantId,
             email: dto.adminEmail,
@@ -294,6 +315,29 @@ export class TenantsService {
             tenantId,
             label,
           })),
+        });
+        await tx.survey.create({
+          data: {
+            tenantId,
+            name: DEFAULT_SURVEY_NAME,
+            createdById: adminUser.id,
+            questions: {
+              create: DEFAULT_SURVEY_QUESTIONS.map((question, index) => ({
+                type: question.type,
+                text: question.text,
+                ordinal: index,
+                options:
+                  'options' in question && question.options
+                    ? {
+                        create: question.options.map((label, optionIndex) => ({
+                          label,
+                          ordinal: optionIndex,
+                        })),
+                      }
+                    : undefined,
+              })),
+            },
+          },
         });
         return createdTenant;
       });

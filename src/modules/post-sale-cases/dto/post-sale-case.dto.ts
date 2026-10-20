@@ -23,11 +23,37 @@ export const PostSaleCaseQuerySchema = ListQuerySchema.extend({
 });
 export type PostSaleCaseQueryDto = z.infer<typeof PostSaleCaseQuerySchema>;
 
-/** S3: case'de contactId zaten varsa gonderilmeyebilir (resend), yoksa zorunludur -
- * bu kural DTO'da degil serviste kontrol edilir. */
-export const SendPostSaleSurveySchema = z.object({
-  contactId: z.string().uuid().optional(),
-});
+/** S3 (2026-10-20 revizyonu, bkz. docs/VARSAYIMLAR.md): artik hangi Survey sablonunun
+ * gonderilecegi + aliciyi (CONTACT: firmanin bir kontagi, email duzenlenebilir / EMAIL:
+ * elle girilen ad+mail) her gonderimde aciklamak gerekiyor - eski "case'de contactId
+ * varsa resend" kisayolu kalkti, her gonderim recipientName/recipientEmail'i acikca tasir. */
+export const SendPostSaleSurveySchema = z
+  .object({
+    surveyId: z.string().uuid(),
+    recipientKind: z.enum(['CONTACT', 'EMAIL']),
+    contactId: z.string().uuid().optional(),
+    recipientName: z
+      .string()
+      .trim()
+      .min(1, 'Alici adi bos birakilamaz.')
+      .max(200),
+    recipientEmail: z
+      .string()
+      .trim()
+      .email('Gecerli bir e-posta adresi giriniz.'),
+    /** Kullanici talebi (2026-10-20): varsayilan olarak Tenant.email gelir ama
+     * /satis-sonrasi/:id ekraninda gonderim bazinda override edilebilir - bkz.
+     * send-post-sale-survey.processor.ts (MailService.replyTo). */
+    fromEmail: z
+      .string()
+      .trim()
+      .email('Gecerli bir e-posta adresi giriniz.')
+      .optional(),
+  })
+  .refine((dto) => dto.recipientKind !== 'CONTACT' || Boolean(dto.contactId), {
+    message: 'Kisi secilmelidir.',
+    path: ['contactId'],
+  });
 export type SendPostSaleSurveyDto = z.infer<typeof SendPostSaleSurveySchema>;
 
 export const MarkPostSaleFeedbackSchema = z.object({

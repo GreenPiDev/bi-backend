@@ -123,6 +123,13 @@ enum NotificationType {
    * CONTACT_INACTIVITY_ALERT ile ayni "tenant genelinde yayin" deseni.
    */
   QUOTE_REVISION_REQUESTED
+  /**
+   * S2 (bkz. docs/VARSAYIMLAR.md, 2026-10-20 revizyonu): PostSaleCase.reminderAt
+   * gecince (check-post-sale-followup.processor.ts) satis siparisini olusturan
+   * temsilciye gider - eskiden mail ("musteri memnun mu kontrol et") giderdi, artik
+   * in-app bildirim ("X sirketine anket gonderilmesi gerekiyor").
+   */
+  POST_SALE_SURVEY_REMINDER
 }
 
 enum ContactStatus {
@@ -287,6 +294,8 @@ model Tenant {
   quoteTemplates              QuoteTemplate[]
   postSaleCases               PostSaleCase[]
   feedbackSurveys             FeedbackSurvey[]
+  surveys                     Survey[]
+  surveyResponses             SurveyResponse[]
   projects                    Project[]
   projectAttachments          ProjectAttachment[]
   salesOrders                 SalesOrder[]
@@ -1529,28 +1538,132 @@ model PostSaleCase {
 }
 
 /**
- * S3 (bkz. docs/VARSAYIMLAR.md V28): anket SADECE e-posta olarak gonderilir (mevcut
- * text-only MailService), yanit temsilci tarafindan elle isaretlenir - tokenli bir public
- * link/form YAZILMADI. Bu yuzden taslak semadaki `response Json` yerine serbest metin
- * `responseNote String?` yeterli gorulmustur (Q7/ProductDiscountPolicy'deki 1:1-basitlestirme
- * kararlariyla ayni gerekce - bkz. docs/VARSAYIMLAR.md). postSaleCaseId @unique: bir vaka
- * icin en fazla bir anket kaydi, yeniden gonderim sentAt'i gunceller (resend).
+ * Anket sablonlari (kullanici talebi, 2026-10-20 sonrasi genisleme - bkz.
+ * docs/VARSAYIMLAR.md V28 revizyonu). Her tenant kendi anketlerini olusturur,
+ * duzenler; bir anket birden fazla FeedbackSurvey "gonderim"inde yeniden kullanilabilir.
+ * isActive=false olan anketler gonderim ekraninda secilemez ama gecmis gonderimler
+ * (FeedbackSurvey.surveyId) bozulmaz.
+ */
+model Survey {
+  id          String    @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  questions       SurveyQuestion[]
+  feedbackSurveys FeedbackSurvey[]
+
+  @@index([tenantId])
+  @@map("crm_surveys")
+}
+
+enum SurveyQuestionType {
+  MULTIPLE_CHOICE
+  OPEN_ENDED
+  /**
+   * Sabit 5'li olcek (kullanici karariyla - soru bazinda ayarlanabilir degil).
+   */
+  LIKERT
+}
+
+model SurveyQuestion {
+  id       String             @id @default(uuid())
+  surveyId String
+  type     SurveyQuestionType
+  text     String
+  ordinal  Int
+  required Boolean            @default(true)
+
+  survey    Survey                 @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  options   SurveyQuestionOption[]
+  responses SurveyResponse[]
+
+  @@index([surveyId])
+  @@map("crm_survey_questions")
+}
+
+/**
+ * Sadece type=MULTIPLE_CHOICE sorularda anlamli.
+ */
+model SurveyQuestionOption {
+  id         String @id @default(uuid())
+  questionId String
+  label      String
+  ordinal    Int
+
+  question SurveyQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers  SurveyResponse[]
+
+  @@index([questionId])
+  @@map("crm_survey_question_options")
+}
+
+enum SurveyRecipientKind {
+  CONTACT
+  EMAIL
+}
+
+/**
+ * S3 (bkz. docs/VARSAYIMLAR.md V28, 2026-10-20 revizyonu): anket artik gercek bir
+ * Survey sablonuna (surveyId) baglanir ve musteri tokenli bir public linkten
+ * (responseToken) kimlik dogrulamasiz yanitlayabilir (bkz. modules/public-surveys).
+ * recipientKind=CONTACT ise contactId dolu olur ama recipientName/recipientEmail
+ * yine de ayri tutulur - kullanici kisinin mailini bu gonderime ozel degistirebilir
+ * (Contact.email'i MUTLAMAZ). recipientKind=EMAIL ise contactId null kalir.
+ * postSaleCaseId @unique: bir vaka icin en fazla bir anket kaydi, yeniden gonderim
+ * (resend) sentAt/responseToken'i gunceller, SurveyResponse'lari SIFIRLAMAZ (eski
+ * yanitlar responseToken degisince zaten erisilemez hale gelir, DB'de kalir).
  */
 model FeedbackSurvey {
-  id             String    @id @default(uuid())
+  id             String              @id @default(uuid())
   tenantId       String
-  postSaleCaseId String    @unique
-  contactId      String
+  postSaleCaseId String              @unique
+  surveyId       String
+  recipientKind  SurveyRecipientKind
+  contactId      String?
+  recipientName  String
+  recipientEmail String
+  responseToken  String              @unique
   sentAt         DateTime
   respondedAt    DateTime?
   responseNote   String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime            @default(now())
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id])
-  postSaleCase PostSaleCase @relation(fields: [postSaleCaseId], references: [id])
-  contact      Contact      @relation(fields: [contactId], references: [id])
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  postSaleCase PostSaleCase     @relation(fields: [postSaleCaseId], references: [id])
+  survey       Survey           @relation(fields: [surveyId], references: [id])
+  contact      Contact?         @relation(fields: [contactId], references: [id])
+  responses    SurveyResponse[]
 
   @@map("crm_feedback_surveys")
+}
+
+/**
+ * Bir soruya verilen tek bir yanit - public yanitlama formundan (Faz 4) yazilir.
+ */
+model SurveyResponse {
+  id                String   @id @default(uuid())
+  tenantId          String
+  feedbackSurveyId  String
+  questionId        String
+  answerText        String?
+  answerOptionId    String?
+  answerLikertValue Int?
+  createdAt         DateTime @default(now())
+
+  tenant         Tenant                @relation(fields: [tenantId], references: [id])
+  feedbackSurvey FeedbackSurvey        @relation(fields: [feedbackSurveyId], references: [id], onDelete: Cascade)
+  question       SurveyQuestion        @relation(fields: [questionId], references: [id])
+  answerOption   SurveyQuestionOption? @relation(fields: [answerOptionId], references: [id])
+
+  @@index([feedbackSurveyId])
+  @@map("crm_survey_responses")
 }
 
 /**

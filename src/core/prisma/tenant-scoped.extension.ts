@@ -39,6 +39,8 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'QuoteTemplate',
   'PostSaleCase',
   'FeedbackSurvey',
+  'Survey',
+  'SurveyResponse',
   'Project',
   'ProjectAttachment',
   'SalesOrder',
@@ -73,6 +75,7 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   'Project',
   'PurchaseOrder',
   'Drawing',
+  'Survey',
 ]);
 
 const READ_OPERATIONS = new Set([

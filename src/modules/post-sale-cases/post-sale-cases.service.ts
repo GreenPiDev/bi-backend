@@ -8,6 +8,9 @@ import type {
   PostSaleCase,
   Quote,
   SalesOrder,
+  SurveyQuestion,
+  SurveyQuestionOption,
+  SurveyResponse,
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
 import { AppException } from '../../core/errors/app.exception';
@@ -42,15 +45,28 @@ const POST_SALE_CASE_INCLUDE = {
   quote: true,
   account: true,
   contact: true,
-  feedbackSurvey: true,
+  feedbackSurvey: {
+    include: {
+      responses: {
+        orderBy: { question: { ordinal: 'asc' as const } },
+        include: { question: true, answerOption: true },
+      },
+    },
+  },
 } as const;
+
+export type SurveyResponseWithQuestion = SurveyResponse & {
+  question: SurveyQuestion;
+  answerOption: SurveyQuestionOption | null;
+};
 
 export type PostSaleCaseWithDetails = PostSaleCase & {
   salesOrder: SalesOrder;
   quote: Quote | null;
   account: Account;
   contact: Contact | null;
-  feedbackSurvey: FeedbackSurvey | null;
+  feedbackSurvey:
+    (FeedbackSurvey & { responses: SurveyResponseWithQuestion[] }) | null;
   status: PostSaleCaseStatus;
 };
 
@@ -169,25 +185,32 @@ export class PostSaleCasesService {
     return { ...postSaleCase, status: computeStatus(postSaleCase) };
   }
 
-  /** S3: case'de contactId zaten varsa (otomatik doldurulmus veya daha once elle
-   * secilmis) resend sayilir; yoksa dto.contactId zorunludur ve hesaba ait olmalidir. */
+  /** S3 (2026-10-20 revizyonu): her gonderimde hangi Survey sablonu + kime (kisi
+   * secilerek veya elle ad/mail girilerek) gonderilecegi acikca belirtilir. CONTACT
+   * modunda secilen kisinin bu firmaya ait oldugu dogrulanir, ama Contact.email
+   * degistirilmez - recipientEmail bu gonderime ozel, kullanici tarafindan
+   * duzenlenebilir bir kopyadir. */
   async sendSurvey(
     id: string,
     dto: SendPostSaleSurveyDto,
   ): Promise<PostSaleCaseWithDetails> {
     const existing = await this.getById(id);
-    const contactId = existing.contactId ?? dto.contactId;
-    if (!contactId) {
+
+    const survey = await this.prisma.survey.findFirst({
+      where: { id: dto.surveyId, isActive: true },
+    });
+    if (!survey) {
       throw new AppException(
-        'CONTACT_REQUIRED',
-        'Anket gonderebilmek icin bir kisi secilmelidir.',
+        'SURVEY_NOT_FOUND',
+        'Secilen anket bulunamadi veya pasif.',
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    if (!existing.contactId) {
+    let contactId: string | null = null;
+    if (dto.recipientKind === 'CONTACT') {
       const contact = await this.prisma.contact.findFirst({
-        where: { id: contactId },
+        where: { id: dto.contactId },
       });
       if (!contact || contact.accountId !== existing.accountId) {
         throw new AppException(
@@ -196,20 +219,23 @@ export class PostSaleCasesService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      await this.prisma.postSaleCase.update({
-        where: { id },
-        data: { contactId },
-      });
+      contactId = contact.id;
     }
 
     await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
       postSaleCaseId: id,
+      surveyId: dto.surveyId,
+      recipientKind: dto.recipientKind,
+      contactId,
+      recipientName: dto.recipientName,
+      recipientEmail: dto.recipientEmail,
+      fromEmail: dto.fromEmail ?? null,
     });
     await this.audit.log({
       action: 'UPDATE',
       entity: 'PostSaleCase',
       entityId: id,
-      meta: { action: 'send-survey' },
+      meta: { action: 'send-survey', surveyId: dto.surveyId },
     });
     await this.cache.invalidate();
 
