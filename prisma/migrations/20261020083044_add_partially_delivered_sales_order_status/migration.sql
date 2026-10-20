@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "SalesOrderStatus" ADD VALUE 'PARTIALLY_DELIVERED';

@@ -6,6 +6,7 @@ export const SalesOrderStatusSchema = z.enum([
   'PROCESSING',
   'READY_FOR_SHIPMENT',
   'SHIPPED',
+  'PARTIALLY_DELIVERED',
   'DELIVERED',
   'COMPLETED',
   'CANCELLED',
