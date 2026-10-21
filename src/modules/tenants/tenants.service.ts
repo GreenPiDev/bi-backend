@@ -296,7 +296,11 @@ export class TenantsService {
           data: DEFAULT_TITLE_OPTIONS.map((label) => ({ tenantId, label })),
         });
         await tx.unitOption.createMany({
-          data: DEFAULT_UNIT_OPTIONS.map((label) => ({ tenantId, label })),
+          data: DEFAULT_UNIT_OPTIONS.map((label) => ({
+            tenantId,
+            label,
+            isDefault: label === 'Adet',
+          })),
         });
         await tx.paymentMethodOption.createMany({
           data: DEFAULT_PAYMENT_METHOD_OPTIONS.map((label) => ({

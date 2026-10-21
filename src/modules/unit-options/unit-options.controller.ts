@@ -49,6 +49,12 @@ export class UnitOptionsController {
     return this.unitOptions.update(id, dto);
   }
 
+  @Post(':id/set-default')
+  @RequiresPermission('settings', 'UPDATE')
+  setDefault(@Param('id') id: string): Promise<UnitOption> {
+    return this.unitOptions.setDefault(id);
+  }
+
   @Delete(':id')
   @RequiresPermission('settings', 'UPDATE')
   @HttpCode(204)

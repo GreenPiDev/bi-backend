@@ -746,6 +746,7 @@ model UnitOption {
   id        String   @id @default(uuid())
   tenantId  String
   label     String
+  isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])

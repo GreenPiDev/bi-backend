@@ -99,6 +99,37 @@ export class UnitOptionsService {
     }
   }
 
+  async setDefault(id: string): Promise<UnitOption> {
+    const existing = await this.prisma.unitOption.findFirst({
+      where: { id },
+    });
+    if (!existing) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Birim bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const option = await this.prisma.$transaction(async (tx) => {
+      await tx.unitOption.updateMany({
+        where: { isDefault: true, id: { not: id } },
+        data: { isDefault: false },
+      });
+      return tx.unitOption.update({
+        where: { id },
+        data: { isDefault: true },
+      });
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'UnitOption',
+      entityId: id,
+      meta: { setDefault: true },
+    });
+    await this.emitUpdated();
+    return option;
+  }
+
   async remove(id: string): Promise<void> {
     const option = await this.prisma.unitOption.findFirst({
       where: { id },
