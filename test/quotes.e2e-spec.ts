@@ -267,7 +267,7 @@ describe('Quotes (e2e)', () => {
     expect(res.body.status).toBe('REJECTED');
   });
 
-  it('POST /exports/quote/:id/pdf: onay bekleyen teklif icin 409 QUOTE_NOT_READY doner (Playwright cagrilmadan once reddedilir)', async () => {
+  it('GET /exports/quote/:id/pdf: onay bekleyen teklif icin 409 QUOTE_NOT_READY doner (Playwright cagrilmadan once reddedilir)', async () => {
     const createRes = await request(app.getHttpServer())
       .post('/api/v1/quotes')
       .set('Cookie', cookiesA)
@@ -285,7 +285,7 @@ describe('Quotes (e2e)', () => {
     expect(createRes.body.status).toBe('PENDING_APPROVAL');
 
     const res = await request(app.getHttpServer())
-      .post(`/api/v1/exports/quote/${createRes.body.id}/pdf`)
+      .get(`/api/v1/exports/quote/${createRes.body.id}/pdf`)
       .set('Cookie', cookiesA);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('QUOTE_NOT_READY');

@@ -10,6 +10,8 @@ import { TokenService } from '../auth/token.service';
 import { WidgetsService } from '../widgets/widgets.service';
 import { buildCsv } from './csv';
 import { DashboardPdfService } from './dashboard-pdf.service';
+import { setPdfTitleMetadata } from './pdf-metadata';
+import { buildQuotePdfFilename } from './quote-pdf-filename';
 import { QuotePdfService } from './quote-pdf.service';
 import { isKnownReportTab, ReportPdfService } from './report-pdf.service';
 
@@ -68,6 +70,13 @@ export class ExportsService {
     };
   }
 
+  /** Teklif PDF export butonlarinin ucunun indirecegi dosya adi (uzantisiz) -
+   * controller bu temele ".pdf"/"-maliyet.pdf"/"-grafikler.pdf" ekler. */
+  async getQuotePdfFileName(quoteId: string): Promise<string> {
+    const quote = await this.quotes.getById(quoteId);
+    return buildQuotePdfFilename(quote.quoteNumber, quote.account.name);
+  }
+
   async exportWidgetCsv(widgetId: string, tenantId: string): Promise<string> {
     const widget = await this.widgets.findByIdAcrossDashboards(widgetId);
     const querySpec = widget.querySpec as unknown as QuerySpec;
@@ -110,14 +119,20 @@ export class ExportsService {
       quoteId,
       user.tenantId,
     );
-    return this.quotePdf.render(quoteId, accessToken, {
+    const pdf = await this.quotePdf.render(quoteId, accessToken, {
       branded: quote.templateId !== null,
       header,
       company,
     });
+    return setPdfTitleMetadata(
+      pdf,
+      buildQuotePdfFilename(quote.quoteNumber, quote.account.name),
+    );
   }
 
-  private async requireExportableQuote(quoteId: string): Promise<void> {
+  private async requireExportableQuote(
+    quoteId: string,
+  ): Promise<Awaited<ReturnType<QuotesService['getById']>>> {
     const quote = await this.quotes.getById(quoteId);
     if (!QUOTE_EXPORTABLE_STATUSES.has(quote.status)) {
       throw new AppException(
@@ -126,6 +141,7 @@ export class ExportsService {
         HttpStatus.CONFLICT,
       );
     }
+    return quote;
   }
 
   /** /teklifler/:id?tab=cost ekraninin kendi PDF export'u - ana teklif PDF'inden
@@ -134,14 +150,20 @@ export class ExportsService {
     quoteId: string,
     user: RequestUser,
   ): Promise<Buffer> {
-    await this.requireExportableQuote(quoteId);
+    const quote = await this.requireExportableQuote(quoteId);
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,
       roleIds: user.roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
     });
-    return this.quotePdf.render(quoteId, accessToken, { tab: 'cost' });
+    const pdf = await this.quotePdf.render(quoteId, accessToken, {
+      tab: 'cost',
+    });
+    return setPdfTitleMetadata(
+      pdf,
+      `${buildQuotePdfFilename(quote.quoteNumber, quote.account.name)}-maliyet`,
+    );
   }
 
   /** /teklifler/:id?tab=charts ekraninin kendi PDF export'u - ayni gerekce. */
@@ -149,14 +171,20 @@ export class ExportsService {
     quoteId: string,
     user: RequestUser,
   ): Promise<Buffer> {
-    await this.requireExportableQuote(quoteId);
+    const quote = await this.requireExportableQuote(quoteId);
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,
       roleIds: user.roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
     });
-    return this.quotePdf.render(quoteId, accessToken, { tab: 'charts' });
+    const pdf = await this.quotePdf.render(quoteId, accessToken, {
+      tab: 'charts',
+    });
+    return setPdfTitleMetadata(
+      pdf,
+      `${buildQuotePdfFilename(quote.quoteNumber, quote.account.name)}-grafikler`,
+    );
   }
 
   async exportReportsPdf(tab: string, user: RequestUser): Promise<Buffer> {

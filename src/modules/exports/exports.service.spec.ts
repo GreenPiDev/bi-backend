@@ -1,4 +1,9 @@
 import { ExportsService } from './exports.service';
+import { setPdfTitleMetadata } from './pdf-metadata';
+
+vi.mock('./pdf-metadata', () => ({
+  setPdfTitleMetadata: vi.fn((buf: Buffer) => Promise.resolve(buf)),
+}));
 
 const WIDGET_ID = '11111111-1111-1111-1111-111111111111';
 const DASHBOARD_ID = '22222222-2222-2222-2222-222222222222';
@@ -63,6 +68,7 @@ function createQuotes(
       templateId,
       quoteDate: '2026-09-23T00:00:00.000Z',
       quoteNumber: 'TEK-2026-09-23-001',
+      account: { name: '3AB Enerji ve Sanayi Tesisleri Ticaret A.Ş.' },
     }),
   };
 }
@@ -158,6 +164,10 @@ describe('ExportsService', () => {
         }),
         company: expect.objectContaining({ address: 'Adres 1' }),
       }),
+    );
+    expect(setPdfTitleMetadata).toHaveBeenCalledWith(
+      expect.anything(),
+      'TEK-2026-09-23-001-3AB-ENERJI-VE-SANAYI-TESISLERI-TICARET-A.S',
     );
     expect(pdf.toString()).toBe('quote-pdf-bytes');
   });

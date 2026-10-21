@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -60,50 +61,65 @@ export class ExportsController {
     res.send(pdf);
   }
 
-  @Post('quote/:id/pdf')
+  // GET (POST degil): bu uc, dogrudan tarayici sekme navigasyonuyla acilir
+  // (bkz. bi-frontend/src/lib/download.ts) - blob: URL'ye fetch'leyip sonra
+  // tabHandle'a yazma deseni KASITLI OLARAK birakildi, cunku Chrome'un PDF
+  // goruntuleyicisi blob: URL'lerde "kaydet" tiklaninca dosya adini PDF'in
+  // Info/Title metadata'sindan DEGIL, blob'un kendi rastgele UUID'sinden
+  // aliyor (denendi, calismadi). Gercek bir HTTP kaynagi olarak servis
+  // edilince Content-Disposition'daki filename Chrome tarafindan dogru
+  // kullaniliyor. `inline` (attachment degil): sekmede goruntulensin, "kaydet"
+  // kullaniciya birakilsin.
+  @Get('quote/:id/pdf')
   @RequiresPermission('quotes', 'EXPORT')
-  @HttpCode(HttpStatus.OK)
   async exportQuotePdf(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ): Promise<void> {
-    const pdf = await this.exports.exportQuotePdf(id, user);
+    const [pdf, fileName] = await Promise.all([
+      this.exports.exportQuotePdf(id, user),
+      this.exports.getQuotePdfFileName(id),
+    ]);
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="teklif-${id}.pdf"`,
+      'Content-Disposition': `inline; filename="${fileName}.pdf"`,
     });
     res.send(pdf);
   }
 
-  @Post('quote/:id/cost-pdf')
+  @Get('quote/:id/cost-pdf')
   @RequiresPermission('quotes', 'EXPORT')
-  @HttpCode(HttpStatus.OK)
   async exportQuoteCostPdf(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ): Promise<void> {
-    const pdf = await this.exports.exportQuoteCostPdf(id, user);
+    const [pdf, fileName] = await Promise.all([
+      this.exports.exportQuoteCostPdf(id, user),
+      this.exports.getQuotePdfFileName(id),
+    ]);
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="teklif-${id}-maliyet.pdf"`,
+      'Content-Disposition': `inline; filename="${fileName}-maliyet.pdf"`,
     });
     res.send(pdf);
   }
 
-  @Post('quote/:id/charts-pdf')
+  @Get('quote/:id/charts-pdf')
   @RequiresPermission('quotes', 'EXPORT')
-  @HttpCode(HttpStatus.OK)
   async exportQuoteChartsPdf(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ): Promise<void> {
-    const pdf = await this.exports.exportQuoteChartsPdf(id, user);
+    const [pdf, fileName] = await Promise.all([
+      this.exports.exportQuoteChartsPdf(id, user),
+      this.exports.getQuotePdfFileName(id),
+    ]);
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="teklif-${id}-grafikler.pdf"`,
+      'Content-Disposition': `inline; filename="${fileName}-grafikler.pdf"`,
     });
     res.send(pdf);
   }
