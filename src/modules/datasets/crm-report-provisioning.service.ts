@@ -23,6 +23,13 @@ interface CrmReportDatasetSeed {
  * karşılık gelir. "id" alanları her zaman gizli (isVisible:false) tutulur - sadece
  * `{field:'id', agg:'count'}` ile satır/kayıt sayısı sorgulamak için var, kullanıcıya
  * görünen bir kolon değil (bkz. crm_quote_line_report'taki quoteId ile aynı desen).
+ *
+ * UYARI (bkz. docs/VARSAYIMLAR.md V78): `crm_quote_line_report` TEK BAŞINA satır/kalem
+ * bazlıdır (bir teklifte birden fazla ürün satırı olabilir) - diğer 9 dataset'in aksine
+ * burada "id" alanı yerine `quoteId` gizli alanı var ve `{field:'quoteId', agg:'count'}`
+ * SATIR sayısını (dolayısıyla yanlış, şişirilmiş bir "teklif sayısı") verir. Tekil TEKLİF
+ * sayısı için `agg:'count_distinct'` ZORUNLU - bu, label'da ve system prompt'ta
+ * (chatbot-context.ts) açıkça yazılı, LLM'in varsayılan `count`'a düşmemesi için.
  */
 const CRM_REPORT_DATASETS: readonly CrmReportDatasetSeed[] = [
   {
@@ -32,7 +39,9 @@ const CRM_REPORT_DATASETS: readonly CrmReportDatasetSeed[] = [
       {
         sourceName: 'quoteId',
         name: 'quoteId',
-        label: 'Teklif Id',
+        label:
+          'Teklif Id (bu veri kümesi SATIR/KALEM bazlıdır - tekil TEKLİF SAYISI için ' +
+          'agg=count_distinct kullan, agg=count tüm ürün satırlarını sayar ve YANLIŞ sonuç verir)',
         type: 'STRING',
         role: 'DIMENSION',
         isVisible: false,
