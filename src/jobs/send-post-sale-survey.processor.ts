@@ -89,8 +89,7 @@ export class SendPostSaleSurveyProcessor extends WorkerHost {
 
     const referenceNumber =
       postSaleCase.quote?.quoteNumber ?? postSaleCase.salesOrder.orderNumber;
-    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
-    const link = `${frontendUrl}/anket/${responseToken}`;
+    const link = `${this.buildTenantFrontendUrl(postSaleCase.tenant.slug)}/anket/${responseToken}`;
 
     const tenantName = postSaleCase.tenant.name;
     const logoAttachment = await this.loadLogoAttachment(
@@ -128,6 +127,19 @@ export class SendPostSaleSurveyProcessor extends WorkerHost {
     });
 
     await this.postSaleCasesCache.invalidateForTenant(postSaleCase.tenantId);
+  }
+
+  /** Musteriye giden linkte, varsa tenant'a ozel subdomain'i kullanir
+   * (`{slug}.{TENANT_ROOT_DOMAIN}`, orn. greenpi.pilens.com.tr) - markali mail
+   * deneyiminin (fromName/logo) devami, kullanici Vercel'de tenant basina domain
+   * kurma pratigini zaten benimsemis durumda (bkz. kullanici geri bildirimi,
+   * 2026-10-23). TENANT_ROOT_DOMAIN bos ise (yerel gelistirme) FRONTEND_URL'e
+   * duser - login origin kisitlamasindaki ayni degiskeni (core/http/
+   * tenant-subdomain.ts) yeniden kullanir, yeni bir env eklenmedi. */
+  private buildTenantFrontendUrl(tenantSlug: string): string {
+    const rootDomain = this.config.get<string>('TENANT_ROOT_DOMAIN');
+    if (rootDomain) return `https://${tenantSlug}.${rootDomain}`;
+    return this.config.getOrThrow<string>('FRONTEND_URL');
   }
 
   /** Sirket logosu setliyse R2'den okuyup inline (cid) ek olarak hazirlar - mail

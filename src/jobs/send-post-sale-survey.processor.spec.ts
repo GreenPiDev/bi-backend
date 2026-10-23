@@ -1,9 +1,13 @@
 import { SendPostSaleSurveyProcessor } from './send-post-sale-survey.processor';
 
 const fakePostSaleCasesCache = { invalidateForTenant: vi.fn() } as never;
-const fakeConfig = {
-  getOrThrow: vi.fn().mockReturnValue('http://localhost:5173'),
-} as never;
+function createConfig(tenantRootDomain: string | undefined = undefined) {
+  return {
+    getOrThrow: vi.fn().mockReturnValue('http://localhost:5173'),
+    get: vi.fn().mockReturnValue(tenantRootDomain),
+  } as never;
+}
+const fakeConfig = createConfig();
 const fakeStorage = { download: vi.fn() } as never;
 
 function createCase(overrides: Partial<Record<string, unknown>> = {}) {
@@ -12,7 +16,7 @@ function createCase(overrides: Partial<Record<string, unknown>> = {}) {
     tenantId: 'tenant-1',
     salesOrder: { orderNumber: 'SAT-2026-10-19-001' },
     quote: { quoteNumber: 'TEK-2026-09-06-001' },
-    tenant: { name: 'ACME', email: 'destek@acme.com' },
+    tenant: { name: 'ACME', email: 'destek@acme.com', slug: 'acme' },
     ...overrides,
   };
 }
@@ -77,6 +81,25 @@ describe('SendPostSaleSurveyProcessor', () => {
           recipientEmail: 'ayse@example.com',
           responseToken: expect.any(String),
         }),
+      }),
+    );
+  });
+
+  it('TENANT_ROOT_DOMAIN setliyse linkte tenant slug subdomain olarak kullanilir', async () => {
+    const prisma = createPrisma();
+    const mail = { send: vi.fn().mockResolvedValue(undefined) };
+    const processor = new SendPostSaleSurveyProcessor(
+      prisma as never,
+      mail as never,
+      fakePostSaleCasesCache,
+      createConfig('pilens.com.tr'),
+      fakeStorage,
+    );
+    await processor.process(createJob());
+
+    expect(mail.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('https://acme.pilens.com.tr/anket/'),
       }),
     );
   });
