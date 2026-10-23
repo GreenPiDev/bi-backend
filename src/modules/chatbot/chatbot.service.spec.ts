@@ -99,6 +99,13 @@ function createPageModules() {
   return { getModuleKeysForPage: vi.fn().mockResolvedValue([]) };
 }
 
+function createConversations() {
+  return {
+    loadForChat: vi.fn().mockResolvedValue({ title: null, history: [] }),
+    appendExchange: vi.fn().mockResolvedValue({ assignedTitle: null }),
+  };
+}
+
 describe('ChatbotService', () => {
   it('gecerli run_query tool-call ini dogru tenantId ile QueryService.runQuery e delege eder', async () => {
     const runQuery = vi.fn().mockResolvedValue({
@@ -129,10 +136,11 @@ describe('ChatbotService', () => {
       createPermissions() as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'toplam satis ne kadar?', history: [] },
+      { message: 'toplam satis ne kadar?', conversationId: 'c1' },
       USER,
     );
 
@@ -173,10 +181,11 @@ describe('ChatbotService', () => {
       createPermissions() as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'yok alanini topla', history: [] },
+      { message: 'yok alanini topla', conversationId: 'c1' },
       USER,
     );
 
@@ -201,10 +210,11 @@ describe('ChatbotService', () => {
       createPermissions() as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'panolara git', history: [] },
+      { message: 'panolara git', conversationId: 'c1' },
       USER,
     );
 
@@ -229,10 +239,11 @@ describe('ChatbotService', () => {
       createPermissions({ isCompanyAdmin: false }) as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'ayarlara git', history: [] },
+      { message: 'ayarlara git', conversationId: 'c1' },
       USER,
     );
 
@@ -259,10 +270,11 @@ describe('ChatbotService', () => {
       createPermissions() as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'satis veri kumesinde neler var?', history: [] },
+      { message: 'satis veri kumesinde neler var?', conversationId: 'c1' },
       USER,
     );
 
@@ -295,10 +307,11 @@ describe('ChatbotService', () => {
       createPermissions() as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'olmayan veri kumesi', history: [] },
+      { message: 'olmayan veri kumesi', conversationId: 'c1' },
       USER,
     );
 
@@ -321,10 +334,11 @@ describe('ChatbotService', () => {
       createPermissions() as never,
       createRawPrisma() as never,
       createPageModules() as never,
+      createConversations() as never,
     );
 
     const result = await service.chat(
-      { message: 'panolara git', history: [] },
+      { message: 'panolara git', conversationId: 'c1' },
       USER,
     );
 

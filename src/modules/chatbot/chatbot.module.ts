@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { QueryModule } from '../query/query.module';
+import { ChatConversationsService } from './chat-conversations.service';
 import { ChatbotController } from './chatbot.controller';
 import { ChatbotService } from './chatbot.service';
 import { OPENAI_CLIENT } from './openai-client.token';
@@ -11,6 +12,7 @@ import { OPENAI_CLIENT } from './openai-client.token';
   controllers: [ChatbotController],
   providers: [
     ChatbotService,
+    ChatConversationsService,
     {
       provide: OPENAI_CLIENT,
       // baseURL verilirse (ör. Gemini'nin OpenAI-uyumlu ucu) farkli bir

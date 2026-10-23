@@ -13,6 +13,7 @@ import {
 } from '../../core/prisma/tenant-prisma.token';
 import { QuerySpec } from '../query/dto/query-spec.dto';
 import { QueryService } from '../query/query.service';
+import { ChatConversationsService } from './chat-conversations.service';
 import {
   buildDatasetSummaries,
   buildSystemPrompt,
@@ -58,9 +59,17 @@ export class ChatbotService {
     private readonly permissions: PermissionsService,
     private readonly rawPrisma: PrismaService,
     private readonly pageModules: PageModulesService,
+    private readonly conversations: ChatConversationsService,
   ) {}
 
   async chat(request: ChatRequest, user: RequestUser): Promise<ChatResponse> {
+    // Sahiplik kontrolu burada yapiliyor (bu kullanicinin konusmasi degilse 404) -
+    // bkz. docs/VARSAYIMLAR.md V77.
+    const { history } = await this.conversations.loadForChat(
+      request.conversationId,
+      user.id,
+    );
+
     const [datasets, dashboards] = await Promise.all([
       this.prisma.dataset.findMany({ include: { fields: true } }),
       this.prisma.dashboard.findMany({ select: { id: true, name: true } }),
@@ -72,7 +81,7 @@ export class ChatbotService {
         role: 'system',
         content: buildSystemPrompt(datasetSummaries, dashboards),
       },
-      ...request.history.map((item): ChatCompletionMessageParam => ({
+      ...history.map((item): ChatCompletionMessageParam => ({
         role: item.role,
         content: item.content,
       })),
@@ -94,7 +103,13 @@ export class ChatbotService {
 
       const toolCalls = responseMessage.tool_calls ?? [];
       if (toolCalls.length === 0) {
-        return { reply: responseMessage.content ?? '', navigateTo };
+        const reply = responseMessage.content ?? '';
+        const { assignedTitle } = await this.conversations.appendExchange(
+          request.conversationId,
+          request.message,
+          reply,
+        );
+        return { reply, navigateTo, title: assignedTitle };
       }
 
       for (const toolCall of toolCalls) {
@@ -117,7 +132,12 @@ export class ChatbotService {
       }
     }
 
-    return { reply: FALLBACK_REPLY, navigateTo: null };
+    const { assignedTitle } = await this.conversations.appendExchange(
+      request.conversationId,
+      request.message,
+      FALLBACK_REPLY,
+    );
+    return { reply: FALLBACK_REPLY, navigateTo: null, title: assignedTitle };
   }
 
   private async executeTool(

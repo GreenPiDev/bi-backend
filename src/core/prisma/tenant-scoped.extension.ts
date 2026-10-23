@@ -58,6 +58,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'DrawingPanelTemplate',
   'Drawing',
   'Note',
+  'ChatConversation',
 ]);
 
 /**
