@@ -1,5 +1,7 @@
 import { PublicSurveysService } from './public-surveys.service';
 
+const fakeStorage = { download: vi.fn() } as never;
+
 function createFeedbackSurvey(
   overrides: Partial<Record<string, unknown>> = {},
 ) {
@@ -9,6 +11,7 @@ function createFeedbackSurvey(
     postSaleCaseId: 'psc-1',
     responseToken: 'token-123',
     respondedAt: null,
+    tenant: { name: 'ACME', logoKey: null },
     survey: {
       name: 'Memnuniyet Anketi',
       description: 'Aciklama',
@@ -63,7 +66,7 @@ function createPrisma(feedbackSurvey: unknown = createFeedbackSurvey()) {
 describe('PublicSurveysService', () => {
   it('getByToken: token bulunamazsa TOKEN_NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     await expect(service.getByToken('yok')).rejects.toMatchObject({
       code: 'TOKEN_NOT_FOUND',
     });
@@ -71,7 +74,7 @@ describe('PublicSurveysService', () => {
 
   it('getByToken: gecerli token icin anket sablonunu (alreadyResponded=false) doner', async () => {
     const prisma = createPrisma();
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     const result = await service.getByToken('token-123');
 
     expect(result.surveyName).toBe('Memnuniyet Anketi');
@@ -87,14 +90,14 @@ describe('PublicSurveysService', () => {
     const prisma = createPrisma(
       createFeedbackSurvey({ respondedAt: new Date() }),
     );
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     const result = await service.getByToken('token-123');
     expect(result.alreadyResponded).toBe(true);
   });
 
   it('submit: token bulunamazsa TOKEN_NOT_FOUND firlatir', async () => {
     const prisma = createPrisma(null);
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     await expect(service.submit('yok', { answers: [] })).rejects.toMatchObject({
       code: 'TOKEN_NOT_FOUND',
     });
@@ -104,7 +107,7 @@ describe('PublicSurveysService', () => {
     const prisma = createPrisma(
       createFeedbackSurvey({ respondedAt: new Date() }),
     );
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     await expect(
       service.submit('token-123', { answers: [] }),
     ).rejects.toMatchObject({
@@ -114,7 +117,7 @@ describe('PublicSurveysService', () => {
 
   it('submit: zorunlu soru cevaplanmamissa VALIDATION_ERROR firlatir', async () => {
     const prisma = createPrisma();
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     await expect(
       service.submit('token-123', {
         answers: [{ questionId: 'q-mc', answerOptionId: 'opt-1' }],
@@ -124,7 +127,7 @@ describe('PublicSurveysService', () => {
 
   it("submit: MULTIPLE_CHOICE sorusunda sablonda olmayan bir secenek ID'si verilince VALIDATION_ERROR firlatir", async () => {
     const prisma = createPrisma();
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
     await expect(
       service.submit('token-123', {
         answers: [
@@ -137,7 +140,7 @@ describe('PublicSurveysService', () => {
 
   it('submit: gecerli yanitlarla SurveyResponse olusturur ve respondedAt/feedbackReceivedAt setler', async () => {
     const prisma = createPrisma();
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
 
     await service.submit('token-123', {
       answers: [
@@ -173,7 +176,7 @@ describe('PublicSurveysService', () => {
 
   it('submit: opsiyonel soru bos birakilirsa SurveyResponse olusturulmaz', async () => {
     const prisma = createPrisma();
-    const service = new PublicSurveysService(prisma as never);
+    const service = new PublicSurveysService(prisma as never, fakeStorage);
 
     await service.submit('token-123', {
       answers: [

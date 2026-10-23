@@ -6,6 +6,9 @@ export interface MailAttachment {
   filename: string;
   content: Buffer;
   contentType: string;
+  /** Verilirse bu ek, ek listesinde degil mail govdesinde `cid:<cid>` ile
+   * referans verilen bir inline gorsel olarak gomulur (orn. sirket logosu). */
+  cid?: string;
 }
 
 export interface SendMailInput {
@@ -14,6 +17,9 @@ export interface SendMailInput {
   cc?: string[];
   subject: string;
   text: string;
+  /** Verilirse HTML govde kullanilir (text alani HTML'i desteklemeyen istemciler
+   * icin fallback olarak kalir). */
+  html?: string;
   attachments?: MailAttachment[];
   /**
    * Musteriye "A Sirketi'nden gelmis gibi" gorunmesi icin (kullanici talebi,
@@ -57,6 +63,7 @@ export class MailService {
       cc: input.cc,
       subject: input.subject,
       text: input.text,
+      html: input.html,
       attachments: input.attachments,
     });
   }

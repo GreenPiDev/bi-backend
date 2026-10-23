@@ -1,9 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../core/errors/app.exception';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { R2StorageService } from '../../core/storage/r2-storage.service';
 import type { SubmitSurveyResponseDto } from './dto/public-survey.dto';
 
 const FEEDBACK_SURVEY_INCLUDE = {
+  tenant: true,
   survey: {
     include: {
       questions: {
@@ -26,6 +28,11 @@ export interface PublicSurveyView {
   surveyName: string;
   surveyDescription: string | null;
   alreadyResponded: boolean;
+  tenantName: string;
+  /** `data:` URI - public sayfa kimlik dogrulamasiz oldugu icin FileUrlService'in
+   * uretecegi (auth gerektiren) /files proxy URL'i kullanilamaz, bkz. mail
+   * gonderimindeki ayni gerekce (send-post-sale-survey.processor.ts). */
+  tenantLogoDataUrl: string | null;
   questions: PublicSurveyQuestionView[];
 }
 
@@ -38,7 +45,10 @@ export interface PublicSurveyView {
  */
 @Injectable()
 export class PublicSurveysService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: R2StorageService,
+  ) {}
 
   async getByToken(token: string): Promise<PublicSurveyView> {
     const feedbackSurvey = await this.prisma.feedbackSurvey.findUnique({
@@ -57,6 +67,10 @@ export class PublicSurveysService {
       surveyName: feedbackSurvey.survey.name,
       surveyDescription: feedbackSurvey.survey.description,
       alreadyResponded: Boolean(feedbackSurvey.respondedAt),
+      tenantName: feedbackSurvey.tenant.name,
+      tenantLogoDataUrl: await this.loadLogoDataUrl(
+        feedbackSurvey.tenant.logoKey,
+      ),
       questions: feedbackSurvey.survey.questions.map((question) => ({
         id: question.id,
         type: question.type,
@@ -68,6 +82,27 @@ export class PublicSurveysService {
         })),
       })),
     };
+  }
+
+  /** Sirket logosunu R2'den okuyup base64 `data:` URI'ye cevirir - public sayfa hicbir
+   * kimlik dogrulamasi olmadan tarayicidan dogrudan yuklendigi icin (auth cookie yok),
+   * backend'in /files ucuna isaret eden bir URL kullanilamaz. Logo yoksa/okunamazsa
+   * sessizce null doner, sayfa logosuz da calisabilmeli. */
+  private async loadLogoDataUrl(
+    logoKey: string | null,
+  ): Promise<string | null> {
+    if (!logoKey) return null;
+    try {
+      const file = await this.storage.download(logoKey);
+      const chunks: Buffer[] = [];
+      for await (const chunk of file.body) {
+        chunks.push(chunk as Buffer);
+      }
+      const base64 = Buffer.concat(chunks).toString('base64');
+      return `data:${file.contentType ?? 'image/png'};base64,${base64}`;
+    } catch {
+      return null;
+    }
   }
 
   async submit(token: string, dto: SubmitSurveyResponseDto): Promise<void> {

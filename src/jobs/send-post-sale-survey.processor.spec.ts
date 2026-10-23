@@ -4,6 +4,7 @@ const fakePostSaleCasesCache = { invalidateForTenant: vi.fn() } as never;
 const fakeConfig = {
   getOrThrow: vi.fn().mockReturnValue('http://localhost:5173'),
 } as never;
+const fakeStorage = { download: vi.fn() } as never;
 
 function createCase(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -52,6 +53,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(createJob());
 
@@ -88,6 +90,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(createJob());
 
@@ -102,6 +105,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(
       createJob({
@@ -132,6 +136,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(createJob({ fromEmail: 'ozel@acme.com' }));
 
@@ -151,6 +156,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(createJob());
 
@@ -170,6 +176,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(createJob());
 
@@ -188,6 +195,7 @@ describe('SendPostSaleSurveyProcessor', () => {
       mail as never,
       fakePostSaleCasesCache,
       fakeConfig,
+      fakeStorage,
     );
     await processor.process(createJob());
 
