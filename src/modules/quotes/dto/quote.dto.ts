@@ -53,6 +53,9 @@ const QuoteItemInputSchema = z.object({
    * Product.brand'den alinir, verilirse (bos string dahil) manuel ezme
    * sayilir; Product.brand'i kalici olarak degistirmez. */
   brand: z.string().trim().max(120).optional(),
+  /** Ad-hoc "Ürünleri Gruplayarak Ekle" (bkz. Quote.groupItemsByProduct doc comment'i)
+   * - bu satirin ait oldugu grubun serbest metin adi. */
+  groupName: z.string().trim().max(200).optional(),
 });
 
 /** O2: teklif olustururken isaretlenirse otomatik firsat olusturulur. */
@@ -112,6 +115,9 @@ export const CreateQuoteSchema = z.object({
    * olarak isteği yapan kullaniciyi onceden secili gosterir ama degistirilebilir,
    * bu yuzden zorunlu (createdById'den bagimsiz, bkz. Quote.senderId doc comment'i). */
   senderId: z.string().uuid(),
+  /** Ad-hoc "Ürünleri Gruplayarak Ekle" checkbox'ı - bkz. Quote.groupItemsByProduct
+   * doc comment'i. */
+  groupItemsByProduct: z.boolean().optional(),
 });
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
@@ -156,6 +162,9 @@ export const UpdateQuoteSchema = z
     templateId: z.string().uuid().nullable().optional(),
     /** Verilirse gonderen degistirilir, hic verilmezse mevcut deger korunur. */
     senderId: z.string().uuid().optional(),
+    /** Ad-hoc "Ürünleri Gruplayarak Ekle" checkbox'ı - bkz. Quote.groupItemsByProduct
+     * doc comment'i. */
+    groupItemsByProduct: z.boolean().optional(),
     /** Status 'REJECTED' ise zorunlu - kullanicinin crm_quote_rejection_reason_options
      * listesinden sectigi red sebebi (bkz. QuotesListPage'deki durum dropdown'u,
      * ApproveQuoteModal ile ayni "once onay, sonra geri bildirim" deseni). */

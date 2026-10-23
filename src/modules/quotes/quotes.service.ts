@@ -198,6 +198,7 @@ interface ResolvedQuoteItem {
   discountNote: string | null;
   costPriceAtSale: Prisma.Decimal | null;
   brand: string | null;
+  groupName: string | null;
 }
 
 type ItemResolutionTx = Pick<TenantPrismaClient, 'product'>;
@@ -660,6 +661,7 @@ export class QuotesService {
             : null,
         costPriceAtSale: product.avgCost,
         brand: item.brand !== undefined ? item.brand || null : product.brand,
+        groupName: item.groupName || null,
       };
     });
 
@@ -1391,6 +1393,7 @@ export class QuotesService {
               templateId,
               status: 'DRAFT',
               senderId: dto.senderId,
+              groupItemsByProduct: dto.groupItemsByProduct ?? false,
               createdById,
               quoteCurrency: dto.quoteCurrency,
               exchangeRates: dto.exchangeRates ?? undefined,
@@ -1575,6 +1578,9 @@ export class QuotesService {
         ? { exchangeRates: dto.exchangeRates }
         : {}),
       ...(dto.senderId !== undefined ? { senderId: dto.senderId } : {}),
+      ...(dto.groupItemsByProduct !== undefined
+        ? { groupItemsByProduct: dto.groupItemsByProduct }
+        : {}),
       ...(isRevisionSave
         ? {
             revisionNote: dto.revisionNote,

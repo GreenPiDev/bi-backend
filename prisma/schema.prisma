@@ -1333,6 +1333,14 @@ model Quote {
    * birlikte QuotesService.getPrintData'da ayri bir sorguyla cozulur.
    */
   senderId         String?
+  /**
+   * Ad-hoc "Ürünleri Gruplayarak Ekle" checkbox'ı (/teklifler/yeni, "Teklif Özeti"
+   * karti) - pano ureticilerine ozel, urunlerin "Kompanzasyon Panosu" gibi isimli
+   * gruplar altinda girilmesini saglar (bkz. QuoteItem.groupName). true ise hem
+   * teklif formu hem varsayilan/sablonsuz PDF (QuoteContentBody) kalemleri
+   * gruplandirip grup baslik satirlarini acik mavi arkaplanla basar.
+   */
+  groupItemsByProduct Boolean          @default(false)
   createdById      String
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
@@ -1476,6 +1484,13 @@ model QuoteItem {
    * Product.brand'i KALICI olarak degistirmez, sadece bu satirin gorunumunu.
    */
   brand             String?
+  /**
+   * Ad-hoc "Ürünleri Gruplayarak Ekle" (bkz. Quote.groupItemsByProduct) - teklif
+   * olustururken kullanicinin tanimladigi serbest metin grup adi (orn. "Kompanzasyon
+   * Panosu"). Ayri bir Group modeli yok - ayni grup adini paylasan satirlar birlikte
+   * gruplanir. Quote.groupItemsByProduct false ise bu alan hep null kalir.
+   */
+  groupName         String?
   /**
    * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kismi sevkiyat takibi.
    * quantity ile ayni birimde, "bu kalemden musteriye kac adet fiilen teslim edildi"
