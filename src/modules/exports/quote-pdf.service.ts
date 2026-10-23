@@ -23,10 +23,10 @@ const COST_RENDER_WIDTH_PX = 1400;
 const COST_PDF_SCALE = LANDSCAPE_CONTENT_WIDTH_PX / COST_RENDER_WIDTH_PX;
 const PDF_VIEWPORT_HEIGHT_PX = 1200;
 // Her sayfanin altinda tekrar eden acik yesil footer (sirket adresi/telefon/
-// e-postasi) icin ayrilan alt marj - Playwright'in displayHeaderFooter alani
-// bu marjin icine sigar. 3 satira kadar sarabilen adres + tek satirlik
-// telefon/e-posta icin yeterli.
-const PDF_FOOTER_MARGIN_BOTTOM = '24mm';
+// e-postasi + Pilens atif satiri) icin ayrilan alt marj - Playwright'in
+// displayHeaderFooter alani bu marjin icine sigar. 3 satira kadar sarabilen
+// adres + telefon/e-posta satiri + Pilens atif satiri icin yeterli.
+const PDF_FOOTER_MARGIN_BOTTOM = '28mm';
 // Logo + "Fiyat Teklifi" basligi + tarih/teklif no satirinin sigmasi icin ayrilan
 // ust marj (bkz. buildHeaderTemplate) - eskiden body icinde tek seferlik render
 // edilen AppShell print header'inin yerini alir, artik her sayfada tekrar eder.
@@ -62,9 +62,12 @@ function escapeHtml(value: string): string {
 }
 
 /** Acik yesil, kagida bitisik (tam genislik) footer - sirket adresi/telefon/
- * e-postasi yan yana. Adres uzunsa en fazla 3 satira sarar (-webkit-line-clamp).
- * Markali sablonun (quote-template-print-page.tsx) kendi tasarimi var, bu footer
- * SADECE sablonsuz/varsayilan yazdirma rotasinda (`/teklifler/:id`) kullanilir. */
+ * e-postasi yan yana, altinda Pilens atif satiri. Adres uzunsa en fazla 3
+ * satira sarar (-webkit-line-clamp). Markali sablonun (quote-template-print-page.tsx)
+ * kendi tasarimi var, bu footer SADECE sablonsuz/varsayilan yazdirma rotasinda
+ * (`/teklifler/:id`) kullanilir. Atif satirindaki link PDF'e export edilince de
+ * tiklanabilir kalir (Chromium, print-to-pdf sirasinda header/footer frame'indeki
+ * <a> etiketlerini de PDF link annotation'ina cevirir). */
 function buildFooterTemplate(company: {
   address: string | null;
   phone: string | null;
@@ -86,10 +89,12 @@ function buildFooterTemplate(company: {
       `<div style="white-space:nowrap;">${escapeHtml(company.email)}</div>`,
     );
   }
-  if (cells.length === 0) {
-    return '<div></div>';
-  }
-  return `<div style="width:100%;box-sizing:border-box;background:#e8f5e9;padding:8px 10mm;display:flex;align-items:center;justify-content:center;gap:24px;font-size:12px;color:#16202e;font-family:Arial,Helvetica,sans-serif;line-height:1.3;">${cells.join('')}</div>`;
+  const infoRow =
+    cells.length > 0
+      ? `<div style="width:100%;display:flex;align-items:center;justify-content:center;gap:24px;">${cells.join('')}</div>`
+      : '';
+  const noticeRow = `<div style="color:#2196f3;">Bu teklif, Pilens CRM platformu üzerinden hazırlanmıştır. <a href="https://www.pilens.com.tr" style="color:inherit;text-decoration:none;">www.pilens.com.tr</a></div>`;
+  return `<div style="width:100%;box-sizing:border-box;background:#e8f5e9;padding:8px 10mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:#16202e;font-family:Arial,Helvetica,sans-serif;line-height:1.3;">${infoRow}${noticeRow}</div>`;
 }
 
 /** AppShell print header'inin (app-shell.tsx) her sayfada tekrar eden esdegeri -
