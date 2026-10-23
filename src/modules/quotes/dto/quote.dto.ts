@@ -217,3 +217,15 @@ export const QuoteReportsQuerySchema = z.object({
   createdById: z.string().optional(),
 });
 export type QuoteReportsQueryDto = z.infer<typeof QuoteReportsQuerySchema>;
+
+/** /teklifler?tab=reports "Durum Bazlı Toplam Değer" pasta grafigi - QuoteReportsQuerySchema
+ * + kullanicinin grafikten degistirebildigi ortak para birimi (varsayilan TRY). */
+export const QuoteValueByStatusQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  createdById: z.string().optional(),
+  displayCurrency: CurrencyCodeSchema.default('TRY'),
+});
+export type QuoteValueByStatusQueryDto = z.infer<
+  typeof QuoteValueByStatusQuerySchema
+>;

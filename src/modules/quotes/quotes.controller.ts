@@ -27,6 +27,7 @@ import {
   FxRatesQuerySchema,
   QuoteQuerySchema,
   QuoteReportsQuerySchema,
+  QuoteValueByStatusQuerySchema,
   RejectQuoteSchema,
   UpdateQuoteSchema,
   type ApproveQuoteDto,
@@ -34,6 +35,7 @@ import {
   type FxRatesQueryDto,
   type QuoteQueryDto,
   type QuoteReportsQueryDto,
+  type QuoteValueByStatusQueryDto,
   type RejectQuoteDto,
   type UpdateQuoteDto,
 } from './dto/quote.dto';
@@ -109,6 +111,22 @@ export class QuotesController {
     query: QuoteReportsQueryDto,
   ): Promise<{ reason: string | null; count: number }[]> {
     return this.quotes.getRejectionReasonsSummary(
+      query.from,
+      query.to,
+      query.createdById,
+    );
+  }
+
+  /** /teklifler?tab=reports "Durum Bazlı Toplam Değer" pasta grafigi - `:id` route'undan
+   * once tanimlanmali, ayni desen (bkz. fx-rates/revision-summary/rejection-reasons-summary). */
+  @Get('value-by-status')
+  @RequiresPermission('quotes', 'VIEW')
+  getValueByStatus(
+    @Query(new ZodValidationPipe(QuoteValueByStatusQuerySchema))
+    query: QuoteValueByStatusQueryDto,
+  ) {
+    return this.quotes.getValueByStatus(
+      query.displayCurrency,
       query.from,
       query.to,
       query.createdById,

@@ -9,6 +9,7 @@ import type {
   ProductList,
   Quote,
   QuoteItem,
+  QuoteStatus,
   QuoteTemplate,
 } from '@prisma/client';
 import type { Queue } from 'bullmq';
@@ -782,6 +783,131 @@ export class QuotesService {
     return [...countByReason.entries()]
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count);
+  }
+
+  /** /teklifler?tab=reports "Durum Bazlı Toplam Değer" pasta grafigi: aralikdaki her
+   * teklifin genel toplami (MANUAL_TOTAL modunda manualSubtotal+manualVatAmount,
+   * ITEMIZED modunda satir bazli hesap - bkz. bi-frontend lib/quote-totals.ts
+   * groupQuoteItemTotals ile ayni formul, backend'de bagimsiz bir kopyasi, CLAUDE.md
+   * SS3'teki "tip repolar arasi kasitli tekrarlanir" ilkesiyle tutarli) kendi para
+   * biriminde hesaplanir, sonra TEK bir `displayCurrency`'ye FxService (guncel ECB
+   * kuru) ile cevrilip durum bazinda toplanir. Kullanicinin teklife elle girdigi
+   * Quote.exchangeRates kasitli olarak KULLANILMAZ - bu bir rapor/istatistik, guncel
+   * piyasa kuru ile tutarli olmasi, her teklifin kendi (bazen eski/manuel) kuruna
+   * bagimli olmamasi tercih edildi. */
+  async getValueByStatus(
+    displayCurrency: string,
+    from?: Date,
+    to?: Date,
+    createdById?: string,
+  ): Promise<{
+    displayCurrency: string;
+    asOf: string;
+    totals: { status: QuoteStatus; amount: number }[];
+    missingRateCurrencies: string[];
+  }> {
+    const quotes = await this.prisma.quote.findMany({
+      where: {
+        ...(createdById ? { createdById } : {}),
+        ...(from || to
+          ? {
+              quoteDate: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+      select: {
+        status: true,
+        itemsEntryMode: true,
+        manualSubtotal: true,
+        manualVatAmount: true,
+        manualCurrency: true,
+        items: {
+          select: {
+            quantity: true,
+            unitPrice: true,
+            discountPct: true,
+            vatPct: true,
+            currency: true,
+          },
+        },
+      },
+    });
+
+    // status -> currency -> ham tutar (henuz displayCurrency'ye cevrilmemis)
+    const amountsByStatusAndCurrency = new Map<
+      QuoteStatus,
+      Map<string, number>
+    >();
+    const addAmount = (
+      status: QuoteStatus,
+      currency: string,
+      amount: number,
+    ) => {
+      const byCurrency =
+        amountsByStatusAndCurrency.get(status) ?? new Map<string, number>();
+      byCurrency.set(currency, (byCurrency.get(currency) ?? 0) + amount);
+      amountsByStatusAndCurrency.set(status, byCurrency);
+    };
+
+    for (const quote of quotes) {
+      if (quote.itemsEntryMode === 'MANUAL_TOTAL') {
+        const amount =
+          Number(quote.manualSubtotal ?? 0) +
+          Number(quote.manualVatAmount ?? 0);
+        addAmount(quote.status, quote.manualCurrency || 'TRY', amount);
+        continue;
+      }
+      for (const item of quote.items) {
+        const quantity = Number(item.quantity);
+        const unitPrice = Number(item.unitPrice);
+        const discountPct = Number(item.discountPct);
+        const vatPct = Number(item.vatPct);
+        const lineSubtotal = quantity * unitPrice * (1 - discountPct / 100);
+        const lineTotal = lineSubtotal * (1 + vatPct / 100);
+        addAmount(quote.status, item.currency || 'TRY', lineTotal);
+      }
+    }
+
+    const distinctCurrencies = [
+      ...new Set(
+        [...amountsByStatusAndCurrency.values()].flatMap((byCurrency) => [
+          ...byCurrency.keys(),
+        ]),
+      ),
+    ].filter((currency) => currency !== displayCurrency);
+    const fxResult = await this.fx.getRatesToBase(
+      displayCurrency,
+      distinctCurrencies,
+    );
+
+    const missingRateCurrencies = new Set<string>();
+    const totals: { status: QuoteStatus; amount: number }[] = [];
+    for (const [status, byCurrency] of amountsByStatusAndCurrency) {
+      let total = 0;
+      for (const [currency, amount] of byCurrency) {
+        if (currency === displayCurrency) {
+          total += amount;
+          continue;
+        }
+        const rate = fxResult.rates[currency];
+        if (rate === undefined) {
+          missingRateCurrencies.add(currency);
+          continue;
+        }
+        total += amount * rate;
+      }
+      if (total > 0) totals.push({ status, amount: total });
+    }
+
+    return {
+      displayCurrency,
+      asOf: fxResult.asOf,
+      totals: totals.sort((a, b) => b.amount - a.amount),
+      missingRateCurrencies: [...missingRateCurrencies],
+    };
   }
 
   /** /teklifler?tab=reports "Reddedilme Notları" collapsible tablosu: her reddedilen
