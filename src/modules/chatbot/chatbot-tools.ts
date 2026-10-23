@@ -1,5 +1,31 @@
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
+import { CHATBOT_PAGE_CATALOG } from './chatbot-page-catalog';
 import { NAVIGATION_INTENTS } from './chatbot-navigation';
+
+/**
+ * LLM'in `navigate` aracina gonderdigi `tab`/`status` degerlerinin hangi
+ * intent'lerde gecerli oldugunu aciklamaya yardimci - chatbot-page-catalog.ts'teki
+ * katalogdan turetilir, elle tekrar yazilmaz.
+ */
+const TAB_HINTS = CHATBOT_PAGE_CATALOG.filter(
+  (page) => page.tabs && page.tabs.length > 0,
+)
+  .map(
+    (page) => `${page.key}: [${page.tabs!.map((tab) => tab.key).join(', ')}]`,
+  )
+  .join('; ');
+
+const STATUS_HINTS = CHATBOT_PAGE_CATALOG.flatMap((page) => {
+  const pageLevel = page.statusValues
+    ? [`${page.key} -> [${page.statusValues.join(', ')}]`]
+    : [];
+  const tabLevel = (page.tabs ?? [])
+    .filter((tab) => tab.statusValues)
+    .map(
+      (tab) => `${page.key}.${tab.key} -> [${tab.statusValues!.join(', ')}]`,
+    );
+  return [...pageLevel, ...tabLevel];
+}).join('; ');
 
 /**
  * LLM'e verilen uc arac: describe_dataset (tembel kesif - alan listesini
@@ -127,7 +153,15 @@ export const CHATBOT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'navigate',
       description:
-        'Kullaniciyi platform icinde bir sayfaya yonlendirmeyi onerir. Sadece kullanici acikca bir sayfaya gitmek istediginde cagir.',
+        `Kullaniciyi platform icinde bir sayfaya (gerekirse bir sekmeye ve/veya durum ` +
+        `filtresiyle) yonlendirmeyi onerir. Sadece kullanici acikca bir sayfaya gitmek ` +
+        `istediginde veya belirli bir durumdaki kayitlari bir listede gormek istediginde cagir ` +
+        `(orn. "revize durumundaki teklifleri goster" -> intent: "quotes", tab: "quotes", ` +
+        `status: "REVIZE"). Hangi intent'in hangi tab'lari/durum degerlerini destekledigini ` +
+        `ASAGIDAKI listelerden kontrol et, listede olmayan bir tab/durum degeri UYDURMA - ` +
+        `sadece tab veya status alanini BOS BIRAK.\n` +
+        `Gecerli tab'lar (intent -> [tab anahtarlari]): ${TAB_HINTS}\n` +
+        `Gecerli durum degerleri (intent(.tab) -> [degerler]): ${STATUS_HINTS}`,
       parameters: {
         type: 'object',
         properties: {
@@ -136,6 +170,16 @@ export const CHATBOT_TOOLS: ChatCompletionTool[] = [
             type: 'string',
             description:
               'dashboard_view/dataset_view icin hedefin adi (ornegin pano veya veri kumesi adi).',
+          },
+          tab: {
+            type: 'string',
+            description:
+              'Yukaridaki listede intent icin gecerli bir tab anahtari (ornegin "quotes" intent\'i icin "quotes"/"reports"/"templates"). Sayfa tab\'siz veya kullanici belirtmediyse bos birak.',
+          },
+          status: {
+            type: 'string',
+            description:
+              'Yukaridaki listede intent (veya intent.tab) icin gecerli bir durum degeri (ornegin "REVIZE"). Kullanici bir durum belirtmediyse bos birak.',
           },
         },
         required: ['intent'],

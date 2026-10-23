@@ -4,12 +4,13 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { z } from 'zod';
 import type { RequestUser } from '../../core/decorators/current-user.decorator';
 import { AppException } from '../../core/errors/app.exception';
+import { PageModulesService } from '../../core/modules/page-modules.service';
+import { PermissionsService } from '../../core/permissions/permissions.service';
+import { PrismaService } from '../../core/prisma/prisma.service';
 import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
-import { hasPermission } from '../../core/permissions/permission.types';
-import { PermissionsService } from '../../core/permissions/permissions.service';
 import { QuerySpec } from '../query/dto/query-spec.dto';
 import { QueryService } from '../query/query.service';
 import {
@@ -34,6 +35,8 @@ const FALLBACK_REPLY =
 const NavigateArgs = z.object({
   intent: z.enum(NAVIGATION_INTENTS),
   targetName: z.string().optional(),
+  tab: z.string().optional(),
+  status: z.string().optional(),
 });
 
 const DescribeDatasetArgs = z.object({
@@ -53,6 +56,8 @@ export class ChatbotService {
     private readonly queryService: QueryService,
     private readonly configService: ConfigService,
     private readonly permissions: PermissionsService,
+    private readonly rawPrisma: PrismaService,
+    private readonly pageModules: PageModulesService,
   ) {}
 
   async chat(request: ChatRequest, user: RequestUser): Promise<ChatResponse> {
@@ -218,12 +223,19 @@ export class ChatbotService {
         user.tenantId,
         user.roleIds,
       );
-      const result = resolveNavigation(
+      const result = await resolveNavigation(
         parsed.intent,
         parsed.targetName,
-        hasPermission(effective, 'settings', 'VIEW'),
+        parsed.tab,
+        parsed.status,
         dashboards,
         datasets,
+        {
+          tenantId: user.tenantId,
+          effective,
+          prisma: this.rawPrisma,
+          pageModules: this.pageModules,
+        },
       );
       return {
         content: JSON.stringify({

@@ -73,15 +73,30 @@ function createConfig(model = 'gpt-4o-mini') {
   return { get: vi.fn().mockReturnValue(model) };
 }
 
-function createPermissions(canViewSettings = true) {
+function createPermissions(
+  overrides: {
+    isCompanyAdmin?: boolean;
+    permissions?: Array<{
+      pageKey: string;
+      tabKey: string | null;
+      action: string;
+    }>;
+  } = {},
+) {
   return {
     getEffectivePermissions: vi.fn().mockResolvedValue({
-      isCompanyAdmin: false,
-      permissions: canViewSettings
-        ? [{ pageKey: 'settings', tabKey: null, action: 'VIEW' }]
-        : [],
+      isCompanyAdmin: overrides.isCompanyAdmin ?? true,
+      permissions: overrides.permissions ?? [],
     }),
   };
+}
+
+function createRawPrisma() {
+  return { tenantModule: { findFirst: vi.fn().mockResolvedValue(null) } };
+}
+
+function createPageModules() {
+  return { getModuleKeysForPage: vi.fn().mockResolvedValue([]) };
 }
 
 describe('ChatbotService', () => {
@@ -112,6 +127,8 @@ describe('ChatbotService', () => {
       { runQuery } as never,
       createConfig() as never,
       createPermissions() as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
@@ -154,6 +171,8 @@ describe('ChatbotService', () => {
       { runQuery } as never,
       createConfig() as never,
       createPermissions() as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
@@ -171,7 +190,7 @@ describe('ChatbotService', () => {
     const create = vi
       .fn()
       .mockResolvedValue(
-        toolCallCompletion('navigate', { intent: 'dashboards_list' }),
+        toolCallCompletion('navigate', { intent: 'dashboards' }),
       );
 
     const service = new ChatbotService(
@@ -180,6 +199,8 @@ describe('ChatbotService', () => {
       { runQuery: vi.fn() } as never,
       createConfig() as never,
       createPermissions() as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
@@ -205,7 +226,9 @@ describe('ChatbotService', () => {
       createPrisma() as never,
       { runQuery: vi.fn() } as never,
       createConfig() as never,
-      createPermissions(false) as never,
+      createPermissions({ isCompanyAdmin: false }) as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
@@ -234,6 +257,8 @@ describe('ChatbotService', () => {
       { runQuery: vi.fn() } as never,
       createConfig() as never,
       createPermissions() as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
@@ -268,6 +293,8 @@ describe('ChatbotService', () => {
       { runQuery: vi.fn() } as never,
       createConfig() as never,
       createPermissions() as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
@@ -282,7 +309,7 @@ describe('ChatbotService', () => {
     const create = vi
       .fn()
       .mockResolvedValueOnce(
-        toolCallCompletion('navigate', { intent: 'dashboards_list' }),
+        toolCallCompletion('navigate', { intent: 'dashboards' }),
       )
       .mockResolvedValueOnce(textCompletion('Panolara yonlendiriyorum.'));
 
@@ -292,6 +319,8 @@ describe('ChatbotService', () => {
       { runQuery: vi.fn() } as never,
       createConfig() as never,
       createPermissions() as never,
+      createRawPrisma() as never,
+      createPageModules() as never,
     );
 
     const result = await service.chat(
