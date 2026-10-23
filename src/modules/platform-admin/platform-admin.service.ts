@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { REDIS_CLIENT } from '../../core/redis/redis-client.token';
 import { RealtimeService } from '../../core/realtime/realtime.service';
+import { CrmReportProvisioningService } from '../datasets/crm-report-provisioning.service';
 import { DrawingLibraryProvisioningService } from '../drawing-library/drawing-library-provisioning.service';
 import { DrawingTemplatesProvisioningService } from '../drawing-templates/drawing-templates-provisioning.service';
 import {
@@ -32,6 +33,7 @@ export class PlatformAdminService {
     private readonly realtime: RealtimeService,
     private readonly drawingLibrary: DrawingLibraryProvisioningService,
     private readonly drawingTemplates: DrawingTemplatesProvisioningService,
+    private readonly crmReports: CrmReportProvisioningService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -84,6 +86,16 @@ export class PlatformAdminService {
     if (moduleKey === 'drawings' && enabled) {
       await this.drawingLibrary.provisionForTenant(tenantId);
       await this.drawingTemplates.provisionForTenant(tenantId);
+    }
+    // Faz 11f (bkz. docs/VARSAYIMLAR.md V29): CRM rapor dataset'i sentetik/yeniden
+    // uretilebilir oldugu icin (gercek kullanici verisi degil, drawings'teki
+    // kutuphane/sablon satirlarinin aksine) crm kapatilinca da kaldirilir.
+    if (moduleKey === 'crm') {
+      if (enabled) {
+        await this.crmReports.provisionForTenant(tenantId);
+      } else {
+        await this.crmReports.deprovisionForTenant(tenantId);
+      }
     }
     const modules = await this.tenants.listModules(tenantId);
     this.realtime.emitToTenant(tenantId, 'tenant.modules.updated', modules);
