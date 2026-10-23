@@ -45,6 +45,7 @@ import {
   POST_SALE_FOLLOW_UP_DAYS_KEY,
 } from '../tenant-settings/tenant-settings.constants';
 import { QuotesCacheService } from './quotes-cache.service';
+import { computeQuoteGrandTotalForSort } from './quote-grand-total.util';
 import type {
   ApproveQuoteDto,
   CreateQuoteDto,
@@ -55,7 +56,18 @@ import type {
   UpdateQuoteDto,
 } from './dto/quote.dto';
 
-const SORTABLE_FIELDS = ['quoteNumber', 'createdAt'] as const;
+const SORTABLE_FIELDS = [
+  'quoteNumber',
+  'createdAt',
+  'quoteDate',
+  'grandTotal',
+] as const;
+// 'grandTotal' Quote tablosunda kolon degil (coklu para birimi + manuel toplam
+// modu nedeniyle items'tan hesaplaniyor, bkz. quote-grand-total.util.ts) - bu
+// yuzden Prisma orderBy'a verilemez, eslesen tum satirlar cekilip hesaplandiktan
+// sonra JS tarafinda siralanip sayfalanir (accounts.service.ts'teki
+// COMPUTED_SORT_FIELDS deseniyle ayni).
+const COMPUTED_SORT_FIELDS = new Set<string>(['grandTotal']);
 const QUOTE_NUMBER_CREATE_RETRIES = 5;
 
 const QUOTE_INCLUDE = {
@@ -961,6 +973,34 @@ export class QuotesService {
           }
         : {}),
     };
+
+    if (COMPUTED_SORT_FIELDS.has(field)) {
+      const all = await this.prisma.quote.findMany({
+        where,
+        include: QUOTE_INCLUDE,
+      });
+      all.sort((a, b) => {
+        const diff =
+          computeQuoteGrandTotalForSort(a) - computeQuoteGrandTotalForSort(b);
+        return direction === 'asc' ? diff : -diff;
+      });
+      const total = all.length;
+      const pageRows = all.slice(
+        (page - 1) * pageSize,
+        (page - 1) * pageSize + pageSize,
+      );
+      const result = {
+        data: await this.attachCreatedByNames(pageRows),
+        meta: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+      await this.quotesCache.set(query, result);
+      return result;
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.quote.findMany({
