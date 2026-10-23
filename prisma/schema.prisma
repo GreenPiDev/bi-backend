@@ -312,6 +312,7 @@ model Tenant {
   drawingLibraryComponents    DrawingLibraryComponent[]
   drawingPanelTemplates       DrawingPanelTemplate[]
   drawings                    Drawing[]
+  notes                       Note[]
 
   @@map("tenants")
 }
@@ -2183,6 +2184,42 @@ model Notification {
 
   @@index([tenantId, recipientUserId, readAt, createdAt])
   @@map("notifications")
+}
+
+/**
+ * /anasayfa "Not Defteri" - tenant genelinde paylasilan bir pano (post-it tarzi),
+ * tek bir kullaniciya ozel degil (bkz. docs/VARSAYIMLAR.md). Hatirlatma, Interaction'daki
+ * reminder ile ayni desen: ayri bir FK degil, CalendarEvent.relatedEntityType='Note' +
+ * relatedEntityId=Note.id uzerinden gevsekce baglanir (NotesService bu CalendarEvent'i
+ * kendisi yonetir).
+ */
+model Note {
+  id          String    @id @default(uuid())
+  tenantId    String
+  content     String
+  color       NoteColor @default(YELLOW)
+  /**
+   * Varsayilan true: not sadece olusturana gorunur. false ise tenant'taki herkesin
+   * gordugu/duzenleyebildigi paylasimli panoya dusler (bkz. docs/VARSAYIMLAR.md V73).
+   */
+  isPrivate   Boolean   @default(true)
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, deletedAt])
+  @@map("crm_notes")
+}
+
+enum NoteColor {
+  YELLOW
+  BLUE
+  RED
+  GREEN
+  PURPLE
 }
 
 /**

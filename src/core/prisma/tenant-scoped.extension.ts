@@ -57,6 +57,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'DrawingLibraryComponent',
   'DrawingPanelTemplate',
   'Drawing',
+  'Note',
 ]);
 
 /**
@@ -76,6 +77,7 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   'PurchaseOrder',
   'Drawing',
   'Survey',
+  'Note',
 ]);
 
 const READ_OPERATIONS = new Set([
