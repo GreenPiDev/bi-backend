@@ -9,7 +9,6 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { Opportunity } from '@prisma/client';
 import {
   CurrentUser,
   type RequestUser,
@@ -29,6 +28,7 @@ import {
 import {
   OpportunitiesService,
   type CreateOpportunityResult,
+  type OpportunityWithAccount,
 } from './opportunities.service';
 
 @ModulePage('opportunities')
@@ -41,13 +41,13 @@ export class OpportunitiesController {
   list(
     @Query(new ZodValidationPipe(OpportunityQuerySchema))
     query: OpportunityQueryDto,
-  ): Promise<PagedResult<Opportunity>> {
+  ): Promise<PagedResult<OpportunityWithAccount>> {
     return this.opportunities.list(query);
   }
 
   @Get(':id')
   @RequiresPermission('opportunities', 'VIEW')
-  getById(@Param('id') id: string): Promise<Opportunity> {
+  getById(@Param('id') id: string): Promise<OpportunityWithAccount> {
     return this.opportunities.getById(id);
   }
 
@@ -67,7 +67,7 @@ export class OpportunitiesController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateOpportunitySchema))
     dto: UpdateOpportunityDto,
-  ): Promise<Opportunity> {
+  ): Promise<OpportunityWithAccount> {
     return this.opportunities.update(id, dto);
   }
 

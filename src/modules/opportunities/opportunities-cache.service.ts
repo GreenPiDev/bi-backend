@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Opportunity } from '@prisma/client';
 import type { Redis } from 'ioredis';
 import type { PagedResult } from '../../core/dto/list-query.dto';
 import { REDIS_CLIENT } from '../../core/redis/redis-client.token';
 import { TenantContext } from '../../core/tenant/tenant-context';
+import type { OpportunityWithAccount } from './opportunities.service';
 
 function hashParams(params: unknown): string {
   return createHash('sha256').update(JSON.stringify(params)).digest('hex');
@@ -25,16 +25,21 @@ export class OpportunitiesCacheService {
     return `tenant:${tenantId}:opportunities:list:${hashParams(params)}`;
   }
 
-  async get(params: unknown): Promise<PagedResult<Opportunity> | null> {
+  async get(
+    params: unknown,
+  ): Promise<PagedResult<OpportunityWithAccount> | null> {
     const { tenantId } = TenantContext.getOrThrow();
     const raw = await this.redis.get(this.buildKey(tenantId, params));
     if (!raw) {
       return null;
     }
-    return JSON.parse(raw) as PagedResult<Opportunity>;
+    return JSON.parse(raw) as PagedResult<OpportunityWithAccount>;
   }
 
-  async set(params: unknown, result: PagedResult<Opportunity>): Promise<void> {
+  async set(
+    params: unknown,
+    result: PagedResult<OpportunityWithAccount>,
+  ): Promise<void> {
     const { tenantId } = TenantContext.getOrThrow();
     await this.redis.set(
       this.buildKey(tenantId, params),

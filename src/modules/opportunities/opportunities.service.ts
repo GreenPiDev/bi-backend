@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { Opportunity } from '@prisma/client';
+import type { Account, Opportunity } from '@prisma/client';
 import { AppException } from '../../core/errors/app.exception';
 import { isPastCalendarDay } from '../../core/validators/date';
 import { parseSort, type PagedResult } from '../../core/dto/list-query.dto';
@@ -16,10 +16,20 @@ import type {
   UpdateOpportunityDto,
 } from './dto/opportunity.dto';
 
-const SORTABLE_FIELDS = ['name', 'stage', 'occurredAt', 'createdAt'] as const;
+const SORTABLE_FIELDS = [
+  'name',
+  'stage',
+  'estimatedValue',
+  'occurredAt',
+  'createdAt',
+] as const;
 
 const REMINDER_CONFLICT_STEP_MINUTES = 30;
 const REMINDER_CONFLICT_MAX_TRIES = 48; // 24 saat, 30 dk adimlarla
+
+const OPPORTUNITY_INCLUDE = { account: true } as const;
+
+export type OpportunityWithAccount = Opportunity & { account: Account | null };
 
 export interface OpportunityReminderConflict {
   userId: string;
@@ -27,7 +37,7 @@ export interface OpportunityReminderConflict {
 }
 
 export interface CreateOpportunityResult {
-  opportunity: Opportunity;
+  opportunity: OpportunityWithAccount;
   reminderConflicts: OpportunityReminderConflict[];
 }
 
@@ -40,7 +50,9 @@ export class OpportunitiesService {
     private readonly opportunitiesCache: OpportunitiesCacheService,
   ) {}
 
-  async list(query: OpportunityQueryDto): Promise<PagedResult<Opportunity>> {
+  async list(
+    query: OpportunityQueryDto,
+  ): Promise<PagedResult<OpportunityWithAccount>> {
     const cached = await this.opportunitiesCache.get(query);
     if (cached) {
       return cached;
@@ -75,6 +87,7 @@ export class OpportunitiesService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { [field]: direction },
+        include: OPPORTUNITY_INCLUDE,
       }),
       this.prisma.opportunity.count({ where }),
     ]);
@@ -87,9 +100,10 @@ export class OpportunitiesService {
     return result;
   }
 
-  async getById(id: string): Promise<Opportunity> {
+  async getById(id: string): Promise<OpportunityWithAccount> {
     const opportunity = await this.prisma.opportunity.findFirst({
       where: { id },
+      include: OPPORTUNITY_INCLUDE,
     });
     if (!opportunity) {
       throw new AppException(
@@ -246,11 +260,15 @@ export class OpportunitiesService {
     };
   }
 
-  async update(id: string, dto: UpdateOpportunityDto): Promise<Opportunity> {
+  async update(
+    id: string,
+    dto: UpdateOpportunityDto,
+  ): Promise<OpportunityWithAccount> {
     await this.getById(id);
     const opportunity = await this.prisma.opportunity.update({
       where: { id },
       data: dto,
+      include: OPPORTUNITY_INCLUDE,
     });
     await this.audit.log({
       action: 'UPDATE',
