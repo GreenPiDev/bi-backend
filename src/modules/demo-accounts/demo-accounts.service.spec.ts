@@ -5,7 +5,9 @@ import { DemoAccountsService } from './demo-accounts.service';
 
 const dto = {
   name: 'Ziyaretci',
+  companyName: 'Ornek A.S.',
   email: 'ziyaretci@ornek.com',
+  phone: '0555 000 00 00',
   password: 'Sifre1234',
 };
 
@@ -46,6 +48,8 @@ describe('DemoAccountsService', () => {
     expect(createArgs.data).toMatchObject({
       tenantId: 'tenant-demo',
       email: dto.email,
+      phone: dto.phone,
+      demoCompanyName: dto.companyName,
       isDemoUser: true,
       roles: { create: { roleId: 'role-admin' } },
     });

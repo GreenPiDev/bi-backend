@@ -87,6 +87,24 @@ describe('Platform admin (e2e)', () => {
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
+  it('platform-admin olmayan kullanici demo kullanicilari listesine erisemez (403)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/platform-admin/demo-users')
+      .set('Cookie', normalCookies);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('platform-admin demo kullanicilari listesini gorur', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/platform-admin/demo-users')
+      .set('Cookie', adminCookies);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
   it('platform-admin tenant listesini gorur', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/v1/platform-admin/tenants')

@@ -23,7 +23,7 @@ import {
 } from './dto/update-tenant-slug.dto';
 import { PlatformAdminService } from './platform-admin.service';
 import type { TenantModuleStatus } from '../tenants/tenants.service';
-import type { TenantSummary } from './platform-admin.service';
+import type { DemoUserSummary, TenantSummary } from './platform-admin.service';
 
 @UseGuards(PlatformAdminGuard)
 @Controller('platform-admin')
@@ -33,6 +33,11 @@ export class PlatformAdminController {
   @Get('tenants')
   listTenants(): Promise<TenantSummary[]> {
     return this.platformAdmin.listTenants();
+  }
+
+  @Get('demo-users')
+  listDemoUsers(): Promise<DemoUserSummary[]> {
+    return this.platformAdmin.listDemoUsers();
   }
 
   @Post('tenants')

@@ -53,6 +53,8 @@ export class DemoAccountsService {
           tenantId,
           email: dto.email,
           name: dto.name,
+          phone: dto.phone,
+          demoCompanyName: dto.companyName,
           passwordHash,
           isDemoUser: true,
           roles: { create: { roleId: companyAdminRole.id } },

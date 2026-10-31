@@ -349,6 +349,8 @@ model User {
    */
   isDemoUser        Boolean   @default(false)
   demoExpiresAt     DateTime?
+  /** Demo kaydinda ziyaretcinin girdigi firma adi (satis ekibinin geri donusu icin). */
+  demoCompanyName   String?
   lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

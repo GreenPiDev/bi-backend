@@ -24,6 +24,21 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 
 export type { TenantSummary };
 
+/** Super admin "Demo Kullanicilari" sayfasindaki satir (bkz. modules/demo-accounts). */
+export interface DemoUserSummary {
+  id: string;
+  name: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  tenantSlug: string;
+  isActive: boolean;
+  createdAt: Date;
+  lastLoginAt: Date | null;
+  /** Ilk login'de setlenir; null = hic giris yapmadi. */
+  demoExpiresAt: Date | null;
+}
+
 @Injectable()
 export class PlatformAdminService {
   constructor(
@@ -100,6 +115,32 @@ export class PlatformAdminService {
     const modules = await this.tenants.listModules(tenantId);
     this.realtime.emitToTenant(tenantId, 'tenant.modules.updated', modules);
     return modules;
+  }
+
+  /** Tanitim sayfasindan acilan tum demo kullanicilari, en yeni once. Tenant'lar arasi
+   * okuma - PrismaService ham (tenant-scoped extension'siz) oldugu icin filtre yok. */
+  async listDemoUsers(): Promise<DemoUserSummary[]> {
+    const users = await this.prisma.user.findMany({
+      where: { isDemoUser: true },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        demoCompanyName: true,
+        email: true,
+        phone: true,
+        isActive: true,
+        createdAt: true,
+        lastLoginAt: true,
+        demoExpiresAt: true,
+        tenant: { select: { slug: true } },
+      },
+    });
+    return users.map(({ demoCompanyName, tenant, ...user }) => ({
+      ...user,
+      companyName: demoCompanyName,
+      tenantSlug: tenant.slug,
+    }));
   }
 
   listModuleDefinitions(): readonly ModuleDefinition[] {

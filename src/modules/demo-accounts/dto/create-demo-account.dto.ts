@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 export const CreateDemoAccountSchema = z.object({
   name: z.string().trim().min(1).max(120),
+  companyName: z.string().trim().min(1).max(160),
   email: z.string().trim().email().max(255),
+  phone: z.string().trim().min(1).max(50),
   password: z.string().min(8).max(72),
 });
 
