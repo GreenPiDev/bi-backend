@@ -9,6 +9,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { DemoRestricted } from '../../core/decorators/demo-access.decorator';
 import { CompanyAdminGuard } from '../../core/guards/company-admin.guard';
 import {
   CurrentUser,
@@ -73,6 +74,7 @@ export class RolesController {
   }
 
   @Post('roles')
+  @DemoRestricted()
   @UseGuards(CompanyAdminGuard)
   create(
     @Body(new ZodValidationPipe(CreateRoleSchema)) dto: CreateRoleDto,
@@ -81,6 +83,7 @@ export class RolesController {
   }
 
   @Patch('roles/:id')
+  @DemoRestricted()
   @UseGuards(CompanyAdminGuard)
   update(
     @Param('id') id: string,
@@ -90,6 +93,7 @@ export class RolesController {
   }
 
   @Delete('roles/:id')
+  @DemoRestricted()
   @UseGuards(CompanyAdminGuard)
   @HttpCode(204)
   remove(@Param('id') id: string): Promise<void> {

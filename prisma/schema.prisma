@@ -341,6 +341,14 @@ model User {
    * (varsayilan). Kullanici bazli, tenant genelinde paylasilmaz.
    */
   columnPreferences Json?
+  /**
+   * Tanitim sayfasindaki "Demo kullanici olustur" akisiyla (modules/demo-accounts)
+   * ortak demo tenant'ina acilan deneme kullanicisi. demoExpiresAt ilk login'de
+   * (now + DEMO_ACCOUNT_DURATION_MS) setlenir; dolduktan sonra login olabilir ama
+   * DemoAccessGuard /auth/me ve /auth/logout disindaki her ucu DEMO_EXPIRED ile reddeder.
+   */
+  isDemoUser        Boolean   @default(false)
+  demoExpiresAt     DateTime?
   lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

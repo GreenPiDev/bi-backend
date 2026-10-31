@@ -11,6 +11,7 @@ import type { EffectivePermissionSet } from '../../core/permissions/permission.t
 import { PermissionsService } from '../../core/permissions/permissions.service';
 import type { LoginOriginClassification } from '../../core/http/tenant-subdomain';
 import { FileUrlService } from '../../core/storage/file-url.service';
+import { DEMO_ACCOUNT_DURATION_MS } from '../demo-accounts/demo-account.constants';
 import { TenantsService } from '../tenants/tenants.service';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
@@ -34,6 +35,9 @@ export interface SafeUser {
   phone: string | null;
   defaultPageSize: number;
   columnPreferences: Record<string, string[]> | null;
+  isDemoUser: boolean;
+  /** ISO; demo kullanicisi ilk kez login olunca setlenir (bkz. modules/demo-accounts). */
+  demoExpiresAt: string | null;
 }
 
 /** /auth/me ve login/register/refresh yanitlarindaki "su an giris yapmis kullanici"
@@ -170,11 +174,17 @@ export class AuthService {
       );
     }
 
+    const now = new Date();
+    // Demo kullanicisinin 1 gunluk suresi kayitta degil, ilk login'de baslar.
+    const demoExpiresAt =
+      user.isDemoUser && !user.demoExpiresAt
+        ? new Date(now.getTime() + DEMO_ACCOUNT_DURATION_MS)
+        : user.demoExpiresAt;
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+      data: { lastLoginAt: now, demoExpiresAt },
     });
-    return this.issueTokens(user);
+    return this.issueTokens({ ...user, demoExpiresAt });
   }
 
   async refresh(refreshToken: string): Promise<AuthResult> {
@@ -226,6 +236,12 @@ export class AuthService {
       tenantId: user.tenantId,
       roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
+      ...(user.isDemoUser
+        ? {
+            isDemoUser: true,
+            demoExpiresAt: user.demoExpiresAt?.getTime(),
+          }
+        : {}),
     });
     const refreshToken = this.tokens.signRefreshToken({
       sub: user.id,
@@ -268,5 +284,7 @@ export function toSafeUser(
     defaultPageSize: user.defaultPageSize,
     columnPreferences:
       (user.columnPreferences as Record<string, string[]> | null) ?? null,
+    isDemoUser: user.isDemoUser,
+    demoExpiresAt: user.demoExpiresAt?.toISOString() ?? null,
   };
 }

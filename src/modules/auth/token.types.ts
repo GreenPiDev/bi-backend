@@ -3,6 +3,11 @@ export interface AccessTokenPayload {
   tenantId: string;
   roleIds: string[];
   isPlatformAdmin: boolean;
+  /** Sadece demo kullanicilarda var (bkz. modules/demo-accounts) - DemoAccessGuard
+   * her istekte DB'ye gitmeden kisitlama/sure kontrolu yapabilsin diye token'da. */
+  isDemoUser?: boolean;
+  /** Epoch ms; demo kullanicisi henuz hic login olmadiysa yok. */
+  demoExpiresAt?: number;
   type: 'access';
 }
 

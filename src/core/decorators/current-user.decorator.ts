@@ -5,6 +5,9 @@ export interface RequestUser {
   tenantId: string;
   roleIds: string[];
   isPlatformAdmin: boolean;
+  isDemoUser?: boolean;
+  /** Epoch ms - bkz. AccessTokenPayload.demoExpiresAt. */
+  demoExpiresAt?: number;
 }
 
 export const CurrentUser = createParamDecorator(

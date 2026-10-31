@@ -17,6 +17,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
+import { DemoRestricted } from '../../core/decorators/demo-access.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { CompanyAdminGuard } from '../../core/guards/company-admin.guard';
@@ -48,10 +49,14 @@ export class UsersController {
 
   @Get()
   @RequiresPermission('settings', 'VIEW', 'users')
-  list(
+  async list(
+    @CurrentUser() user: RequestUser,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<SafeUser[]> {
-    return this.users.list(includeInactive === 'true');
+    const users = await this.users.list(includeInactive === 'true');
+    // Ortak demo tenant'inda ziyaretciler birbirinin (ve asil yoneticinin)
+    // e-postalarini kullanici listesinde gormesin - bkz. modules/demo-accounts.
+    return user.isDemoUser ? users.filter((u) => u.id === user.id) : users;
   }
 
   @Get(':id/stats')
@@ -121,6 +126,7 @@ export class UsersController {
 
   @UseGuards(CompanyAdminGuard)
   @Post()
+  @DemoRestricted()
   createUser(
     @Body(new ZodValidationPipe(CreateUserSchema)) dto: CreateUserDto,
   ): Promise<{ user: SafeUser; temporaryPassword: string }> {
@@ -129,6 +135,7 @@ export class UsersController {
 
   @UseGuards(CompanyAdminGuard)
   @Post(':id/reset-password')
+  @DemoRestricted()
   resetPassword(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,
@@ -138,6 +145,7 @@ export class UsersController {
 
   @UseGuards(CompanyAdminGuard)
   @Patch(':id/role')
+  @DemoRestricted()
   updateRole(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,
@@ -148,6 +156,7 @@ export class UsersController {
 
   @UseGuards(CompanyAdminGuard)
   @Patch(':id/active')
+  @DemoRestricted()
   setActive(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,

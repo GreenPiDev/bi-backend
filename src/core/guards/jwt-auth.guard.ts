@@ -48,6 +48,8 @@ export class JwtAuthGuard implements CanActivate {
         tenantId: payload.tenantId,
         roleIds: payload.roleIds,
         isPlatformAdmin: payload.isPlatformAdmin,
+        isDemoUser: payload.isDemoUser,
+        demoExpiresAt: payload.demoExpiresAt,
       };
       return true;
     } catch {

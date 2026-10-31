@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CoreModule } from './core/core.module';
+import { DemoAccessGuard } from './core/guards/demo-access.guard';
 import { JwtAuthGuard } from './core/guards/jwt-auth.guard';
 import { ModuleGuard } from './core/guards/module.guard';
 import { PermissionGuard } from './core/guards/permission.guard';
@@ -22,6 +23,7 @@ import { CacheModule } from './modules/cache/cache.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { DashboardsModule } from './modules/dashboards/dashboards.module';
+import { DemoAccountsModule } from './modules/demo-accounts/demo-accounts.module';
 import { DatasetsModule } from './modules/datasets/datasets.module';
 import { DatasourcesModule } from './modules/datasources/datasources.module';
 import { DepartmentOptionsModule } from './modules/department-options/department-options.module';
@@ -95,6 +97,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     DatasetsModule,
     QueryModule,
     DashboardsModule,
+    DemoAccountsModule,
     WidgetsModule,
     OnboardingModule,
     ExportsModule,
@@ -149,6 +152,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: DemoAccessGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: ModuleGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },

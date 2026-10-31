@@ -14,6 +14,7 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
+import { AllowExpiredDemo } from '../../core/decorators/demo-access.decorator';
 import { Public } from '../../core/decorators/public.decorator';
 import { AppException } from '../../core/errors/app.exception';
 import { setAuthCookies } from '../../core/http/set-auth-cookies';
@@ -79,6 +80,7 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @AllowExpiredDemo()
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response): { ok: true } {
     res.clearCookie(ACCESS_TOKEN_COOKIE);
@@ -86,6 +88,7 @@ export class AuthController {
     return { ok: true };
   }
 
+  @AllowExpiredDemo()
   @Get('me')
   async me(@CurrentUser() user: RequestUser): Promise<AuthenticatedUser> {
     return this.auth.me(user.id);
