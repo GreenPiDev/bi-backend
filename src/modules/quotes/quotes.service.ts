@@ -198,6 +198,7 @@ interface ResolvedQuoteItem {
   discountNote: string | null;
   costPriceAtSale: Prisma.Decimal | null;
   brand: string | null;
+  unit: string;
   groupName: string | null;
 }
 
@@ -661,6 +662,7 @@ export class QuotesService {
             : null,
         costPriceAtSale: product.avgCost,
         brand: item.brand !== undefined ? item.brand || null : product.brand,
+        unit: item.unit || product.unit,
         groupName: item.groupName || null,
       };
     });

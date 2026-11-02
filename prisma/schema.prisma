@@ -1502,6 +1502,12 @@ model QuoteItem {
    */
   groupName         String?
   /**
+   * Satirin birimi (adet, kg...). Varsayilan olarak Product.unit'ten kopyalanir,
+   * ama bu teklif icin manuel ezilebilir (brand ile ayni snapshot semantigi).
+   * Eski kayitlarda null - okurken Product.unit'e dusulur.
+   */
+  unit              String?
+  /**
    * Ad-hoc (2026-10-19, kullanici istegi, bkz. CLAUDE.md): kismi sevkiyat takibi.
    * quantity ile ayni birimde, "bu kalemden musteriye kac adet fiilen teslim edildi"
    * - SalesOrder bir teklife 1:1 bagli oldugundan (quoteId @unique) delivered-quantity

@@ -53,6 +53,8 @@ const QuoteItemInputSchema = z.object({
    * Product.brand'den alinir, verilirse (bos string dahil) manuel ezme
    * sayilir; Product.brand'i kalici olarak degistirmez. */
   brand: z.string().trim().max(120).optional(),
+  /** Verilmezse Product.unit'ten alinir, verilirse manuel ezme sayilir. */
+  unit: z.string().trim().max(50).optional(),
   /** Ad-hoc "Ürünleri Gruplayarak Ekle" (bkz. Quote.groupItemsByProduct doc comment'i)
    * - bu satirin ait oldugu grubun serbest metin adi. */
   groupName: z.string().trim().max(200).optional(),
