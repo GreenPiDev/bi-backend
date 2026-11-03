@@ -30,7 +30,7 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
   async process(): Promise<void> {
     const dueCases = await this.prisma.postSaleCase.findMany({
       where: { reminderSentAt: null, reminderAt: { lte: new Date() } },
-      include: { account: true },
+      include: { account: true, quote: { select: { quoteNumber: true } } },
     });
 
     for (const postSaleCase of dueCases) {
@@ -49,6 +49,7 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
     salesOrderId: string;
     tenantId: string;
     account: { name: string };
+    quote?: { quoteNumber: string } | null;
   }): Promise<void> {
     const salesOrder = await this.prisma.salesOrder.findUnique({
       where: { id: postSaleCase.salesOrderId },
@@ -63,12 +64,16 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
       return;
     }
 
+    // Ayni firmanin birden fazla teklifi icin gelen bildirimler birbirinden ayirt
+    // edilebilsin diye teklif no (teklifsiz/manuel siparislerde siparis no) eklenir.
+    const reference = postSaleCase.quote?.quoteNumber ?? salesOrder.orderNumber;
+
     await this.prisma.notification.create({
       data: {
         tenantId: postSaleCase.tenantId,
         recipientUserId: salesRep.id,
         type: 'POST_SALE_SURVEY_REMINDER',
-        title: `${postSaleCase.account.name} şirketine anket gönderilmesi gerekiyor.`,
+        title: `${postSaleCase.account.name} şirketine anket gönderilmesi gerekiyor. (${reference})`,
         relatedEntityType: 'PostSaleCase',
         relatedEntityId: postSaleCase.id,
       },

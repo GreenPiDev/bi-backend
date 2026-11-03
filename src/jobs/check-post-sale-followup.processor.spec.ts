@@ -8,6 +8,7 @@ function createDueCase(overrides: Partial<Record<string, unknown>> = {}) {
     tenantId: 'tenant-1',
     salesOrderId: 'so-1',
     account: { name: 'ACME' },
+    quote: { quoteNumber: 'TEK-2026-10-19-002' },
     reminderAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     reminderSentAt: null,
     ...overrides,
@@ -62,7 +63,7 @@ describe('CheckPostSaleFollowupProcessor', () => {
           tenantId: 'tenant-1',
           recipientUserId: 'user-1',
           type: 'POST_SALE_SURVEY_REMINDER',
-          title: expect.stringContaining('ACME'),
+          title: expect.stringContaining('TEK-2026-10-19-002'),
           relatedEntityType: 'PostSaleCase',
           relatedEntityId: 'psc-1',
         }),
@@ -79,8 +80,11 @@ describe('CheckPostSaleFollowupProcessor', () => {
     });
   });
 
-  it('teklifsiz (manuel) siparis icin de bildirim olusturur', async () => {
+  it('teklifsiz (manuel) siparis icin de bildirim olusturur ve siparis no ekler', async () => {
     const prisma = createPrisma();
+    prisma.postSaleCase.findMany = vi
+      .fn()
+      .mockResolvedValue([createDueCase({ quote: null })]);
     const realtime = createRealtime();
     const processor = new CheckPostSaleFollowupProcessor(
       prisma as never,
@@ -89,7 +93,13 @@ describe('CheckPostSaleFollowupProcessor', () => {
     );
     await processor.process();
 
-    expect(prisma.notification.create).toHaveBeenCalled();
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: expect.stringContaining('SAT-2026-10-19-001'),
+        }),
+      }),
+    );
   });
 
   it('satis temsilcisi pasifse bildirim olusturmaz', async () => {
