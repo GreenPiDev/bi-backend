@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
+import { identifier, turkishContains } from '../../core/db/turkish-search';
 import { AppException } from '../../core/errors/app.exception';
 import {
   MODULE_REGISTRY,
@@ -213,8 +214,10 @@ export class TenantsService {
   /** Tenant listesi + her tenant'in COMPANYADMIN kullanicisinin e-postasi (platform-admin
    * ekraninda kiraci iletisim bilgisi olarak gosterilir). Birden fazla COMPANYADMIN varsa
    * en eski (ilk) kaydedilen alinir. */
-  async listTenantSummaries(): Promise<TenantSummary[]> {
+  async listTenantSummaries(q?: string): Promise<TenantSummary[]> {
+    const matchingIds = q ? await this.findTenantIdsBySearch(q) : undefined;
     const tenants = await this.prisma.tenant.findMany({
+      where: matchingIds ? { id: { in: matchingIds } } : undefined,
       select: { id: true, name: true, slug: true, plan: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -236,6 +239,18 @@ export class TenantsService {
       ...tenant,
       adminEmail: adminEmailByTenantId.get(tenant.id) ?? null,
     }));
+  }
+
+  /** Platform-admin tenant listesinde ad veya id ile arama. Tenant tablosu
+   * tenant-scoped olmadigi icin findIdsByTurkishSearch (TenantContext ister) yerine
+   * ayni turkishContains kosulu dogrudan kullaniliyor (bkz. core/db/turkish-search.ts). */
+  private async findTenantIdsBySearch(q: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT "id" FROM "tenants"
+      WHERE ${turkishContains(identifier('name'), q)}
+         OR ${turkishContains(identifier('id'), q)}
+    `);
+    return rows.map((row) => row.id);
   }
 
   /** Superadmin'in /new-customer formundan yeni bir kiraci + ilk COMPANYADMIN

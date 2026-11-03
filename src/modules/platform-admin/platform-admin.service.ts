@@ -85,8 +85,8 @@ export class PlatformAdminService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
-  listTenants(): Promise<TenantSummary[]> {
-    return this.tenants.listTenantSummaries();
+  listTenants(q?: string): Promise<TenantSummary[]> {
+    return this.tenants.listTenantSummaries(q);
   }
 
   async createTenant(

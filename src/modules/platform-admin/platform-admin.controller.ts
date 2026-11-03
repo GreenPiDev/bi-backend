@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PlatformAdminGuard } from '../../core/guards/platform-admin.guard';
@@ -12,6 +13,10 @@ import type { ModuleDefinition } from '../../core/modules/module-registry';
 import type { PageModuleAssignment } from '../../core/modules/page-modules.service';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { CreateTenantDto, CreateTenantSchema } from './dto/create-tenant.dto';
+import {
+  ListTenantsQueryDto,
+  ListTenantsQuerySchema,
+} from './dto/list-tenants-query.dto';
 import {
   ExtendDemoUserDto,
   ExtendDemoUserSchema,
@@ -35,8 +40,11 @@ export class PlatformAdminController {
   constructor(private readonly platformAdmin: PlatformAdminService) {}
 
   @Get('tenants')
-  listTenants(): Promise<TenantSummary[]> {
-    return this.platformAdmin.listTenants();
+  listTenants(
+    @Query(new ZodValidationPipe(ListTenantsQuerySchema))
+    query: ListTenantsQueryDto,
+  ): Promise<TenantSummary[]> {
+    return this.platformAdmin.listTenants(query.q);
   }
 
   @Get('demo-users')
