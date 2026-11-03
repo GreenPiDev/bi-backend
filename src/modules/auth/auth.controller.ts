@@ -22,13 +22,23 @@ import { classifyLoginOrigin } from '../../core/http/tenant-subdomain';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { AuthService, type AuthenticatedUser } from './auth.service';
 import { LoginDto, LoginSchema } from './dto/login.dto';
+import {
+  ForgotPasswordDto,
+  ForgotPasswordSchema,
+  ResetPasswordDto,
+  ResetPasswordSchema,
+} from './dto/password-reset.dto';
+import { PasswordResetService } from './password-reset.service';
 import { RegisterDto, RegisterSchema } from './dto/register.dto';
 import { LoginThrottlerGuard } from './login-throttler.guard';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './token.types';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
 
   @Public()
   @Post('register')
@@ -57,6 +67,28 @@ export class AuthController {
     const result = await this.auth.login(dto, originClassification);
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user };
+  }
+
+  @Public()
+  @UseGuards(LoginThrottlerGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @Post('forgot-password')
+  forgotPassword(
+    @Body(new ZodValidationPipe(ForgotPasswordSchema)) dto: ForgotPasswordDto,
+  ): { ok: true } {
+    this.passwordReset.requestReset(dto.email);
+    return { ok: true };
+  }
+
+  @Public()
+  @UseGuards(LoginThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('reset-password')
+  async resetPassword(
+    @Body(new ZodValidationPipe(ResetPasswordSchema)) dto: ResetPasswordDto,
+  ): Promise<{ ok: true }> {
+    await this.passwordReset.resetPassword(dto.token, dto.password);
+    return { ok: true };
   }
 
   @Public()

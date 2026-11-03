@@ -352,14 +352,39 @@ model User {
   /** Demo kaydinda ziyaretcinin girdigi firma adi (satis ekibinin geri donusu icin). */
   demoCompanyName   String?
   lastLoginAt       DateTime?
+  /**
+   * "Sifremi unuttum" ile sifre sifirlandiginda setlenir; bu andan once cikarilmis
+   * (iat'i daha eski) refresh/access token'lar reddedilir (bkz. modules/auth).
+   */
+  passwordChangedAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant Tenant         @relation(fields: [tenantId], references: [id])
-  roles  UserRoleLink[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  roles               UserRoleLink[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([tenantId])
   @@map("users")
+}
+
+/**
+ * Tek kullanimlik sifre sifirlama token'i. Veritabaninda yalnizca SHA-256 hash'i
+ * tutulur; ham token sadece e-postadaki baglantida bulunur. Giris oncesi (public)
+ * akista kullanildigi icin tenant-scoped extension'a EKLENMEZ.
+ */
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 /**

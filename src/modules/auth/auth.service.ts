@@ -15,6 +15,7 @@ import { DEMO_ACCOUNT_DURATION_MS } from '../demo-accounts/demo-account.constant
 import { TenantsService } from '../tenants/tenants.service';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
+import { isIssuedBeforePasswordChange } from './password-reset.constants';
 import { TokenService } from './token.service';
 
 export interface SafeUserRole {
@@ -188,7 +189,7 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string): Promise<AuthResult> {
-    let payload: { sub: string; tenantId: string };
+    let payload: { sub: string; tenantId: string; iat?: number };
     try {
       payload = this.tokens.verifyRefreshToken(refreshToken);
     } catch {
@@ -203,7 +204,16 @@ export class AuthService {
       where: { id: payload.sub },
       include: USER_WITH_ROLES_INCLUDE,
     });
-    if (!user || !user.isActive || user.tenantId !== payload.tenantId) {
+    if (
+      !user ||
+      !user.isActive ||
+      user.tenantId !== payload.tenantId ||
+      (user.passwordChangedAt &&
+        isIssuedBeforePasswordChange(
+          payload.iat,
+          user.passwordChangedAt.getTime(),
+        ))
+    ) {
       throw new AppException(
         'UNAUTHORIZED',
         'Kullanici bulunamadi.',

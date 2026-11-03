@@ -9,12 +9,15 @@ export interface AccessTokenPayload {
   /** Epoch ms; demo kullanicisi henuz hic login olmadiysa yok. */
   demoExpiresAt?: number;
   type: 'access';
+  /** JWT standart claim'i (saniye); jwt.sign otomatik ekler. */
+  iat?: number;
 }
 
 export interface RefreshTokenPayload {
   sub: string;
   tenantId: string;
   type: 'refresh';
+  iat?: number;
 }
 
 export const ACCESS_TOKEN_TTL = '15m';
