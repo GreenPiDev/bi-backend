@@ -113,16 +113,39 @@ export const DEFAULT_REMINDER_TYPE_OPTIONS = [
  * bos bir /satis-sonrasi?tab=surveys ile degil, 3 soru tipini (LIKERT/MULTIPLE_CHOICE/
  * OPEN_ENDED) gosteren hazir bir ornek anketle baslar - DEFAULT_*_OPTIONS listeleriyle
  * ayni "bos ekran yerine ornek" gerekcesi. */
-export const DEFAULT_SURVEY_NAME = 'Memnuniyet Anketi';
+export const DEFAULT_SURVEY_NAME = 'Satış Süreci Memnuniyet Anketi';
 export const DEFAULT_SURVEY_QUESTIONS = [
   {
     type: 'LIKERT' as const,
-    text: 'Genel olarak hizmetimizden ne kadar memnun kaldınız?',
+    text: 'Satış sürecinden genel olarak ne kadar memnun kaldınız?',
+  },
+  {
+    type: 'LIKERT' as const,
+    text: 'Satış temsilcimizin ilgisinden ve bilgi düzeyinden ne kadar memnun kaldınız?',
+  },
+  {
+    type: 'LIKERT' as const,
+    text: 'Teklifimizin açıklığını ve anlaşılırlığını nasıl değerlendirirsiniz?',
+  },
+  {
+    type: 'MULTIPLE_CHOICE' as const,
+    text: 'Teklif ve fiyatlarımızı sektördeki alternatiflerle karşılaştırdığınızda nasıl buldunuz?',
+    options: ['Daha uygun', 'Benzer', 'Biraz yüksek', 'Oldukça yüksek'],
   },
   {
     type: 'MULTIPLE_CHOICE' as const,
     text: 'Siparişiniz zamanında teslim edildi mi?',
     options: ['Evet, zamanında', 'Hafif gecikme oldu', 'Önemli gecikme oldu'],
+  },
+  {
+    type: 'MULTIPLE_CHOICE' as const,
+    text: 'Taleplerinize ve sorularınıza ne kadar hızlı yanıt verildi?',
+    options: ['Çok hızlı', 'Makul sürede', 'Yavaş', 'Yanıt alamadım'],
+  },
+  {
+    type: 'MULTIPLE_CHOICE' as const,
+    text: 'Bizimle tekrar çalışmayı veya bizi tanıdıklarınıza önermeyi düşünür müsünüz?',
+    options: ['Kesinlikle evet', 'Muhtemelen evet', 'Emin değilim', 'Hayır'],
   },
   {
     type: 'OPEN_ENDED' as const,

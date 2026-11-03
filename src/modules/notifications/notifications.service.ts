@@ -9,6 +9,14 @@ import {
 import { RealtimeService } from '../../core/realtime/realtime.service';
 import type { NotificationQueryDto } from './dto/notification.dto';
 
+/** /profile?tab=notifications yaniti - sayfalanmis liste + sayfadan bagimsiz toplam
+ * okunmamis sayisi (sayfa boyutu kucuk olsa bile kullanici gercek sayiyi gorsun diye). */
+export type NotificationListResult = PagedResult<Notification> & {
+  unreadCount: number;
+  /** Filtre butonlarindaki sayilar icin - status filtresinden bagimsiz. */
+  readCount: number;
+};
+
 /** Zil ikonu dropdown'inda gosterilecek okunmamis bildirim sayisi bu deger asilirsa
  * "n+" gibi bir gosterime gecmez (kapsam disi) - sadece liste bu kadarla sinirlanir,
  * gercek toplam sayi ayri donen `total` alanindan okunur. */
@@ -70,23 +78,53 @@ export class NotificationsService {
     });
   }
 
-  /** /profile?tab=notifications icin - okunmus/okunmamis tumu, sayfalanmis. */
+  /** /profile?tab=notifications icin - okunmus/okunmamis tumu, sayfalanmis,
+   * opsiyonel READ/UNREAD filtresiyle. Filtresiz siralama: once okunmamislar, sonra
+   * okunmuslar; her grup kendi icinde en yeni en ustte. */
   async list(
     recipientUserId: string,
     query: NotificationQueryDto,
-  ): Promise<PagedResult<Notification>> {
-    const where = { recipientUserId };
-    const [data, total] = await Promise.all([
-      this.prisma.notification.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (query.page - 1) * query.pageSize,
-        take: query.pageSize,
+  ): Promise<NotificationListResult> {
+    const [allCount, unreadCount] = await Promise.all([
+      this.prisma.notification.count({ where: { recipientUserId } }),
+      this.prisma.notification.count({
+        where: { recipientUserId, readAt: null },
       }),
-      this.prisma.notification.count({ where }),
     ]);
+    const readCount = allCount - unreadCount;
+    const offset = (query.page - 1) * query.pageSize;
+
+    let data: Notification[];
+    let total: number;
+    if (query.status === 'UNREAD') {
+      data = await this.findSegment(
+        recipientUserId,
+        false,
+        offset,
+        query.pageSize,
+      );
+      total = unreadCount;
+    } else if (query.status === 'READ') {
+      data = await this.findSegment(
+        recipientUserId,
+        true,
+        offset,
+        query.pageSize,
+      );
+      total = readCount;
+    } else {
+      data = await this.findUnreadFirstPage(
+        recipientUserId,
+        unreadCount,
+        offset,
+        query.pageSize,
+      );
+      total = allCount;
+    }
     return {
       data,
+      unreadCount,
+      readCount,
       meta: {
         page: query.page,
         pageSize: query.pageSize,
@@ -94,6 +132,42 @@ export class NotificationsService {
         totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
       },
     };
+  }
+
+  /** Prisma'da kosullu (CASE) siralama olmadigi icin filtresiz sayfa iki segmentten
+   * birlestirilir: okunmamislar global sirada 0..unreadCount-1, okunmuslar ondan sonra. */
+  private async findUnreadFirstPage(
+    recipientUserId: string,
+    unreadCount: number,
+    offset: number,
+    pageSize: number,
+  ): Promise<Notification[]> {
+    const unreadTake = Math.max(0, Math.min(pageSize, unreadCount - offset));
+    const readSkip = Math.max(0, offset - unreadCount);
+    const readTake = pageSize - unreadTake;
+    const [unread, read] = await Promise.all([
+      unreadTake > 0
+        ? this.findSegment(recipientUserId, false, offset, unreadTake)
+        : Promise.resolve([]),
+      readTake > 0
+        ? this.findSegment(recipientUserId, true, readSkip, readTake)
+        : Promise.resolve([]),
+    ]);
+    return [...unread, ...read];
+  }
+
+  private findSegment(
+    recipientUserId: string,
+    isRead: boolean,
+    skip: number,
+    take: number,
+  ): Promise<Notification[]> {
+    return this.prisma.notification.findMany({
+      where: { recipientUserId, readAt: isRead ? { not: null } : null },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    });
   }
 
   async setRead(

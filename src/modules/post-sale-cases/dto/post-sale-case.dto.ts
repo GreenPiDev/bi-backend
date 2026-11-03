@@ -62,3 +62,14 @@ export const MarkPostSaleFeedbackSchema = z.object({
 export type MarkPostSaleFeedbackDto = z.infer<
   typeof MarkPostSaleFeedbackSchema
 >;
+
+export const PostSaleFeedbackNoteSchema = z.object({
+  text: z
+    .string()
+    .trim()
+    .min(1, 'Not bos birakilamaz.')
+    .max(2000, 'Not en fazla 2000 karakter olabilir.'),
+});
+export type PostSaleFeedbackNoteDto = z.infer<
+  typeof PostSaleFeedbackNoteSchema
+>;

@@ -12,7 +12,6 @@ import {
   CurrentUser,
   type RequestUser,
 } from '../../core/decorators/current-user.decorator';
-import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   NotificationQuerySchema,
@@ -20,7 +19,10 @@ import {
   type NotificationQueryDto,
   type SetNotificationReadDto,
 } from './dto/notification.dto';
-import { NotificationsService } from './notifications.service';
+import {
+  NotificationsService,
+  type NotificationListResult,
+} from './notifications.service';
 
 /**
  * Bilerek hicbir @RequiresPermission/@ModulePage tasimiyor - bildirimler tamamen
@@ -42,7 +44,7 @@ export class NotificationsController {
     @Query(new ZodValidationPipe(NotificationQuerySchema))
     query: NotificationQueryDto,
     @CurrentUser() user: RequestUser,
-  ): Promise<PagedResult<Notification>> {
+  ): Promise<NotificationListResult> {
     return this.notifications.list(user.id, query);
   }
 

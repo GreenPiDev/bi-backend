@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -13,9 +14,11 @@ import type { PagedResult } from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   MarkPostSaleFeedbackSchema,
+  PostSaleFeedbackNoteSchema,
   PostSaleCaseQuerySchema,
   SendPostSaleSurveySchema,
   type MarkPostSaleFeedbackDto,
+  type PostSaleFeedbackNoteDto,
   type PostSaleCaseQueryDto,
   type SendPostSaleSurveyDto,
 } from './dto/post-sale-case.dto';
@@ -62,5 +65,25 @@ export class PostSaleCasesController {
     dto: MarkPostSaleFeedbackDto,
   ): Promise<PostSaleCaseWithDetails> {
     return this.postSaleCases.markFeedback(id, dto);
+  }
+
+  @Patch(':id/feedback-notes/:noteId')
+  @RequiresPermission('post-sale-cases', 'UPDATE')
+  updateFeedbackNote(
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+    @Body(new ZodValidationPipe(PostSaleFeedbackNoteSchema))
+    dto: PostSaleFeedbackNoteDto,
+  ): Promise<PostSaleCaseWithDetails> {
+    return this.postSaleCases.updateFeedbackNote(id, noteId, dto);
+  }
+
+  @Delete(':id/feedback-notes/:noteId')
+  @RequiresPermission('post-sale-cases', 'UPDATE')
+  deleteFeedbackNote(
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+  ): Promise<PostSaleCaseWithDetails> {
+    return this.postSaleCases.deleteFeedbackNote(id, noteId);
   }
 }

@@ -294,6 +294,7 @@ model Tenant {
   quoteTemplates              QuoteTemplate[]
   postSaleCases               PostSaleCase[]
   feedbackSurveys             FeedbackSurvey[]
+  postSaleFeedbackNotes       PostSaleFeedbackNote[]
   surveys                     Survey[]
   surveyResponses             SurveyResponse[]
   projects                    Project[]
@@ -1590,10 +1591,32 @@ model PostSaleCase {
   account        Account         @relation(fields: [accountId], references: [id])
   contact        Contact?        @relation(fields: [contactId], references: [id])
   feedbackSurvey FeedbackSurvey?
+  feedbackNotes  PostSaleFeedbackNote[]
 
   @@index([tenantId, reminderAt])
   @@index([tenantId, accountId])
   @@map("crm_post_sale_cases")
+}
+
+/**
+ * Satis sonrasi kaydina girilen geri bildirim notlari (kullanici talebi, 2026-11-03):
+ * eski tekil PostSaleCase.feedbackNote alani yerine, her kayda birden fazla not
+ * eklenebilir/duzenlenebilir/silinebilir. Eski feedbackNote degerleri migration'da
+ * bu tabloya tasindi, kolon geriye uyumluluk icin duruyor ama artik yazilmiyor.
+ */
+model PostSaleFeedbackNote {
+  id             String   @id @default(uuid())
+  tenantId       String
+  postSaleCaseId String
+  text           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  postSaleCase PostSaleCase @relation(fields: [postSaleCaseId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, postSaleCaseId, createdAt])
+  @@map("crm_post_sale_feedback_notes")
 }
 
 /**

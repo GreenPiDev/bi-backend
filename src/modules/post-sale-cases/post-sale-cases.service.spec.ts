@@ -14,6 +14,7 @@ const fakeCache = {
 function createCaseRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'psc-1',
+    tenantId: 'tenant-1',
     quoteId: 'quote-1',
     accountId: 'account-1',
     contactId: null,
@@ -47,6 +48,14 @@ function createPrisma(row: unknown = createCaseRow()) {
     },
     feedbackSurvey: {
       update: vi.fn().mockResolvedValue({}),
+    },
+    postSaleFeedbackNote: {
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+      findFirst: vi
+        .fn()
+        .mockResolvedValue({ id: 'note-1', postSaleCaseId: 'psc-1' }),
     },
   };
 }
@@ -287,9 +296,18 @@ describe('PostSaleCasesService', () => {
     expect(prisma.postSaleCase.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'psc-1' },
-        data: expect.objectContaining({ feedbackNote: 'Musteri memnun' }),
+        data: expect.objectContaining({
+          feedbackReceivedAt: expect.any(Date),
+        }),
       }),
     );
+    expect(prisma.postSaleFeedbackNote.create).toHaveBeenCalledWith({
+      data: {
+        tenantId: 'tenant-1',
+        postSaleCaseId: 'psc-1',
+        text: 'Musteri memnun',
+      },
+    });
     expect(prisma.feedbackSurvey.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'survey-1' },
@@ -310,5 +328,75 @@ describe('PostSaleCasesService', () => {
 
     expect(prisma.postSaleCase.update).toHaveBeenCalled();
     expect(prisma.feedbackSurvey.update).not.toHaveBeenCalled();
+    expect(prisma.postSaleFeedbackNote.create).not.toHaveBeenCalled();
+  });
+
+  it('markFeedback: daha once alinmis geri bildirim tarihini ileri kaydirmaz', async () => {
+    const received = new Date('2026-10-01T10:00:00.000Z');
+    const prisma = createPrisma(
+      createCaseRow({ feedbackReceivedAt: received }),
+    );
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+    await service.markFeedback('psc-1', { responseNote: 'Ikinci not' });
+
+    expect(prisma.postSaleCase.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { feedbackReceivedAt: received } }),
+    );
+  });
+
+  it('updateFeedbackNote: notun metnini gunceller', async () => {
+    const prisma = createPrisma();
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+    await service.updateFeedbackNote('psc-1', 'note-1', { text: 'Yeni metin' });
+
+    expect(prisma.postSaleFeedbackNote.update).toHaveBeenCalledWith({
+      where: { id: 'note-1' },
+      data: { text: 'Yeni metin' },
+    });
+  });
+
+  it('deleteFeedbackNote: notu siler', async () => {
+    const prisma = createPrisma();
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+    await service.deleteFeedbackNote('psc-1', 'note-1');
+
+    expect(prisma.postSaleFeedbackNote.delete).toHaveBeenCalledWith({
+      where: { id: 'note-1' },
+    });
+  });
+
+  it('updateFeedbackNote/deleteFeedbackNote: not bu kayda ait degilse 404 firlatir', async () => {
+    const prisma = createPrisma();
+    prisma.postSaleFeedbackNote.findFirst.mockResolvedValue(null);
+    const service = new PostSaleCasesService(
+      prisma as never,
+      fakeAudit,
+      fakeSurveyQueue,
+      fakeCache,
+    );
+
+    await expect(
+      service.updateFeedbackNote('psc-1', 'x', { text: 'a' }),
+    ).rejects.toBeInstanceOf(AppException);
+    await expect(
+      service.deleteFeedbackNote('psc-1', 'x'),
+    ).rejects.toBeInstanceOf(AppException);
+    expect(prisma.postSaleFeedbackNote.update).not.toHaveBeenCalled();
+    expect(prisma.postSaleFeedbackNote.delete).not.toHaveBeenCalled();
   });
 });

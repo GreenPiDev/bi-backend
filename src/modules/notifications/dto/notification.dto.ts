@@ -6,6 +6,9 @@ import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 export const NotificationQuerySchema = ListQuerySchema.pick({
   page: true,
   pageSize: true,
+}).extend({
+  /** Tablo uzerindeki Tumu/Okundu/Okunmadi filtresi - verilmezse tumu. */
+  status: z.enum(['READ', 'UNREAD']).optional(),
 });
 export type NotificationQueryDto = z.infer<typeof NotificationQuerySchema>;
 

@@ -6,6 +6,7 @@ import type {
   Contact,
   FeedbackSurvey,
   PostSaleCase,
+  PostSaleFeedbackNote,
   Quote,
   SalesOrder,
   SurveyQuestion,
@@ -35,6 +36,7 @@ import type {
   MarkPostSaleFeedbackDto,
   PostSaleCaseQueryDto,
   PostSaleCaseStatus,
+  PostSaleFeedbackNoteDto,
   SendPostSaleSurveyDto,
 } from './dto/post-sale-case.dto';
 
@@ -45,6 +47,7 @@ const POST_SALE_CASE_INCLUDE = {
   quote: true,
   account: true,
   contact: true,
+  feedbackNotes: { orderBy: { createdAt: 'asc' as const } },
   feedbackSurvey: {
     include: {
       responses: {
@@ -65,6 +68,7 @@ export type PostSaleCaseWithDetails = PostSaleCase & {
   quote: Quote | null;
   account: Account;
   contact: Contact | null;
+  feedbackNotes: PostSaleFeedbackNote[];
   feedbackSurvey:
     (FeedbackSurvey & { responses: SurveyResponseWithQuestion[] }) | null;
   status: PostSaleCaseStatus;
@@ -247,21 +251,31 @@ export class PostSaleCasesService {
     dto: MarkPostSaleFeedbackDto,
   ): Promise<PostSaleCaseWithDetails> {
     const existing = await this.getById(id);
-    const feedbackReceivedAt = new Date();
+    // Ilk geri bildirim tarihi korunur: sonraki her not "geri bildirim alindi"
+    // tarihini ileri kaydirmamali (Surec kartindaki zaman cizelgesi bunu gosterir).
+    const feedbackReceivedAt = existing.feedbackReceivedAt ?? new Date();
 
     await this.prisma.postSaleCase.update({
       where: { id },
-      data: {
-        feedbackReceivedAt,
-        feedbackNote: dto.responseNote ?? existing.feedbackNote,
-      },
+      data: { feedbackReceivedAt },
     });
+
+    if (dto.responseNote) {
+      await this.prisma.postSaleFeedbackNote.create({
+        data: {
+          tenantId: existing.tenantId,
+          postSaleCaseId: id,
+          text: dto.responseNote,
+        },
+      });
+    }
 
     if (existing.feedbackSurvey) {
       await this.prisma.feedbackSurvey.update({
         where: { id: existing.feedbackSurvey.id },
         data: {
-          respondedAt: feedbackReceivedAt,
+          respondedAt:
+            existing.feedbackSurvey.respondedAt ?? feedbackReceivedAt,
           responseNote:
             dto.responseNote ?? existing.feedbackSurvey.responseNote,
         },
@@ -277,5 +291,60 @@ export class PostSaleCasesService {
     await this.cache.invalidate();
 
     return this.getById(id);
+  }
+
+  async updateFeedbackNote(
+    id: string,
+    noteId: string,
+    dto: PostSaleFeedbackNoteDto,
+  ): Promise<PostSaleCaseWithDetails> {
+    await this.findNoteOrThrow(id, noteId);
+    await this.prisma.postSaleFeedbackNote.update({
+      where: { id: noteId },
+      data: { text: dto.text },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'PostSaleCase',
+      entityId: id,
+      meta: { action: 'update-feedback-note', noteId },
+    });
+    await this.cache.invalidate();
+    return this.getById(id);
+  }
+
+  async deleteFeedbackNote(
+    id: string,
+    noteId: string,
+  ): Promise<PostSaleCaseWithDetails> {
+    await this.findNoteOrThrow(id, noteId);
+    await this.prisma.postSaleFeedbackNote.delete({ where: { id: noteId } });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'PostSaleCase',
+      entityId: id,
+      meta: { action: 'delete-feedback-note', noteId },
+    });
+    await this.cache.invalidate();
+    return this.getById(id);
+  }
+
+  /** Not yoksa, baska bir kayda veya baska bir tenant'a aitse 404 (varligi sizdirma). */
+  private async findNoteOrThrow(
+    id: string,
+    noteId: string,
+  ): Promise<PostSaleFeedbackNote> {
+    await this.getById(id);
+    const note = await this.prisma.postSaleFeedbackNote.findFirst({
+      where: { id: noteId, postSaleCaseId: id },
+    });
+    if (!note) {
+      throw new AppException(
+        'FEEDBACK_NOTE_NOT_FOUND',
+        'Not bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return note;
   }
 }
