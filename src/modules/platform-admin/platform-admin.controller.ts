@@ -13,6 +13,10 @@ import type { PageModuleAssignment } from '../../core/modules/page-modules.servi
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import { CreateTenantDto, CreateTenantSchema } from './dto/create-tenant.dto';
 import {
+  ExtendDemoUserDto,
+  ExtendDemoUserSchema,
+} from './dto/extend-demo-user.dto';
+import {
   SetPageModuleDto,
   SetPageModuleSchema,
 } from './dto/set-page-module.dto';
@@ -38,6 +42,19 @@ export class PlatformAdminController {
   @Get('demo-users')
   listDemoUsers(): Promise<DemoUserSummary[]> {
     return this.platformAdmin.listDemoUsers();
+  }
+
+  @Post('demo-users/:id/extend')
+  extendDemoUser(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ExtendDemoUserSchema)) dto: ExtendDemoUserDto,
+  ): Promise<DemoUserSummary> {
+    return this.platformAdmin.extendDemoUser(id, dto);
+  }
+
+  @Post('demo-users/:id/deactivate')
+  deactivateDemoUser(@Param('id') id: string): Promise<DemoUserSummary> {
+    return this.platformAdmin.deactivateDemoUser(id);
   }
 
   @Post('tenants')

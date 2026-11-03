@@ -21,8 +21,41 @@ import {
   type TenantSummary,
 } from '../tenants/tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import type { ExtendDemoUserDto } from './dto/extend-demo-user.dto';
 
 export type { TenantSummary };
+
+const DEMO_USER_SELECT = {
+  id: true,
+  name: true,
+  demoCompanyName: true,
+  email: true,
+  phone: true,
+  isActive: true,
+  createdAt: true,
+  lastLoginAt: true,
+  demoExpiresAt: true,
+  tenant: { select: { slug: true } },
+} as const;
+
+function toDemoUserSummary({
+  demoCompanyName,
+  tenant,
+  ...user
+}: {
+  id: string;
+  name: string;
+  demoCompanyName: string | null;
+  email: string;
+  phone: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  lastLoginAt: Date | null;
+  demoExpiresAt: Date | null;
+  tenant: { slug: string };
+}): DemoUserSummary {
+  return { ...user, companyName: demoCompanyName, tenantSlug: tenant.slug };
+}
 
 /** Super admin "Demo Kullanicilari" sayfasindaki satir (bkz. modules/demo-accounts). */
 export interface DemoUserSummary {
@@ -123,24 +156,68 @@ export class PlatformAdminService {
     const users = await this.prisma.user.findMany({
       where: { isDemoUser: true },
       orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        demoCompanyName: true,
-        email: true,
-        phone: true,
-        isActive: true,
-        createdAt: true,
-        lastLoginAt: true,
-        demoExpiresAt: true,
-        tenant: { select: { slug: true } },
-      },
+      select: DEMO_USER_SELECT,
     });
-    return users.map(({ demoCompanyName, tenant, ...user }) => ({
-      ...user,
-      companyName: demoCompanyName,
-      tenantSlug: tenant.slug,
-    }));
+    return users.map(toDemoUserSummary);
+  }
+
+  /**
+   * Re-activates a demo user: the trial now ends `now + days/hours/minutes`
+   * (not counted from the old expiry), and the account is set active again.
+   */
+  /**
+   * "Deactivates" a demo user by ending the trial right now: the account stays active
+   * (can still log in) but sees the expired-trial modal, same as a natural expiry.
+   * Setting `isActive=false` would block login entirely instead.
+   */
+  async deactivateDemoUser(id: string): Promise<DemoUserSummary> {
+    const { tenantId } = await this.requireDemoUser(id);
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { demoExpiresAt: new Date() },
+      select: DEMO_USER_SELECT,
+    });
+    this.notifyDemoUserChanged(tenantId, id);
+    return toDemoUserSummary(updated);
+  }
+
+  /** Lets an open session of that demo user refetch /auth/me without a page refresh. */
+  private notifyDemoUserChanged(tenantId: string, userId: string): void {
+    this.realtime.emitToTenant(tenantId, 'demo-user.updated', { userId });
+  }
+
+  private async requireDemoUser(id: string): Promise<{ tenantId: string }> {
+    const existing = await this.prisma.user.findFirst({
+      where: { id, isDemoUser: true },
+      select: { tenantId: true },
+    });
+    if (!existing) {
+      throw new AppException(
+        'DEMO_USER_NOT_FOUND',
+        'Demo kullanıcısı bulunamadı.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return existing;
+  }
+
+  async extendDemoUser(
+    id: string,
+    duration: ExtendDemoUserDto,
+  ): Promise<DemoUserSummary> {
+    const { tenantId } = await this.requireDemoUser(id);
+    const durationMs =
+      ((duration.days * 24 + duration.hours) * 60 + duration.minutes) * 60_000;
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        demoExpiresAt: new Date(Date.now() + durationMs),
+        isActive: true,
+      },
+      select: DEMO_USER_SELECT,
+    });
+    this.notifyDemoUserChanged(tenantId, id);
+    return toDemoUserSummary(updated);
   }
 
   listModuleDefinitions(): readonly ModuleDefinition[] {
