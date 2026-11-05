@@ -12,7 +12,9 @@ export function resolveAppVersion(
 ): string {
   if (env.APP_VERSION) return env.APP_VERSION;
   try {
-    const fromFile = readFileSync(join(cwd, 'BUILD_ID'), 'utf-8').trim();
+    const fromFile = readFileSync(join(cwd, 'BUILD_ID'), {
+      encoding: 'utf-8',
+    }).trim();
     if (fromFile) return fromFile;
   } catch {
     // dosya yok: yerel gelistirme
