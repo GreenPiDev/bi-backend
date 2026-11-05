@@ -7,10 +7,16 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import type { BrandOption } from '@prisma/client';
 import { RequiresModule } from '../../core/decorators/requires-module.decorator';
 import { RequiresPermission } from '../../core/decorators/requires-permission.decorator';
+import {
+  ListQuerySchema,
+  type ListQueryDto,
+  type PagedResult,
+} from '../../core/dto/list-query.dto';
 import { ZodValidationPipe } from '../../core/pipes/zod-validation.pipe';
 import {
   CreateBrandOptionSchema,
@@ -28,6 +34,13 @@ export class BrandOptionsController {
   @Get()
   list(): Promise<BrandOption[]> {
     return this.brandOptions.list();
+  }
+
+  @Get('browse')
+  browse(
+    @Query(new ZodValidationPipe(ListQuerySchema)) query: ListQueryDto,
+  ): Promise<PagedResult<BrandOption>> {
+    return this.brandOptions.browse(query);
   }
 
   @Post()

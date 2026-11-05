@@ -1,5 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Prisma, type BrandOption } from '@prisma/client';
+import type { ListQueryDto, PagedResult } from '../../core/dto/list-query.dto';
+import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import { AppException } from '../../core/errors/app.exception';
 import {
   TENANT_PRISMA,
@@ -23,6 +25,34 @@ export class BrandOptionsService {
 
   list(): Promise<BrandOption[]> {
     return this.prisma.brandOption.findMany({ orderBy: { label: 'asc' } });
+  }
+
+  /** Sayfalı + aramalı liste (infinite-scroll dropdown'ları için). Arama, Türkçe
+   * aksanlı karakterlerde doğru çalışması için `findIdsByTurkishSearch` kullanır. */
+  async browse(query: ListQueryDto): Promise<PagedResult<BrandOption>> {
+    const { page, pageSize, q } = query;
+    const matchingIds = q
+      ? await findIdsByTurkishSearch(
+          this.prisma,
+          'crm_brand_options',
+          ['label'],
+          q,
+        )
+      : null;
+    const where = matchingIds ? { id: { in: matchingIds } } : {};
+    const [data, total] = await Promise.all([
+      this.prisma.brandOption.findMany({
+        where,
+        orderBy: { label: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.brandOption.count({ where }),
+    ]);
+    return {
+      data,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
   }
 
   private async emitUpdated(): Promise<void> {
