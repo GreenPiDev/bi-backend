@@ -267,30 +267,6 @@ describe('Quotes (e2e)', () => {
     expect(res.body.status).toBe('REJECTED');
   });
 
-  it('GET /exports/quote/:id/pdf: onay bekleyen teklif icin 409 QUOTE_NOT_READY doner (Playwright cagrilmadan once reddedilir)', async () => {
-    const createRes = await request(app.getHttpServer())
-      .post('/api/v1/quotes')
-      .set('Cookie', cookiesA)
-      .send({
-        accountId: accountIdA,
-        items: [
-          {
-            productId: limitedProductId,
-            quantity: 1,
-            discountPct: 30,
-            vatPct: 0,
-          },
-        ],
-      });
-    expect(createRes.body.status).toBe('PENDING_APPROVAL');
-
-    const res = await request(app.getHttpServer())
-      .get(`/api/v1/exports/quote/${createRes.body.id}/pdf`)
-      .set('Cookie', cookiesA);
-    expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('QUOTE_NOT_READY');
-  });
-
   it('POST /quotes/:id/approve: PENDING_APPROVAL disindaki teklif icin 409 doner', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/quotes/${pendingQuoteId}/approve`)

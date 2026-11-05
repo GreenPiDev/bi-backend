@@ -15,7 +15,6 @@ import { buildQuotePdfFilename } from './quote-pdf-filename';
 import { QuotePdfService } from './quote-pdf.service';
 import { isKnownReportTab, ReportPdfService } from './report-pdf.service';
 
-const QUOTE_EXPORTABLE_STATUSES = new Set(['DRAFT', 'SENT', 'APPROVED']);
 const QUOTE_PDF_COVER_TITLE = 'Fiyat Teklifi';
 const quotePdfDateFormatter = new Intl.DateTimeFormat('tr-TR');
 
@@ -98,17 +97,9 @@ export class ExportsService {
     return this.dashboardPdf.render(dashboardId, accessToken);
   }
 
-  /** Q6/Q7: PENDING_APPROVAL/REJECTED durumundaki teklifler disa aktarilamaz -
-   * "onaya dusme" ifadesinin pratik karsiligi, bkz. docs/VARSAYIMLAR.md V27. */
+  /** Q6: Teklif PDF'i durumdan bagimsiz olarak her teklif icin alinabilir. */
   async exportQuotePdf(quoteId: string, user: RequestUser): Promise<Buffer> {
     const quote = await this.quotes.getById(quoteId);
-    if (!QUOTE_EXPORTABLE_STATUSES.has(quote.status)) {
-      throw new AppException(
-        'QUOTE_NOT_READY',
-        'Bu teklif onay bekliyor veya reddedildi, PDF olarak disa aktarilamaz.',
-        HttpStatus.CONFLICT,
-      );
-    }
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,
@@ -130,27 +121,13 @@ export class ExportsService {
     );
   }
 
-  private async requireExportableQuote(
-    quoteId: string,
-  ): Promise<Awaited<ReturnType<QuotesService['getById']>>> {
-    const quote = await this.quotes.getById(quoteId);
-    if (!QUOTE_EXPORTABLE_STATUSES.has(quote.status)) {
-      throw new AppException(
-        'QUOTE_NOT_READY',
-        'Bu teklif onay bekliyor veya reddedildi, PDF olarak disa aktarilamaz.',
-        HttpStatus.CONFLICT,
-      );
-    }
-    return quote;
-  }
-
   /** /teklifler/:id?tab=cost ekraninin kendi PDF export'u - ana teklif PDF'inden
    * (exportQuotePdf) bagimsiz, markali sablon kullanmaz. */
   async exportQuoteCostPdf(
     quoteId: string,
     user: RequestUser,
   ): Promise<Buffer> {
-    const quote = await this.requireExportableQuote(quoteId);
+    const quote = await this.quotes.getById(quoteId);
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,
@@ -171,7 +148,7 @@ export class ExportsService {
     quoteId: string,
     user: RequestUser,
   ): Promise<Buffer> {
-    const quote = await this.requireExportableQuote(quoteId);
+    const quote = await this.quotes.getById(quoteId);
     const accessToken = this.tokenService.signAccessToken({
       sub: user.id,
       tenantId: user.tenantId,

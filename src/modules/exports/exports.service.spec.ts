@@ -190,19 +190,6 @@ describe('ExportsService', () => {
     );
   });
 
-  it('exportQuotePdf: PENDING_APPROVAL teklif icin QUOTE_NOT_READY firlatir', async () => {
-    const service = buildService({ quotes: createQuotes('PENDING_APPROVAL') });
-    const user = {
-      id: 'u1',
-      tenantId: TENANT_ID,
-      roleIds: ['role-1'],
-      isPlatformAdmin: false,
-    };
-    await expect(service.exportQuotePdf(QUOTE_ID, user)).rejects.toMatchObject({
-      code: 'QUOTE_NOT_READY',
-    });
-  });
-
   it('exportReportsPdf: bilinen bir tab icin kisa omurlu token uretip PDF uretir', async () => {
     const tokenService = createTokenService();
     const reportPdf = createReportPdf();
