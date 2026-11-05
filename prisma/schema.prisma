@@ -350,7 +350,9 @@ model User {
    */
   isDemoUser        Boolean   @default(false)
   demoExpiresAt     DateTime?
-  /** Demo kaydinda ziyaretcinin girdigi firma adi (satis ekibinin geri donusu icin). */
+  /**
+   * Demo kaydinda ziyaretcinin girdigi firma adi (satis ekibinin geri donusu icin).
+   */
   demoCompanyName   String?
   lastLoginAt       DateTime?
   /**
@@ -1257,40 +1259,40 @@ model ProductList {
  * basina benzersiz, gun icinde sirali (Q1).
  */
 model Quote {
-  id               String              @id @default(uuid())
-  tenantId         String
-  accountId        String
+  id                  String              @id @default(uuid())
+  tenantId            String
+  accountId           String
   /**
    * S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - teklif olustururken opsiyonel
    * secilir, PostSaleCase/FeedbackSurvey bunu teklif uzerinden miras alir.
    */
-  contactId        String?
-  quoteNumber      String
+  contactId           String?
+  quoteNumber         String
   /**
    * Kullanicinin teklife elle verdigi tarih - quoteNumber'in gun-icinde-sayaci
    * (sistemin "simdi"si) ile karistirilmamali, teklif belgesinde gorunen tarih
    * kullanici tarafindan gecmis/gelecek bir gune ayarlanabilir.
    */
-  quoteDate        DateTime            @default(now())
+  quoteDate           DateTime            @default(now())
   /**
    * Serbest metin, orn. "3 is gunu", "2 hafta", "2-3 hafta".
    */
-  leadTime         String?
+  leadTime            String?
   /**
    * Teklif gecerlilik suresi. leadTime ile ayni desen: serbest metin,
    * orn. "15 gun", "1 ay", "30.11.2026'a kadar".
    */
-  validityPeriod   String?
+  validityPeriod      String?
   /**
    * Tenant'in crm_payment_method_options listesine karsi dogrulanir (bkz.
    * QuotesService.assertValidPaymentMethod, sektor alaniyla ayni desen).
    */
-  paymentMethod    String?
-  title            String?
-  paymentTerms     String?
-  salesTerms       String?
-  deliveryTerms    String?
-  generalTerms     String?
+  paymentMethod       String?
+  title               String?
+  paymentTerms        String?
+  salesTerms          String?
+  deliveryTerms       String?
+  generalTerms        String?
   /**
    * Secilen IbanOption(lar)'in alanlari olusturma/guncelleme aninda buraya
    * kopyalanir (bkz. IbanOption doc comment'i) - FK degil, snapshot. Bir grup
@@ -1299,39 +1301,39 @@ model Quote {
    * tek bir hesap secildiyse 1 elemanli array. Her eleman:
    * { bankName, accountHolderName, accountNumber, iban, currency }.
    */
-  ibanAccounts     Json?
-  status           QuoteStatus         @default(DRAFT)
-  approvedAt       DateTime?
-  approvedById     String?
+  ibanAccounts        Json?
+  status              QuoteStatus         @default(DRAFT)
+  approvedAt          DateTime?
+  approvedById        String?
   /**
    * Ad-hoc /teklifler ice aktarma (bkz. QuoteItemsEntryMode doc comment'i).
    * MANUAL_TOTAL oldugunda items bos olabilir, PDF/toplam hesaplayicilari
    * manualSubtotal/manualVatAmount/manualCurrency'den okur (bkz. bi-frontend
    * lib/quote-totals.ts getQuoteCurrencyTotals).
    */
-  itemsEntryMode   QuoteItemsEntryMode @default(ITEMIZED)
-  manualSubtotal   Decimal?            @db.Decimal(14, 2)
-  manualVatAmount  Decimal?            @db.Decimal(14, 2)
-  manualCurrency   String?
+  itemsEntryMode      QuoteItemsEntryMode @default(ITEMIZED)
+  manualSubtotal      Decimal?            @db.Decimal(14, 2)
+  manualVatAmount     Decimal?            @db.Decimal(14, 2)
+  manualCurrency      String?
   /**
    * Ad-hoc /teklifler ice aktarma - Product.attributes ile ayni "bilinen alana
    * eslenmeyen ama kaybedilmek istenmeyen kolon" catch-all deseni (bkz.
    * ProductImportsService). quote-imports disinda hic yazilmaz.
    */
-  attributes       Json?
+  attributes          Json?
   /**
    * Kalemler farkli para birimlerinde olabilir (Product.currency) - teklifin TEK bir
    * genel toplamini gosterebilmek icin kullanicinin sectigi hedef para birimi. Item
    * para birimlerinden biriyle ayni olmak zorunda degil.
    */
-  quoteCurrency    String              @default("TRY")
+  quoteCurrency       String              @default("TRY")
   /**
    * quoteCurrency disindaki her item para biriminin quoteCurrency'ye cevrim kuru
    * snapshot'i - `{ asOf: string, rates: { [currency]: number } }`. Kullanici FxService'ten
    * gelen guncel kuru duzenleyebilir; olusturma/guncelleme aninda buraya donmuslenir,
    * gecmis teklifler farkli gunun kurunu korur (unitPrice ile ayni "snapshot" deseni).
    */
-  exchangeRates    Json?
+  exchangeRates       Json?
   /**
    * Bir proje birden fazla teklifle iliskilendirilebilir (1 Project : N Quote), ama bir
    * teklif en fazla bir projeye baglidir - bu yuzden FK burada, Quote tarafinda (eskiden
@@ -1339,14 +1341,14 @@ model Quote {
    * olustururken setlenmez; proje duzenleme formundaki "Teklifler" cok-secimli alaniyla
    * (tam degisim/replace semantigi) ayarlanir (bkz. ProjectsService.update).
    */
-  projectId        String?
+  projectId           String?
   /**
    * Ad-hoc: markali PDF sablonu (bkz. docs/VARSAYIMLAR.md V41). Nullable ve
    * onDelete: SetNull - sablonsuz teklifler (null) mevcut sade export yolunu
    * degismeden kullanmaya devam eder, bir sablon silinirse onu kullanan teklifler
    * sessizce sablonsuz export'a duser.
    */
-  templateId       String?
+  templateId          String?
   /**
    * Ad-hoc revizyon takibi (kullanici istegi, bkz. CLAUDE.md). Teklif REVIZE
    * durumundayken kalemler kaydedilince: o ana kadarki kalemlerin/kurun JSON
@@ -1357,10 +1359,10 @@ model Quote {
    * firma bazli "X kere revize istedi" uyarisi icin (bkz. QuotesService.
    * getRevisionSummaryForAccount) tum tekliflerde toplanir.
    */
-  revisionNote     String?
-  revisionSnapshot Json?
-  revisionCount    Int                 @default(0)
-  lastRevisedAt    DateTime?
+  revisionNote        String?
+  revisionSnapshot    Json?
+  revisionCount       Int                 @default(0)
+  lastRevisedAt       DateTime?
   /**
    * Teklifin "gonderen"i (PDF'te gosterilen temsilci) - /teklifler/yeni'de
    * kullanici tarafindan secilir, varsayilan olarak teklifi olusturan kullanici
@@ -1368,7 +1370,7 @@ model Quote {
    * FK degil (bkz. createdById doc comment'i) - User.title/phone/email ile
    * birlikte QuotesService.getPrintData'da ayri bir sorguyla cozulur.
    */
-  senderId         String?
+  senderId            String?
   /**
    * Ad-hoc "Ürünleri Gruplayarak Ekle" checkbox'ı (/teklifler/yeni, "Teklif Özeti"
    * karti) - pano ureticilerine ozel, urunlerin "Kompanzasyon Panosu" gibi isimli
@@ -1376,11 +1378,11 @@ model Quote {
    * teklif formu hem varsayilan/sablonsuz PDF (QuoteContentBody) kalemleri
    * gruplandirip grup baslik satirlarini acik mavi arkaplanla basar.
    */
-  groupItemsByProduct Boolean          @default(false)
-  createdById      String
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  deletedAt        DateTime?
+  groupItemsByProduct Boolean             @default(false)
+  createdById         String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?
 
   tenant         Tenant               @relation(fields: [tenantId], references: [id])
   account        Account              @relation(fields: [accountId], references: [id])
@@ -1585,11 +1587,11 @@ model PostSaleCase {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  salesOrder     SalesOrder      @relation(fields: [salesOrderId], references: [id])
-  quote          Quote?          @relation(fields: [quoteId], references: [id])
-  account        Account         @relation(fields: [accountId], references: [id])
-  contact        Contact?        @relation(fields: [contactId], references: [id])
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id])
+  salesOrder     SalesOrder             @relation(fields: [salesOrderId], references: [id])
+  quote          Quote?                 @relation(fields: [quoteId], references: [id])
+  account        Account                @relation(fields: [accountId], references: [id])
+  contact        Contact?               @relation(fields: [contactId], references: [id])
   feedbackSurvey FeedbackSurvey?
   feedbackNotes  PostSaleFeedbackNote[]
 
@@ -2145,24 +2147,37 @@ model Warehouse {
  * Interaction bu fazda zaten var, String'e gevsetmeye gerek yok.
  */
 model Message {
-  id              String                @id @default(uuid())
-  tenantId        String
-  conversationId  String                @default(uuid())
-  senderId        String
-  subject         String
-  body            String
-  sentAt          DateTime              @default(now())
-  relatedEntity   MessageRelatedEntity?
-  relatedEntityId String?
+  id               String                @id @default(uuid())
+  tenantId         String
+  conversationId   String                @default(uuid())
+  senderId         String
+  subject          String
+  body             String
+  sentAt           DateTime              @default(now())
+  relatedEntity    MessageRelatedEntity?
+  relatedEntityId  String?
   /**
    * "Ajanda > Toplanti Raporu Olustur" akisindan (isMeeting=true bir CalendarEvent'e
    * bagli) gonderilen mesajlarda true - meetingEventId verildiginde MessagesService.create()
    * tarafindan setlenir, /mesajlar filtresinde ayirt etmek icin (bkz. MessageQuerySchema).
    */
-  isMeetingReport Boolean               @default(false)
-  createdById     String
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  isMeetingReport  Boolean               @default(false)
+  /**
+   * Gonderenin kendi "Gonderilen"/"Tumu" gorunumunden kisisel olarak cop kutusuna
+   * tasimasi (yumusak silme). Alicilarin kutusunu ETKILEMEZ - alici tarafi icin
+   * MessageRecipient.deletedAt kullanilir. Bilincli olarak `deletedAt` adi
+   * kullanilmadi: tenant-scoped extension'in genel soft-delete davranisi (okumada
+   * otomatik gizleme) burada istenmiyor, cop kutusu bu mesajlari listeleyebilmeli.
+   */
+  senderDeletedAt  DateTime?
+  /**
+   * Gonderenin konusmayi kisisel olarak arsive almasi - senderDeletedAt ile ayni
+   * mantik: alici tarafini etkilemez (o taraf MessageRecipient.archivedAt).
+   */
+  senderArchivedAt DateTime?
+  createdById      String
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   tenant      Tenant              @relation(fields: [tenantId], references: [id])
   recipients  MessageRecipient[]
@@ -2181,12 +2196,21 @@ model Message {
  * Message'a cascade ile miras alinir - kendi tenantId'si yok, TENANT_SCOPED_MODELS'e girmez.
  */
 model MessageRecipient {
-  id        String               @id @default(uuid())
-  messageId String
-  userId    String
-  kind      MessageRecipientKind
-  readAt    DateTime?
-  createdAt DateTime             @default(now())
+  id         String               @id @default(uuid())
+  messageId  String
+  userId     String
+  kind       MessageRecipientKind
+  readAt     DateTime?
+  /**
+   * Alicinin bu mesaji kisisel olarak cop kutusuna tasimasi (yumusak silme) -
+   * sadece bu alicinin gorunumunu etkiler.
+   */
+  deletedAt  DateTime?
+  /**
+   * Alicinin mesaji kisisel olarak arsive almasi - sadece bu alicinin gorunumunu etkiler.
+   */
+  archivedAt DateTime?
+  createdAt  DateTime             @default(now())
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
@@ -2495,8 +2519,10 @@ model ChatConversation {
   id        String   @id @default(uuid())
   tenantId  String
   userId    String
-  /** İlk kullanıcı mesajı gelene kadar null - liste ekranında bu durumda "Yeni
-   * Konuşma" placeholder'ı gösterilir (bkz. bi-frontend i18n). */
+  /**
+   * İlk kullanıcı mesajı gelene kadar null - liste ekranında bu durumda "Yeni
+   * Konuşma" placeholder'ı gösterilir (bkz. bi-frontend i18n).
+   */
   title     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

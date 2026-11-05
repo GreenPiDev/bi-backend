@@ -57,6 +57,7 @@ function createPrisma(messageRows: unknown[] = [createMessageRow()]) {
       findMany: vi.fn().mockResolvedValue(messageRows),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue(messageRows[0] ?? createMessageRow()),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     messageRecipient: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -887,5 +888,258 @@ describe('MessagesService', () => {
       pageSize: 25,
     } as never);
     expect(result.data[0]?.starred).toBe(true);
+  });
+
+  describe('cop kutusu (kisisel yumusak silme)', () => {
+    function buildService(prisma: ReturnType<typeof createPrisma>) {
+      return new MessagesService(
+        prisma as never,
+        fakeAudit,
+        fakeRealtime,
+        fakeFileUrl,
+        fakeStorage,
+        fakeMessagesCache,
+        fakeNotifications,
+      );
+    }
+
+    function boxConditionOf(prisma: ReturnType<typeof createPrisma>) {
+      const call = prisma.message.findMany.mock.calls[0]?.[0] as {
+        where: { AND: unknown[] };
+      };
+      return call.where.AND[0];
+    }
+
+    it('list: Tumu (box yok) cop kutusundakileri gizler', async () => {
+      const prisma = createPrisma();
+      await runInTenant(() =>
+        buildService(prisma).list(SENDER_ID, {
+          page: 1,
+          pageSize: 25,
+        } as never),
+      );
+      expect(boxConditionOf(prisma)).toEqual({
+        OR: [
+          {
+            senderId: SENDER_ID,
+            senderDeletedAt: null,
+            senderArchivedAt: null,
+          },
+          {
+            recipients: {
+              some: { userId: SENDER_ID, deletedAt: null, archivedAt: null },
+            },
+          },
+        ],
+      });
+    });
+
+    it('list: inbox/sent sadece silinmemis taraflari getirir', async () => {
+      const inboxPrisma = createPrisma();
+      await runInTenant(() =>
+        buildService(inboxPrisma).list(RECIPIENT_ID, {
+          page: 1,
+          pageSize: 25,
+          box: 'inbox',
+        } as never),
+      );
+      expect(boxConditionOf(inboxPrisma)).toEqual({
+        recipients: {
+          some: { userId: RECIPIENT_ID, deletedAt: null, archivedAt: null },
+        },
+      });
+
+      const sentPrisma = createPrisma();
+      await runInTenant(() =>
+        buildService(sentPrisma).list(SENDER_ID, {
+          page: 1,
+          pageSize: 25,
+          box: 'sent',
+        } as never),
+      );
+      expect(boxConditionOf(sentPrisma)).toEqual({
+        senderId: SENDER_ID,
+        senderDeletedAt: null,
+        senderArchivedAt: null,
+      });
+    });
+
+    it('list: trash sadece kullanicinin sildigi mesajlari getirir', async () => {
+      const prisma = createPrisma();
+      await runInTenant(() =>
+        buildService(prisma).list(SENDER_ID, {
+          page: 1,
+          pageSize: 25,
+          box: 'trash',
+        } as never),
+      );
+      expect(boxConditionOf(prisma)).toEqual({
+        OR: [
+          { senderId: SENDER_ID, senderDeletedAt: { not: null } },
+          {
+            recipients: {
+              some: { userId: SENDER_ID, deletedAt: { not: null } },
+            },
+          },
+        ],
+      });
+    });
+
+    it('list: archive sadece silinmemis ama arsive alinmis mesajlari getirir', async () => {
+      const prisma = createPrisma();
+      await runInTenant(() =>
+        buildService(prisma).list(SENDER_ID, {
+          page: 1,
+          pageSize: 25,
+          box: 'archive',
+        } as never),
+      );
+      expect(boxConditionOf(prisma)).toEqual({
+        OR: [
+          {
+            senderId: SENDER_ID,
+            senderDeletedAt: null,
+            senderArchivedAt: { not: null },
+          },
+          {
+            recipients: {
+              some: {
+                userId: SENDER_ID,
+                deletedAt: null,
+                archivedAt: { not: null },
+              },
+            },
+          },
+        ],
+      });
+    });
+
+    it('list: starred sadece yildizlanan, cop kutusunda olmayan konusmalari getirir', async () => {
+      const prisma = createPrisma();
+      prisma.messageStar.findMany.mockResolvedValueOnce([
+        { conversationId: CONVERSATION_ID },
+      ]);
+      await runInTenant(() =>
+        buildService(prisma).list(SENDER_ID, {
+          page: 1,
+          pageSize: 25,
+          box: 'starred',
+        } as never),
+      );
+      expect(boxConditionOf(prisma)).toEqual({
+        AND: [
+          { conversationId: { in: [CONVERSATION_ID] } },
+          {
+            OR: [
+              { senderId: SENDER_ID, senderDeletedAt: null },
+              { recipients: { some: { userId: SENDER_ID, deletedAt: null } } },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('setConversationArchived: archive=true iki tarafi da arsive alir, false geri cikarir', async () => {
+      const prisma = createPrisma();
+      await runInTenant(() =>
+        buildService(prisma).setConversationArchived(
+          CONVERSATION_ID,
+          SENDER_ID,
+          true,
+        ),
+      );
+      expect(prisma.message.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { senderArchivedAt: expect.any(Date) },
+        }),
+      );
+      expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { archivedAt: expect.any(Date) } }),
+      );
+
+      const undo = createPrisma();
+      await runInTenant(() =>
+        buildService(undo).setConversationArchived(
+          CONVERSATION_ID,
+          SENDER_ID,
+          false,
+          'inbox',
+        ),
+      );
+      expect(undo.message.updateMany).not.toHaveBeenCalled();
+      expect(undo.messageRecipient.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { archivedAt: null } }),
+      );
+    });
+
+    it('trashConversation: box yoksa hem gonderen hem alici tarafini siler', async () => {
+      const prisma = createPrisma();
+      await runInTenant(() =>
+        buildService(prisma).trashConversation(CONVERSATION_ID, SENDER_ID),
+      );
+      expect(prisma.message.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['message-1'] },
+          senderId: SENDER_ID,
+          senderDeletedAt: null,
+        },
+        data: { senderDeletedAt: expect.any(Date) },
+      });
+      expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith({
+        where: {
+          messageId: { in: ['message-1'] },
+          userId: SENDER_ID,
+          deletedAt: null,
+        },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('trashConversation: box=inbox sadece alici tarafini, box=sent sadece gonderen tarafini siler', async () => {
+      const inboxPrisma = createPrisma();
+      await runInTenant(() =>
+        buildService(inboxPrisma).trashConversation(
+          CONVERSATION_ID,
+          RECIPIENT_ID,
+          'inbox',
+        ),
+      );
+      expect(inboxPrisma.message.updateMany).not.toHaveBeenCalled();
+      expect(inboxPrisma.messageRecipient.updateMany).toHaveBeenCalled();
+
+      const sentPrisma = createPrisma();
+      await runInTenant(() =>
+        buildService(sentPrisma).trashConversation(
+          CONVERSATION_ID,
+          SENDER_ID,
+          'sent',
+        ),
+      );
+      expect(sentPrisma.message.updateMany).toHaveBeenCalled();
+      expect(sentPrisma.messageRecipient.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('trashConversation: katilimci olmayan kullanici 404 alir', async () => {
+      const prisma = createPrisma([]);
+      await expect(
+        runInTenant(() =>
+          buildService(prisma).trashConversation(CONVERSATION_ID, BYSTANDER_ID),
+        ),
+      ).rejects.toBeInstanceOf(AppException);
+      expect(prisma.message.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('restoreConversation: kullanicinin her iki taraftaki silmesini geri alir', async () => {
+      const prisma = createPrisma();
+      await runInTenant(() =>
+        buildService(prisma).restoreConversation(CONVERSATION_ID, SENDER_ID),
+      );
+      expect(prisma.message.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { senderDeletedAt: null } }),
+      );
+      expect(prisma.messageRecipient.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { deletedAt: null } }),
+      );
+    });
   });
 });

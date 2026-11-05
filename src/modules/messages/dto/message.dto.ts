@@ -67,8 +67,21 @@ export const SetConversationStarSchema = z.object({
 });
 export type SetConversationStarDto = z.infer<typeof SetConversationStarSchema>;
 
-export const MessageQuerySchema = ListQuerySchema.extend({
+/** Konusmayi kisisel cop kutusuna tasirken hangi kutudaki mesajlarin silinecegi:
+ * `inbox` = sadece alici oldugum, `sent` = sadece gonderdigim, bos = ikisi de. */
+export const TrashConversationSchema = z.object({
   box: z.enum(['inbox', 'sent']).optional(),
+});
+export type TrashConversationDto = z.infer<typeof TrashConversationSchema>;
+
+/** Arsivleme de ayni sekilde taraf secebilir (`inbox`/`sent`/bos = ikisi). */
+export const ArchiveConversationSchema = TrashConversationSchema;
+export type ArchiveConversationDto = TrashConversationDto;
+
+export const MessageQuerySchema = ListQuerySchema.extend({
+  /** Bos = "Tumu" (gelen + gonderilen, cop kutusundakiler haric); `trash` = kullanicinin
+   * kisisel olarak sildigi (gonderen veya alici tarafinda) mesajlar; `archive` = kisisel arsive alinanlar; `starred` = yildizladigim konusmalar (cop kutusundakiler haric). */
+  box: z.enum(['inbox', 'sent', 'starred', 'trash', 'archive']).optional(),
   // Ilgili kayit turu (F: kompozit filtre) coklu secilebilir; belirli kayitlar
   // (quoteIds/projectIds/interactionIds) secilirse o tur icin turu genel gecerli
   // saymak yerine sadece o kayitlarla sinirlanir - bkz. messages.service.ts list().

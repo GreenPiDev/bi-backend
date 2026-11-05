@@ -26,12 +26,16 @@ import { MAX_MESSAGE_ATTACHMENT_SIZE_BYTES } from '../../core/validators/attachm
 import {
   CreateMessageSchema,
   MessageQuerySchema,
+  ArchiveConversationSchema,
   SetConversationReadSchema,
   SetConversationStarSchema,
+  TrashConversationSchema,
+  type ArchiveConversationDto,
   type CreateMessageDto,
   type MessageQueryDto,
   type SetConversationReadDto,
   type SetConversationStarDto,
+  type TrashConversationDto,
 } from './dto/message.dto';
 import {
   MessagesService,
@@ -154,6 +158,64 @@ export class MessagesController {
       user.id,
       user.tenantId,
       dto.starred,
+    );
+  }
+
+  /** Kisisel cop kutusu (yumusak silme) - yildiz/okundu gibi kullaniciya ozel bir
+   * aksiyon oldugu icin VIEW izniyle korunur; diger katilimcilari etkilemez. */
+  @Post(':conversationId/trash')
+  @HttpCode(204)
+  @RequiresPermission('messages', 'VIEW')
+  trash(
+    @Param('conversationId') conversationId: string,
+    @Body(new ZodValidationPipe(TrashConversationSchema))
+    dto: TrashConversationDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.messages.trashConversation(conversationId, user.id, dto.box);
+  }
+
+  @Post(':conversationId/restore')
+  @HttpCode(204)
+  @RequiresPermission('messages', 'VIEW')
+  restore(
+    @Param('conversationId') conversationId: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.messages.restoreConversation(conversationId, user.id);
+  }
+
+  @Post(':conversationId/archive')
+  @HttpCode(204)
+  @RequiresPermission('messages', 'VIEW')
+  archive(
+    @Param('conversationId') conversationId: string,
+    @Body(new ZodValidationPipe(ArchiveConversationSchema))
+    dto: ArchiveConversationDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.messages.setConversationArchived(
+      conversationId,
+      user.id,
+      true,
+      dto.box,
+    );
+  }
+
+  @Post(':conversationId/unarchive')
+  @HttpCode(204)
+  @RequiresPermission('messages', 'VIEW')
+  unarchive(
+    @Param('conversationId') conversationId: string,
+    @Body(new ZodValidationPipe(ArchiveConversationSchema))
+    dto: ArchiveConversationDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<void> {
+    return this.messages.setConversationArchived(
+      conversationId,
+      user.id,
+      false,
+      dto.box,
     );
   }
 }

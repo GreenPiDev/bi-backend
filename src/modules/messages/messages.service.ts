@@ -182,14 +182,16 @@ export class MessagesService {
         )
       : [];
 
-    const boxCondition: Prisma.MessageWhereInput =
-      box === 'sent'
-        ? { senderId: userId }
-        : box === 'inbox'
-          ? { recipients: { some: { userId } } }
-          : {
-              OR: [{ senderId: userId }, { recipients: { some: { userId } } }],
-            };
+    const starredIds =
+      box === 'starred'
+        ? (
+            await this.prisma.messageStar.findMany({
+              where: { userId },
+              select: { conversationId: true },
+            })
+          ).map((row) => row.conversationId)
+        : [];
+    const boxCondition = this.buildBoxCondition(userId, box, starredIds);
 
     // Kompozit ilgili-kayit filtresi: belirli kayitlar (quoteIds/projectIds/
     // interactionIds) secilirse o tur icin filtre sadece o kayitlarla sinirlanir;
@@ -287,7 +289,10 @@ export class MessagesService {
         (count, message) =>
           count +
           message.recipients.filter(
-            (recipient) => recipient.userId === userId && !recipient.readAt,
+            (recipient) =>
+              recipient.userId === userId &&
+              !recipient.readAt &&
+              (box === 'trash' || !recipient.deletedAt),
           ).length,
         0,
       );
@@ -340,6 +345,190 @@ export class MessagesService {
     };
     await this.messagesCache.set(userId, query, result);
     return result;
+  }
+
+  /** Kutu filtresi - silme kisiye ozeldir: gonderen tarafi `Message.senderDeletedAt`,
+   * alici tarafi `MessageRecipient.deletedAt` ile ayri ayri tutulur. "Tumu"/"Gelen"/
+   * "Gonderilen" cop kutusundakileri gizler, `trash` sadece onlari gosterir. */
+  private buildBoxCondition(
+    userId: string,
+    box: MessageQueryDto['box'],
+    starredConversationIds: string[] = [],
+  ): Prisma.MessageWhereInput {
+    // Aktif = ne silinmis ne arsive alinmis; arsiv = silinmemis ama arsive alinmis.
+    const sentActive: Prisma.MessageWhereInput = {
+      senderId: userId,
+      senderDeletedAt: null,
+      senderArchivedAt: null,
+    };
+    const inboxActive: Prisma.MessageWhereInput = {
+      recipients: { some: { userId, deletedAt: null, archivedAt: null } },
+    };
+    switch (box) {
+      case 'sent':
+        return sentActive;
+      case 'inbox':
+        return inboxActive;
+      case 'starred':
+        // Yildizlananlar: cop kutusundakiler haric (arsivdekiler dahil), sadece
+        // kullanicinin yildizladigi konusmalar.
+        return {
+          AND: [
+            { conversationId: { in: starredConversationIds } },
+            {
+              OR: [
+                { senderId: userId, senderDeletedAt: null },
+                { recipients: { some: { userId, deletedAt: null } } },
+              ],
+            },
+          ],
+        };
+      case 'archive':
+        return {
+          OR: [
+            {
+              senderId: userId,
+              senderDeletedAt: null,
+              senderArchivedAt: { not: null },
+            },
+            {
+              recipients: {
+                some: { userId, deletedAt: null, archivedAt: { not: null } },
+              },
+            },
+          ],
+        };
+      case 'trash':
+        return {
+          OR: [
+            { senderId: userId, senderDeletedAt: { not: null } },
+            { recipients: { some: { userId, deletedAt: { not: null } } } },
+          ],
+        };
+      default:
+        return { OR: [sentActive, inboxActive] };
+    }
+  }
+
+  /** Konusmayi kisisel arsive alir (`archive=true`) ya da arsivden cikarir. `box`
+   * verilirse sadece o taraftaki (gelen/gonderilen) mesajlar etkilenir. */
+  async setConversationArchived(
+    conversationId: string,
+    userId: string,
+    archive: boolean,
+    box?: 'inbox' | 'sent',
+  ): Promise<void> {
+    const messages = await this.getVisibleConversationMessages(
+      conversationId,
+      userId,
+    );
+    const messageIds = messages.map((message) => message.id);
+    const now = archive ? new Date() : null;
+    const current = archive ? null : { not: null };
+    await this.prisma.$transaction(async (tx) => {
+      if (box !== 'inbox') {
+        await tx.message.updateMany({
+          where: {
+            id: { in: messageIds },
+            senderId: userId,
+            senderArchivedAt: current,
+          },
+          data: { senderArchivedAt: now },
+        });
+      }
+      if (box !== 'sent') {
+        await tx.messageRecipient.updateMany({
+          where: { messageId: { in: messageIds }, userId, archivedAt: current },
+          data: { archivedAt: now },
+        });
+      }
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'MessageConversation',
+      entityId: conversationId,
+      meta: { archived: archive, box: box ?? 'all' },
+    });
+    await this.messagesCache.invalidate();
+  }
+
+  /** Konusmayi kullanicinin kisisel cop kutusuna tasir (yumusak silme). `box`
+   * verilirse sadece o taraftaki (gelen/gonderilen) mesajlar silinir; diger
+   * katilimcilarin gorunumu hic etkilenmez. */
+  async trashConversation(
+    conversationId: string,
+    userId: string,
+    box?: 'inbox' | 'sent',
+  ): Promise<void> {
+    const messages = await this.getVisibleConversationMessages(
+      conversationId,
+      userId,
+    );
+    const messageIds = messages.map((message) => message.id);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      if (box !== 'inbox') {
+        await tx.message.updateMany({
+          where: {
+            id: { in: messageIds },
+            senderId: userId,
+            senderDeletedAt: null,
+          },
+          data: { senderDeletedAt: now },
+        });
+      }
+      if (box !== 'sent') {
+        await tx.messageRecipient.updateMany({
+          where: { messageId: { in: messageIds }, userId, deletedAt: null },
+          data: { deletedAt: now },
+        });
+      }
+    });
+    await this.audit.log({
+      action: 'DELETE',
+      entity: 'MessageConversation',
+      entityId: conversationId,
+      meta: { box: box ?? 'all' },
+    });
+    await this.messagesCache.invalidate();
+  }
+
+  /** Cop kutusundaki konusmayi geri alir - kullanicinin bu konusmadaki tum kisisel
+   * silmelerini (gonderen + alici tarafi) temizler. */
+  async restoreConversation(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    const messages = await this.getVisibleConversationMessages(
+      conversationId,
+      userId,
+    );
+    const messageIds = messages.map((message) => message.id);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.message.updateMany({
+        where: {
+          id: { in: messageIds },
+          senderId: userId,
+          senderDeletedAt: { not: null },
+        },
+        data: { senderDeletedAt: null },
+      });
+      await tx.messageRecipient.updateMany({
+        where: {
+          messageId: { in: messageIds },
+          userId,
+          deletedAt: { not: null },
+        },
+        data: { deletedAt: null },
+      });
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'MessageConversation',
+      entityId: conversationId,
+      meta: { restored: true },
+    });
+    await this.messagesCache.invalidate();
   }
 
   /** Verilen konusma(lar) icin `relatedEntityLabel`'i doldurur - Quote icin numara,
