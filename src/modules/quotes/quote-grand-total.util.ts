@@ -12,9 +12,13 @@ interface QuoteItemForGrandTotal {
   discountPct: unknown;
   vatPct: unknown;
   currency: string;
+  groupName?: string | null;
 }
 
 export interface QuoteForGrandTotalSort {
+  groupItemsByProduct?: boolean;
+  groupPricingEnabled?: boolean;
+  groupPrices?: unknown;
   itemsEntryMode: 'ITEMIZED' | 'MANUAL_TOTAL';
   manualSubtotal: unknown;
   manualVatAmount: unknown;
@@ -62,7 +66,24 @@ export function computeQuoteGrandTotalForSort(
   }
 
   const totalsByCurrency = new Map<string, number>();
+  const useGroupPrices =
+    quote.groupItemsByProduct === true && quote.groupPricingEnabled === true;
+  const groupPrices = (quote.groupPrices ?? {}) as Record<string, unknown>;
+  const countedGroups = new Set<string>();
   for (const item of quote.items) {
+    if (useGroupPrices && item.groupName) {
+      // Elle fiyatlanan grup: KDV dahil tutar quoteCurrency cinsindendir, her grup
+      // yalnizca bir kez sayilir.
+      if (!countedGroups.has(item.groupName)) {
+        countedGroups.add(item.groupName);
+        totalsByCurrency.set(
+          quote.quoteCurrency,
+          (totalsByCurrency.get(quote.quoteCurrency) ?? 0) +
+            toNumber(groupPrices[item.groupName] ?? 0),
+        );
+      }
+      continue;
+    }
     const currency = item.currency || 'TRY';
     totalsByCurrency.set(
       currency,

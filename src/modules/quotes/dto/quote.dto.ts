@@ -120,6 +120,13 @@ export const CreateQuoteSchema = z.object({
   /** Ad-hoc "Ürünleri Gruplayarak Ekle" checkbox'ı - bkz. Quote.groupItemsByProduct
    * doc comment'i. */
   groupItemsByProduct: z.boolean().optional(),
+  /** "Gruba fiyat atamasi yap" - bkz. Quote.groupPricingEnabled doc comment'i. */
+  groupPricingEnabled: z.boolean().optional(),
+  /** { [groupName]: KDV dahil tutar } - bkz. Quote.groupPrices. */
+  groupPrices: z
+    .record(z.string().max(200), z.number().nonnegative().max(1e12))
+    .nullable()
+    .optional(),
 });
 export type CreateQuoteDto = z.infer<typeof CreateQuoteSchema>;
 export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
@@ -167,6 +174,11 @@ export const UpdateQuoteSchema = z
     /** Ad-hoc "Ürünleri Gruplayarak Ekle" checkbox'ı - bkz. Quote.groupItemsByProduct
      * doc comment'i. */
     groupItemsByProduct: z.boolean().optional(),
+    groupPricingEnabled: z.boolean().optional(),
+    groupPrices: z
+      .record(z.string().max(200), z.number().nonnegative().max(1e12))
+      .nullable()
+      .optional(),
     /** Status 'REJECTED' ise zorunlu - kullanicinin crm_quote_rejection_reason_options
      * listesinden sectigi red sebebi (bkz. QuotesListPage'deki durum dropdown'u,
      * ApproveQuoteModal ile ayni "once onay, sonra geri bildirim" deseni). */

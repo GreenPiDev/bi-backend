@@ -1379,6 +1379,15 @@ model Quote {
    * gruplandirip grup baslik satirlarini acik mavi arkaplanla basar.
    */
   groupItemsByProduct Boolean             @default(false)
+  /**
+   * "Gruba fiyat ataması yap" checkbox'ı (groupItemsByProduct true iken anlamli) - true
+   * ise her grubun fiyati miktar x birim fiyat toplamindan DEGIL, kullanicinin elle
+   * girdigi groupPrices degerinden alinir. Fiyat KDV dahil ve quoteCurrency cinsindendir
+   * (grup ozet tablosundaki mevcut KDV dahil grup tutariyla tutarli).
+   */
+  groupPricingEnabled Boolean             @default(false)
+  /** { [groupName]: sayi } - sadece groupPricingEnabled true iken kullanilir. */
+  groupPrices         Json?
   createdById         String
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt

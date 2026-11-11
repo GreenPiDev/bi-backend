@@ -1396,6 +1396,15 @@ export class QuotesService {
               status: 'DRAFT',
               senderId: dto.senderId,
               groupItemsByProduct: dto.groupItemsByProduct ?? false,
+              groupPricingEnabled:
+                (dto.groupItemsByProduct ?? false) &&
+                (dto.groupPricingEnabled ?? false),
+              groupPrices:
+                (dto.groupItemsByProduct ?? false) &&
+                (dto.groupPricingEnabled ?? false) &&
+                dto.groupPrices
+                  ? dto.groupPrices
+                  : Prisma.JsonNull,
               createdById,
               quoteCurrency: dto.quoteCurrency,
               exchangeRates: dto.exchangeRates ?? undefined,
@@ -1582,6 +1591,12 @@ export class QuotesService {
       ...(dto.senderId !== undefined ? { senderId: dto.senderId } : {}),
       ...(dto.groupItemsByProduct !== undefined
         ? { groupItemsByProduct: dto.groupItemsByProduct }
+        : {}),
+      ...(dto.groupPricingEnabled !== undefined
+        ? { groupPricingEnabled: dto.groupPricingEnabled }
+        : {}),
+      ...(dto.groupPrices !== undefined
+        ? { groupPrices: dto.groupPrices ?? Prisma.JsonNull }
         : {}),
       ...(isRevisionSave
         ? {
