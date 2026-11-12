@@ -33,7 +33,8 @@ export const QuoteStatusSchema = z.enum([
 
 const QuoteItemInputSchema = z.object({
   productId: z.string().uuid(),
-  quantity: z.number().positive(),
+  /** 0 kabul edilir: is akisinda miktari sifir (ornegin sadece bilgi amacli) satir olabiliyor. */
+  quantity: z.number().nonnegative(),
   /** Q3: verilmezse Product.price'tan alinir; verilirse manuel ezme sayilir.
    * QuoteItem.unitPrice @db.Decimal(14, 2) - DB'nin kabul edebilecegi ust sinir. */
   unitPrice: z

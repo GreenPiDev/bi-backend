@@ -448,6 +448,10 @@ export class QuotesService {
       return;
     }
     for (const item of params.items) {
+      // Miktari 0 olan satir stoktan dusmez (sifir hareketli ledger kaydi uretme).
+      if (Number(item.quantity) <= 0) {
+        continue;
+      }
       await this.stockItems.decreaseStockTx(tx, {
         productId: item.productId,
         warehouseId: params.warehouseId,
