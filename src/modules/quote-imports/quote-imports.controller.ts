@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   HttpStatus,
   Post,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -11,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { Response } from 'express';
 import { diskStorage } from 'multer';
 import {
   CurrentUser,
@@ -26,6 +29,11 @@ import type {
   QuoteImportResult,
 } from './quote-imports.service';
 import { QuoteImportsService } from './quote-imports.service';
+import { buildQuoteItemImportTemplate } from './quote-item-import.format';
+import {
+  QuoteItemImportsService,
+  type QuoteItemImportResult,
+} from './quote-item-imports.service';
 import {
   HeaderRowIndexSchema,
   NumberFormatSchema,
@@ -80,7 +88,44 @@ function parseJsonBody<T>(
 
 @Controller('quote-imports')
 export class QuoteImportsController {
-  constructor(private readonly quoteImports: QuoteImportsService) {}
+  constructor(
+    private readonly quoteImports: QuoteImportsService,
+    private readonly quoteItemImports: QuoteItemImportsService,
+  ) {}
+
+  /** `/teklifler/yeni` "Ürün Listesi" kartindaki "Örnek Excel" butonu - sabit sablon
+   * (bkz. quote-item-import.format.ts). Teklif olusturabilen herkes indirebilir. */
+  @Get('items/template')
+  @RequiresPermission('quotes', 'CREATE')
+  async downloadItemsTemplate(@Res() res: Response): Promise<void> {
+    const buffer = await buildQuoteItemImportTemplate();
+    res
+      .header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
+      .header(
+        'Content-Disposition',
+        'attachment; filename="teklif-urun-listesi-ornek.xlsx"',
+      )
+      .send(buffer);
+  }
+
+  /** Sabit sablonlu excel'deki kalemleri cozumleyip (eslesmeyenler icin yeni urun
+   * listesi + urunler olusturarak) teklif formuna eklenecek satirlari doner - teklifin
+   * kendisini OLUSTURMAZ, kullanici formu yine "Kaydet" ile gonderir. Yeni urun
+   * olusturmasina ragmen izin 'quotes:CREATE' (formdaki hizli urun ekleme ile ayni
+   * kullanici akisi) - bkz. docs/VARSAYIMLAR.md V83. */
+  @Post('items')
+  @RequiresPermission('quotes', 'CREATE')
+  @UseInterceptors(UPLOAD_INTERCEPTOR)
+  async importItems(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<QuoteItemImportResult> {
+    return this.withUploadedFile(file, (filePath, type) =>
+      this.quoteItemImports.importItems(filePath, type, file.originalname),
+    );
+  }
 
   /**
    * headerRowIndex verilmemisse ham satirlar doner (kullanici baslik satirini secer);

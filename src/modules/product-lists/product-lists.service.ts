@@ -31,7 +31,7 @@ export class ProductListsService {
   /** /urunler/yeni'deki "Ürün Listesi" seçicisi başka bir sekmede yeni bir liste
    * oluşturulunca sayfa yenilenmeden güncellensin diye (bkz. docs/YOL_HARITASI.md) -
    * Marka/Kategori/Birim ile aynı desen. */
-  private async emitUpdated(): Promise<void> {
+  async emitUpdated(): Promise<void> {
     const { tenantId } = TenantContext.getOrThrow();
     const lists = await this.prisma.productList.findMany({
       orderBy: { name: 'asc' },
