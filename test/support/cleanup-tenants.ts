@@ -67,6 +67,16 @@ export async function cleanupTestTenants(
   await prisma.interactionTypeOption.deleteMany({ where: tenantFilter });
   await prisma.sectorOption.deleteMany({ where: tenantFilter });
   await prisma.tenantSetting.deleteMany({ where: tenantFilter });
+  // KanbanBoard (kartlari cascade eder; kartlar User'i RESTRICT ile referanslar) -
+  // ortak panolar diger tenant'in temizligini de engellemesin diye her iki taraf.
+  await prisma.kanbanBoard.deleteMany({
+    where: {
+      OR: [
+        { tenantId: { in: tenantIds } },
+        { partnerTenantId: { in: tenantIds } },
+      ],
+    },
+  });
   await prisma.user.deleteMany({ where: tenantFilter });
   await prisma.role.deleteMany({ where: tenantFilter });
   await prisma.tenantModule.deleteMany({ where: tenantFilter });

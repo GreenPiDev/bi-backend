@@ -130,6 +130,11 @@ enum NotificationType {
    * in-app bildirim ("X sirketine anket gonderilmesi gerekiyor").
    */
   POST_SALE_SURVEY_REMINDER
+  /**
+   * Bir kanban kartina atanan kisiye gider (karti olusturan/atayan kisinin kendisi
+   * haric) - relatedEntityType='KanbanBoard', relatedEntityId=pano id'si.
+   */
+  KANBAN_CARD_ASSIGNED
 }
 
 enum ContactStatus {
@@ -315,6 +320,8 @@ model Tenant {
   drawings                    Drawing[]
   notes                       Note[]
   chatConversations           ChatConversation[]
+  kanbanBoards                KanbanBoard[]                @relation("KanbanBoardOwner")
+  partnerKanbanBoards         KanbanBoard[]                @relation("KanbanBoardPartner")
 
   @@map("tenants")
 }
@@ -363,9 +370,12 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  tenant              Tenant                   @relation(fields: [tenantId], references: [id])
   roles               UserRoleLink[]
   passwordResetTokens PasswordResetToken[]
+  kanbanCardsAssigned KanbanCard[]             @relation("KanbanCardAssignee")
+  kanbanCardRevisions KanbanCardRevision[]
+  kanbanProgressNotes KanbanCardProgressNote[]
 
   @@index([tenantId])
   @@map("users")
@@ -1386,7 +1396,9 @@ model Quote {
    * (grup ozet tablosundaki mevcut KDV dahil grup tutariyla tutarli).
    */
   groupPricingEnabled Boolean             @default(false)
-  /** { [groupName]: sayi } - sadece groupPricingEnabled true iken kullanilir. */
+  /**
+   * { [groupName]: sayi } - sadece groupPricingEnabled true iken kullanilir.
+   */
   groupPrices         Json?
   createdById         String
   createdAt           DateTime            @default(now())
@@ -2554,4 +2566,117 @@ model ChatMessage {
 
   @@index([conversationId, createdAt])
   @@map("chat_messages")
+}
+
+/**
+ * Kanban panosu - cekirdek (core) modulun parcasi, hicbir CRM entity'sine bagli degil.
+ * Projedeki ILK tenant'lar-arasi paylasimli kayit: partnerTenantId doluysa pano hem
+ * sahibi (tenantId) hem ortak tenant'in /kanban listesinde gorunur. Bu yuzden
+ * tenant-scoped extension'a (TENANT_SCOPED_MODELS) bilerek EKLENMEDI - KanbanService
+ * ham PrismaService kullanir ve her sorguda "tenantId = ben VEYA partnerTenantId = ben"
+ * filtresini elle uygular (bkz. docs/VARSAYIMLAR.md, Kanban karari). Ortak tenant
+ * sadece olusturma aninda setlenir, sonradan degistirilemez.
+ */
+model KanbanBoard {
+  id              String    @id @default(uuid())
+  tenantId        String
+  partnerTenantId String?
+  name            String
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  tenant        Tenant       @relation("KanbanBoardOwner", fields: [tenantId], references: [id])
+  partnerTenant Tenant?      @relation("KanbanBoardPartner", fields: [partnerTenantId], references: [id])
+  cards         KanbanCard[]
+
+  @@index([tenantId, deletedAt])
+  @@index([partnerTenantId, deletedAt])
+  @@map("kanban_boards")
+}
+
+enum KanbanColumn {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum KanbanPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/**
+ * Kanban karti. tenantId tasimaz - erisim her zaman bagli oldugu pano uzerinden
+ * dogrulanir (QuoteItem ile ayni desen). Atanan kisi, karti olusturan/duzenleyen
+ * kullanicinin KENDI tenant'indan secilebilir; ortak panoda kart diger tenant'in
+ * kullanicisina atanmis olabilir. DONE kolonundaki kart tamamen kilitlidir
+ * (tasinamaz, duzenlenemez, silinemez).
+ */
+model KanbanCard {
+  id                String         @id @default(uuid())
+  boardId           String
+  title             String
+  description       String?
+  column            KanbanColumn   @default(TODO)
+  position          Int            @default(0)
+  priority          KanbanPriority @default(MEDIUM)
+  dueDate           DateTime?      @db.Date
+  assigneeUserId    String?
+  createdById       String
+  createdByTenantId String
+  completedAt       DateTime?
+  completedById     String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  board         KanbanBoard              @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  assignee      User?                    @relation("KanbanCardAssignee", fields: [assigneeUserId], references: [id])
+  revisions     KanbanCardRevision[]
+  progressNotes KanbanCardProgressNote[]
+
+  @@index([boardId, column, position])
+  @@index([assigneeUserId])
+  @@map("kanban_cards")
+}
+
+/**
+ * Kart revize gecmisi - kart Incelemede'den Devam Ediyor'a her geri cekilisinde
+ * zorunlu notla yeni bir satir eklenir (KanbanCardsService.moveCard). Kartta en
+ * sonuncusu, detay modalinda hepsi gosterilir. Erisim kart -> pano uzerinden.
+ */
+model KanbanCardRevision {
+  id          String   @id @default(uuid())
+  cardId      String
+  note        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  card      KanbanCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  createdBy User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([cardId, createdAt])
+  @@map("kanban_card_revisions")
+}
+
+/**
+ * Kart ilerleme notlari - kart Devam Ediyor'dan Incelemede'ye her alinisinda
+ * OPSIYONEL notla yeni bir satir eklenir (revize notunun karsiligi, o zorunlu).
+ * Incelemede kolonundaki kartta en sonuncusu, detay modalinda hepsi gosterilir.
+ */
+model KanbanCardProgressNote {
+  id          String   @id @default(uuid())
+  cardId      String
+  note        String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  card      KanbanCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  createdBy User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([cardId, createdAt])
+  @@map("kanban_card_progress_notes")
 }

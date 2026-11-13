@@ -41,6 +41,7 @@ import { InteractionsModule } from './modules/interactions/interactions.module';
 import { InteractionTypeOptionsModule } from './modules/interaction-type-options/interaction-type-options.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { NotesModule } from './modules/notes/notes.module';
+import { KanbanModule } from './modules/kanban/kanban.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
@@ -144,6 +145,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     MessagesModule,
     NotificationsModule,
     NotesModule,
+    KanbanModule,
     DrawingsModule,
     DrawingImportsModule,
     DrawingLibraryModule,

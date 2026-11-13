@@ -202,6 +202,12 @@ export const CHATBOT_PAGE_CATALOG: readonly ChatbotPageEntry[] = [
     ],
   },
   {
+    key: 'kanban',
+    label: 'Kanban',
+    path: '/kanban',
+    pageKeys: ['kanban'],
+  },
+  {
     key: 'drawing-settings',
     label: 'Cizim Ayarlari',
     path: '/cizim-ayarlari',
