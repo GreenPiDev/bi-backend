@@ -27,6 +27,10 @@ import {
 } from './dto/set-page-module.dto';
 import { ToggleModuleDto, ToggleModuleSchema } from './dto/toggle-module.dto';
 import {
+  UpdateTenantAdminEmailDto,
+  UpdateTenantAdminEmailSchema,
+} from './dto/update-tenant-admin-email.dto';
+import {
   UpdateTenantSlugDto,
   UpdateTenantSlugSchema,
 } from './dto/update-tenant-slug.dto';
@@ -86,6 +90,15 @@ export class PlatformAdminController {
     dto: UpdateTenantSlugDto,
   ): Promise<TenantSummary> {
     return this.platformAdmin.updateTenantSlug(id, dto.slug);
+  }
+
+  @Patch('tenants/:id/admin-email')
+  updateTenantAdminEmail(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateTenantAdminEmailSchema))
+    dto: UpdateTenantAdminEmailDto,
+  ): Promise<TenantSummary> {
+    return this.platformAdmin.updateTenantAdminEmail(id, dto.email);
   }
 
   @Get('tenants/:id/modules')

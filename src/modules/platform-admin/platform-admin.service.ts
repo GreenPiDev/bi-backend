@@ -110,6 +110,14 @@ export class PlatformAdminService {
     return this.tenants.updateSlug(tenantId, slug);
   }
 
+  async updateTenantAdminEmail(
+    tenantId: string,
+    email: string,
+  ): Promise<TenantSummary> {
+    await this.requireTenant(tenantId);
+    return this.tenants.updateAdminEmail(tenantId, email);
+  }
+
   async listTenantModules(tenantId: string): Promise<TenantModuleStatus[]> {
     await this.requireTenant(tenantId);
     return this.tenants.listModules(tenantId);

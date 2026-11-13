@@ -477,6 +477,55 @@ export class TenantsService {
     return { ...updated, adminEmail: admin?.email ?? null };
   }
 
+  /** Superadmin, tenant yetkilisinin (ilk COMPANYADMIN) giris e-postasini degistirir.
+   * User.email global unique oldugu icin baska bir kullanicida varsa EMAIL_TAKEN doner. */
+  async updateAdminEmail(
+    tenantId: string,
+    email: string,
+  ): Promise<TenantSummary> {
+    const admin = await this.prisma.user.findFirst({
+      where: { tenantId, roles: { some: { role: { isCompanyAdmin: true } } } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!admin) {
+      throw new AppException(
+        'NOT_FOUND',
+        'Bu kiraci icin yonetici kullanici bulunamadi.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    try {
+      await this.prisma.user.update({
+        where: { id: admin.id },
+        data: { email },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new AppException(
+          'EMAIL_TAKEN',
+          'Bu e-posta adresi zaten kullaniliyor.',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { id: true, name: true, slug: true, plan: true, createdAt: true },
+    });
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Tenant',
+      entityId: tenantId,
+      meta: { adminEmailUpdated: true },
+    });
+    return { ...tenant, adminEmail: email };
+  }
+
   async listModules(tenantId: string): Promise<TenantModuleStatus[]> {
     const rows = await this.prisma.tenantModule.findMany({
       where: { tenantId, disabledAt: null },
