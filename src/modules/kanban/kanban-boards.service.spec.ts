@@ -1,3 +1,4 @@
+import { UpdateKanbanBoardSchema } from './dto/kanban.dto';
 import { KanbanBoardsService } from './kanban-boards.service';
 
 const OWNER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -188,6 +189,21 @@ describe('KanbanBoardsService', () => {
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+
+  it('never accepts a partner change on update (name only)', () => {
+    expect(UpdateKanbanBoardSchema.safeParse({ name: 'Yeni' }).success).toBe(
+      true,
+    );
+    expect(
+      UpdateKanbanBoardSchema.safeParse({
+        name: 'Yeni',
+        partnerTenantId: OUTSIDER,
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateKanbanBoardSchema.safeParse({ partnerTenantId: null }).success,
+    ).toBe(false);
   });
 
   it('only the owner tenant can delete; partner gets 403', async () => {

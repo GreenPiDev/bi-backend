@@ -31,6 +31,7 @@ export const NAVIGATION_INTENTS = [
   'opportunities',
   'inventory',
   'reports',
+  'kanban',
   'drawing-settings',
   'datasets',
   'dashboards',

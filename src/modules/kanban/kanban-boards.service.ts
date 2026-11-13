@@ -195,50 +195,16 @@ export class KanbanBoardsService {
     // Isim degisikligi hem sahip hem ortak tenant'a acik (kullanici karari);
     // silme ise yalnizca sahipte (bkz. remove/findOwned).
     const board = await this.findAccessible(id, tenantId);
-    const partnerChanged =
-      dto.partnerTenantId !== undefined &&
-      dto.partnerTenantId !== board.partnerTenantId;
-    if (partnerChanged && dto.partnerTenantId) {
-      await this.assertValidPartner(tenantId, dto.partnerTenantId);
-    }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.kanbanBoard.update({
-        where: { id },
-        data: {
-          ...(dto.name !== undefined ? { name: dto.name } : {}),
-          ...(partnerChanged ? { partnerTenantId: dto.partnerTenantId } : {}),
-        },
-      });
-      // Ortak kaldirilir/degisirse eski ortagin kullanicilarina atanmis kartlar
-      // "atanmamis"a duser - erisemeyecekleri panoda sorumlu gorunmesinler.
-      if (partnerChanged && board.partnerTenantId) {
-        await tx.kanbanCard.updateMany({
-          where: {
-            boardId: id,
-            assignee: { tenantId: board.partnerTenantId },
-          },
-          data: { assigneeUserId: null },
-        });
-      }
+    await this.prisma.kanbanBoard.update({
+      where: { id },
+      data: { name: dto.name },
     });
     await this.audit.log({
       action: 'UPDATE',
       entity: 'KanbanBoard',
       entityId: id,
-      ...(partnerChanged
-        ? {
-            meta: {
-              previousPartnerTenantId: board.partnerTenantId,
-              partnerTenantId: dto.partnerTenantId,
-            },
-          }
-        : {}),
     });
-    // Eski ortak da haberdar edilir (listesinden pano kaybolsun) + yeni durum.
     this.emitChanged(board);
-    if (partnerChanged && dto.partnerTenantId) {
-      this.emitChanged({ ...board, partnerTenantId: dto.partnerTenantId });
-    }
   }
 
   async remove(id: string, tenantId: string): Promise<void> {

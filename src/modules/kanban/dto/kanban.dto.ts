@@ -20,16 +20,13 @@ export const CreateKanbanBoardSchema = z.object({
 });
 export type CreateKanbanBoardDto = z.infer<typeof CreateKanbanBoardSchema>;
 
-export const UpdateKanbanBoardSchema = z.object({
-  name: z.string().trim().min(1, 'Pano adi gerekli.').max(120).optional(),
-  /** undefined = ortakliga dokunma, null = ortakligi kaldir, uuid = ortagi ayarla/degistir. */
-  partnerTenantId: z
-    .string()
-    .trim()
-    .uuid('Gecersiz sirket kodu.')
-    .nullable()
-    .optional(),
-});
+/** Yalnizca isim duzenlenir - ortak sirket olusturulduktan sonra DEGISTIRILEMEZ
+ * (kullanici karari). strict(): partnerTenantId gibi bilinmeyen alanlar 400 ile reddedilir. */
+export const UpdateKanbanBoardSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Pano adi gerekli.').max(120),
+  })
+  .strict();
 export type UpdateKanbanBoardDto = z.infer<typeof UpdateKanbanBoardSchema>;
 
 export const CreateKanbanCardSchema = z.object({
