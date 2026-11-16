@@ -66,4 +66,18 @@ describe('RealtimeGateway.handleConnection', () => {
     expect(socket.join).toHaveBeenCalledWith('tenant:tenant-42');
     expect(socket.disconnect).not.toHaveBeenCalled();
   });
+
+  it('super admin token ile ayrica platform-admins room una joinler', () => {
+    const tokenService = createTokenService(() => ({
+      tenantId: 'tenant-42',
+      isPlatformAdmin: true,
+    }));
+    const gateway = new RealtimeGateway(tokenService);
+    const socket = createSocket(`${ACCESS_TOKEN_COOKIE}=gecerli-token`);
+
+    gateway.handleConnection(socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:tenant-42');
+    expect(socket.join).toHaveBeenCalledWith('platform-admins');
+  });
 });

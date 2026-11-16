@@ -161,6 +161,7 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
   },
   { key: 'home', label: 'Ana Sayfa', alwaysVisible: true },
   { key: 'profile', label: 'Profil', alwaysVisible: true },
+  { key: 'support', label: 'Teknik Destek', alwaysVisible: true },
   {
     key: 'settings',
     label: 'Ayarlar',

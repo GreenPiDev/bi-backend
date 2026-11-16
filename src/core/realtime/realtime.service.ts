@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RealtimeGateway } from './realtime.gateway';
-import { tenantRoom } from './tenant-room';
+import { PLATFORM_ADMIN_ROOM, tenantRoom } from './tenant-room';
 
 /**
  * Generic tenant-scoped pub/sub katmani. Event adi ve payload sekli tamamen cagirana ait -
@@ -12,6 +12,11 @@ export class RealtimeService {
 
   emitToTenant(tenantId: string, event: string, payload: unknown): void {
     this.gateway.server.to(tenantRoom(tenantId)).emit(event, payload);
+  }
+
+  /** Sadece super admin oturumlarina iletir (bkz. PLATFORM_ADMIN_ROOM). */
+  emitToPlatformAdmins(event: string, payload: unknown): void {
+    this.gateway.server.to(PLATFORM_ADMIN_ROOM).emit(event, payload);
   }
 
   /** Sayfa<->modul eslemesi gibi TUM tenant'lari etkileyen, tenant'a ozel olmayan

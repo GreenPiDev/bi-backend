@@ -135,6 +135,21 @@ enum NotificationType {
    * haric) - relatedEntityType='KanbanBoard', relatedEntityId=pano id'si.
    */
   KANBAN_CARD_ASSIGNED
+  /**
+   * Bir tenant Teknik Destek talebi actiginda TUM aktif super admin'lere gider
+   * (bkz. docs/VARSAYIMLAR.md V84) - kayit super admin'in kendi tenantId'siyle yazilir.
+   */
+  SUPPORT_TICKET_CREATED
+  /**
+   * Super admin bir destek talebine yeni/degisen bir cevap yazinca talebi acan
+   * kullaniciya gider (bkz. docs/VARSAYIMLAR.md V84).
+   */
+  SUPPORT_TICKET_REPLIED
+  /**
+   * Talebi acan tarafin (tenant kullanicisi) yazismaya yeni mesaj eklemesi - tum aktif
+   * super admin'lere gider (bkz. docs/VARSAYIMLAR.md V84).
+   */
+  SUPPORT_TICKET_USER_MESSAGE
 }
 
 enum ContactStatus {
@@ -319,6 +334,7 @@ model Tenant {
   drawingPanelTemplates       DrawingPanelTemplate[]
   drawings                    Drawing[]
   notes                       Note[]
+  supportTickets              SupportTicket[]
   chatConversations           ChatConversation[]
   kanbanBoards                KanbanBoard[]                @relation("KanbanBoardOwner")
   partnerKanbanBoards         KanbanBoard[]                @relation("KanbanBoardPartner")
@@ -376,6 +392,8 @@ model User {
   kanbanCardsAssigned KanbanCard[]             @relation("KanbanCardAssignee")
   kanbanCardRevisions KanbanCardRevision[]
   kanbanProgressNotes KanbanCardProgressNote[]
+  supportTicketsCreated SupportTicket[]        @relation("SupportTicketCreatedBy")
+  supportTicketMessages SupportTicketMessage[]
 
   @@index([tenantId])
   @@map("users")
@@ -2679,4 +2697,65 @@ model KanbanCardProgressNote {
 
   @@index([cardId, createdAt])
   @@map("kanban_card_progress_notes")
+}
+
+enum SupportTicketKind {
+  PROBLEM
+  SUGGESTION
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketAuthorType {
+  USER
+  ADMIN
+}
+
+/**
+ * Teknik Destek talebi (bkz. docs/VARSAYIMLAR.md V84): tenant kullanicisi problem/oneri
+ * acar (`message` = ilk mesaj), sonrasinda tenant ve super admin SupportTicketMessage
+ * uzerinden karsilikli yazisir; super admin durumu degistirir. Tenant tarafinda
+ * tenant-scoped extension ile, super admin tarafinda ham PrismaService ile okunur.
+ */
+model SupportTicket {
+  id          String              @id @default(uuid())
+  tenantId    String
+  kind        SupportTicketKind
+  message     String
+  status      SupportTicketStatus @default(OPEN)
+  createdById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  tenant    Tenant                 @relation(fields: [tenantId], references: [id])
+  createdBy User?                  @relation("SupportTicketCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  messages  SupportTicketMessage[]
+
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
+  @@map("support_tickets")
+}
+
+/**
+ * Talep yazismasindaki ilk mesajdan sonraki her mesaj. tenantId tasimaz (QuoteItem
+ * deseni) - erisim her zaman once talebin kendisi (tenant-scoped) dogrulanarak yapilir.
+ */
+model SupportTicketMessage {
+  id         String                  @id @default(uuid())
+  ticketId   String
+  authorType SupportTicketAuthorType
+  authorId   String?
+  body       String
+  createdAt  DateTime                @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
 }

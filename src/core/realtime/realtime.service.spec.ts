@@ -28,3 +28,16 @@ describe('RealtimeService.emitToAll', () => {
     ]);
   });
 });
+
+describe('RealtimeService.emitToPlatformAdmins', () => {
+  it('sadece platform-admins room una emit eder', () => {
+    const emit = vi.fn();
+    const to = vi.fn().mockReturnValue({ emit });
+    const service = new RealtimeService({ server: { to } } as never);
+
+    service.emitToPlatformAdmins('event-x', { a: 1 });
+
+    expect(to).toHaveBeenCalledWith('platform-admins');
+    expect(emit).toHaveBeenCalledWith('event-x', { a: 1 });
+  });
+});

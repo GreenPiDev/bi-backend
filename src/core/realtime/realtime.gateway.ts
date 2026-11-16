@@ -4,7 +4,7 @@ import type { Server, Socket } from 'socket.io';
 import { TokenService } from '../../modules/auth/token.service';
 import { ACCESS_TOKEN_COOKIE } from '../../modules/auth/token.types';
 import { createCorsOriginChecker } from '../http/cors-origin';
-import { tenantRoom } from './tenant-room';
+import { PLATFORM_ADMIN_ROOM, tenantRoom } from './tenant-room';
 
 /** cookie-parser'in kullandigi `cookie` paketi ESM-only oldugu icin CJS build'de
  * resolve edilemiyor - burada tek bir cookie degeri okumak icin harici bagimlilik
@@ -57,6 +57,9 @@ export class RealtimeGateway implements OnGatewayConnection {
     try {
       const payload = this.tokenService.verifyAccessToken(token);
       void client.join(tenantRoom(payload.tenantId));
+      if (payload.isPlatformAdmin) {
+        void client.join(PLATFORM_ADMIN_ROOM);
+      }
     } catch {
       client.disconnect(true);
     }
