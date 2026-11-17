@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StockMovementType" ADD VALUE 'QUOTE_SALE_REVERSAL' AFTER 'QUOTE_SALE';

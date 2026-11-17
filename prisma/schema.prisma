@@ -2088,6 +2088,13 @@ enum StockMovementType {
   INCREASE
   DECREASE
   QUOTE_SALE
+  /**
+   * Onaylanmis bir teklif onaydan cikarildiginda (APPROVED -> baska durum, bkz.
+   * QuotesService.reopen) o teklifin QUOTE_SALE hareketlerinin ayni depoya iadesi.
+   * relatedMovementId iade edilen QUOTE_SALE satirini gosterir; maliyeti
+   * (Product.avgCost) DEGISTIRMEZ (QUOTE_SALE'in simetrigi).
+   */
+  QUOTE_SALE_REVERSAL
   TRANSFER_OUT
   TRANSFER_IN
   CORRECTION

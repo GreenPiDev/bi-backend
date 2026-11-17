@@ -445,6 +445,66 @@ describe('StockItemsService', () => {
       expect(newQuantity.toString()).toBe('-3');
     });
 
+    it('reverseQuoteSalesTx: sadece iade edilmemis QUOTE_SALE hareketlerini ayni depoya geri koyar, maliyeti degistirmez', async () => {
+      const { prisma, tx } = createWacPrisma({
+        productRow: { id: 'product-1', name: 'Sunucu', avgCost: '5' },
+        stockItems: [
+          {
+            id: 'stock-1',
+            productId: 'product-1',
+            warehouseId: 'warehouse-1',
+            quantity: '4',
+          },
+        ],
+      });
+      const movementFindMany = vi
+        .fn()
+        .mockImplementation(({ where }: { where: { type: string } }) =>
+          Promise.resolve(
+            where.type === 'QUOTE_SALE'
+              ? [
+                  {
+                    id: 'sale-old',
+                    productId: 'product-1',
+                    warehouseId: 'warehouse-1',
+                    quantity: new Prisma.Decimal(9),
+                  },
+                  {
+                    id: 'sale-new',
+                    productId: 'product-1',
+                    warehouseId: 'warehouse-1',
+                    quantity: new Prisma.Decimal(6),
+                  },
+                ]
+              : [{ id: 'rev-1', relatedMovementId: 'sale-old' }],
+          ),
+        );
+      Object.assign(tx.stockMovement, { findMany: movementFindMany });
+      const service = new StockItemsService(prisma as never, fakeProductsCache);
+
+      const count = await runInTenant(() =>
+        service.reverseQuoteSalesTx(tx as never, {
+          quoteId: 'quote-1',
+          note: 'iade',
+        }),
+      );
+
+      expect(count).toBe(1);
+      expect(tx.product.update).not.toHaveBeenCalled();
+      const newQuantity = tx.stockItem.update.mock.calls[0][0].data.quantity;
+      expect(newQuantity.toString()).toBe('10');
+      expect(tx.stockMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'QUOTE_SALE_REVERSAL',
+            relatedMovementId: 'sale-new',
+            quoteId: 'quote-1',
+            unitCost: null,
+          }),
+        }),
+      );
+    });
+
     it('increaseStock: urun bulunamazsa NOT_FOUND firlatir', async () => {
       const tx = {
         product: { findFirst: vi.fn().mockResolvedValue(null) },

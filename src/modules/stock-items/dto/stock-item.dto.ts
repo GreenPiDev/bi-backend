@@ -24,6 +24,7 @@ export const StockMovementTypeSchema = z.enum([
   'INCREASE',
   'DECREASE',
   'QUOTE_SALE',
+  'QUOTE_SALE_REVERSAL',
   'TRANSFER_OUT',
   'TRANSFER_IN',
   'CORRECTION',

@@ -29,6 +29,7 @@ import {
   QuoteReportsQuerySchema,
   QuoteValueByStatusQuerySchema,
   RejectQuoteSchema,
+  ReopenQuoteSchema,
   UpdateQuoteSchema,
   type ApproveQuoteDto,
   type CreateQuoteDto,
@@ -37,6 +38,7 @@ import {
   type QuoteReportsQueryDto,
   type QuoteValueByStatusQueryDto,
   type RejectQuoteDto,
+  type ReopenQuoteDto,
   type UpdateQuoteDto,
 } from './dto/quote.dto';
 import {
@@ -228,6 +230,18 @@ export class QuotesController {
     @CurrentUser() user: RequestUser,
   ): Promise<QuoteWithDetails> {
     return this.quotes.reject(id, user.id, dto);
+  }
+
+  /** Kilitli (APPROVED/REJECTED) teklifin durumunu degistirir - bkz.
+   * QuotesService.reopen. Onay yetkisi + zorunlu gerekce. */
+  @Post(':id/reopen')
+  @RequiresPermission('quotes', 'APPROVE')
+  reopen(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ReopenQuoteSchema)) dto: ReopenQuoteDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<QuoteWithDetails> {
+    return this.quotes.reopen(id, dto, user.id);
   }
 
   /** SP1-SP2: onayli bir teklif icin onerilen satin alma siparisi kalemlerini

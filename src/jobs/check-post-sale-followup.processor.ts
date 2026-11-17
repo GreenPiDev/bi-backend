@@ -29,7 +29,13 @@ export class CheckPostSaleFollowupProcessor extends WorkerHost {
 
   async process(): Promise<void> {
     const dueCases = await this.prisma.postSaleCase.findMany({
-      where: { reminderSentAt: null, reminderAt: { lte: new Date() } },
+      where: {
+        reminderSentAt: null,
+        reminderAt: { lte: new Date() },
+        // Teklif onaydan cikarilinca (QuotesService.reopen) veya elle iptal edilen
+        // siparislerin memnuniyet hatirlatmasi anlamsiz.
+        salesOrder: { status: { not: 'CANCELLED' } },
+      },
       include: { account: true, quote: { select: { quoteNumber: true } } },
     });
 

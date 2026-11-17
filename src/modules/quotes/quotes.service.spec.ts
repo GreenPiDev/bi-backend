@@ -27,7 +27,13 @@ const fakeFileUrl = { build: vi.fn(() => null) } as never;
 const notificationsCreate = vi.fn();
 const fakeNotifications = { create: notificationsCreate } as never;
 const decreaseStockTx = vi.fn();
-const fakeStockItems = { decreaseStockTx } as never;
+const findActiveQuoteSalesTx = vi.fn().mockResolvedValue([]);
+const reverseQuoteSalesTx = vi.fn().mockResolvedValue(0);
+const fakeStockItems = {
+  decreaseStockTx,
+  findActiveQuoteSalesTx,
+  reverseQuoteSalesTx,
+} as never;
 
 function createQuoteRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -96,6 +102,7 @@ function createPrisma({
       findFirst: vi.fn().mockResolvedValue(null),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue({ id: 'so-1' }),
+      update: vi.fn().mockResolvedValue({ id: 'so-1' }),
     },
     quote: {
       count: vi.fn().mockResolvedValue(0),
@@ -137,6 +144,8 @@ describe('QuotesService', () => {
     auditLog.mockClear();
     surveyQueueAdd.mockClear();
     decreaseStockTx.mockClear();
+    findActiveQuoteSalesTx.mockClear();
+    reverseQuoteSalesTx.mockClear();
   });
 
   it('getById: bulunamayan teklif icin NOT_FOUND firlatir', async () => {
@@ -938,15 +947,15 @@ describe('QuotesService', () => {
     );
   });
 
-  it('approve: ayni teklif icin zaten bir QUOTE_SALE hareketi varsa tekrar dusmez (idempotent)', async () => {
+  it('approve: ayni teklif icin zaten aktif (iade edilmemis) bir QUOTE_SALE hareketi varsa tekrar dusmez (idempotent)', async () => {
     const prisma = createPrisma({
       quoteRow: createQuoteRow({
         status: 'PENDING_APPROVAL',
         items: [{ productId: 'product-1', quantity: 3 }],
       }),
       products: [],
-      existingStockMovement: { id: 'mv-1' },
     });
+    findActiveQuoteSalesTx.mockResolvedValueOnce([{ id: 'mv-1' }]);
     const service = new QuotesService(
       prisma as never,
       fakeAudit,
@@ -1274,5 +1283,181 @@ describe('QuotesService', () => {
         note: null,
       },
     ]);
+  });
+  describe('reopen (kilitli teklifin durumunu degistirme)', () => {
+    function buildService(prisma: ReturnType<typeof createPrisma>) {
+      return new QuotesService(
+        prisma as never,
+        fakeAudit,
+        fakeSurveyQueue,
+        fakeQuotesCache,
+        fakeOpportunitiesCache,
+        fakePostSaleCasesCache,
+        fakeSalesOrdersCache,
+        fakeProductsCache,
+        fakeFx,
+        fakeFileUrl,
+        fakeNotifications,
+        fakeStockItems,
+      );
+    }
+
+    it('APPROVED -> REVIZE: stok iade edilir, satis siparisi iptal edilir, onay bilgisi temizlenir', async () => {
+      const prisma = createPrisma({
+        quoteRow: createQuoteRow({ status: 'APPROVED' }),
+        products: [],
+      });
+      prisma.__tx.salesOrder.findFirst.mockResolvedValue({
+        id: 'so-1',
+        status: 'SHIPPED',
+      });
+      await runInTenant(() =>
+        buildService(prisma).reopen(
+          'quote-1',
+          { status: 'REVIZE', note: 'Musteri miktari degistirdi' },
+          'manager-1',
+        ),
+      );
+
+      expect(reverseQuoteSalesTx).toHaveBeenCalledWith(
+        prisma.__tx,
+        expect.objectContaining({ quoteId: 'quote-1' }),
+      );
+      expect(prisma.__tx.salesOrder.update).toHaveBeenCalledWith({
+        where: { id: 'so-1' },
+        data: { status: 'CANCELLED' },
+      });
+      expect(prisma.__tx.quote.update).toHaveBeenCalledWith({
+        where: { id: 'quote-1' },
+        data: { status: 'REVIZE', approvedAt: null, approvedById: null },
+      });
+      expect(prisma.__tx.quoteStatusHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          status: 'REVIZE',
+          note: 'Musteri miktari degistirdi',
+        }),
+      });
+      expect(decreaseStockTx).not.toHaveBeenCalled();
+    });
+
+    it('APPROVED -> REJECTED: red sebebi kaydedilir, stok iade edilir', async () => {
+      const prisma = createPrisma({
+        quoteRow: createQuoteRow({ status: 'APPROVED' }),
+        products: [],
+      });
+      await runInTenant(() =>
+        buildService(prisma).reopen(
+          'quote-1',
+          {
+            status: 'REJECTED',
+            note: 'Musteri vazgecti',
+            rejectionReason: 'Fiyat',
+          },
+          'manager-1',
+        ),
+      );
+      expect(reverseQuoteSalesTx).toHaveBeenCalled();
+      expect(prisma.__tx.quoteStatusHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ status: 'REJECTED', reason: 'Fiyat' }),
+      });
+    });
+
+    it('REJECTED -> APPROVED: stok iadesi yapilmaz, kalemler secilen depodan duser', async () => {
+      const prisma = createPrisma({
+        quoteRow: createQuoteRow({
+          status: 'REJECTED',
+          items: [{ productId: 'product-1', quantity: 2 }],
+        }),
+        products: [],
+      });
+      await runInTenant(() =>
+        buildService(prisma).reopen(
+          'quote-1',
+          {
+            status: 'APPROVED',
+            note: 'Musteri geri dondu',
+            warehouseId: 'warehouse-1',
+          },
+          'manager-1',
+        ),
+      );
+      expect(reverseQuoteSalesTx).not.toHaveBeenCalled();
+      expect(decreaseStockTx).toHaveBeenCalledWith(
+        prisma.__tx,
+        expect.objectContaining({
+          productId: 'product-1',
+          warehouseId: 'warehouse-1',
+          type: 'QUOTE_SALE',
+        }),
+      );
+      expect(prisma.__tx.salesOrder.create).toHaveBeenCalled();
+    });
+
+    it('tekrar onayda iptal edilmis satis siparisi yeniden acilir, anket tekrar kuyruga atilmaz', async () => {
+      const prisma = createPrisma({
+        quoteRow: createQuoteRow({
+          status: 'REJECTED',
+          contactId: 'contact-1',
+        }),
+        products: [],
+      });
+      prisma.__tx.salesOrder.findFirst.mockResolvedValue({
+        id: 'so-1',
+        status: 'CANCELLED',
+      });
+      prisma.__tx.postSaleCase.findFirst.mockResolvedValue({
+        id: 'psc-1',
+        contactId: 'contact-1',
+      });
+      await runInTenant(() =>
+        buildService(prisma).reopen(
+          'quote-1',
+          {
+            status: 'APPROVED',
+            note: 'Yeniden onay',
+            warehouseId: 'warehouse-1',
+          },
+          'manager-1',
+        ),
+      );
+      expect(prisma.__tx.salesOrder.update).toHaveBeenCalledWith({
+        where: { id: 'so-1' },
+        data: { status: 'PENDING' },
+      });
+      expect(prisma.__tx.salesOrder.create).not.toHaveBeenCalled();
+      expect(surveyQueueAdd).not.toHaveBeenCalled();
+    });
+
+    it('kilitli olmayan teklif icin QUOTE_NOT_LOCKED firlatir', async () => {
+      const prisma = createPrisma({
+        quoteRow: createQuoteRow({ status: 'DRAFT' }),
+        products: [],
+      });
+      await expect(
+        runInTenant(() =>
+          buildService(prisma).reopen(
+            'quote-1',
+            { status: 'SENT', note: 'x' },
+            'manager-1',
+          ),
+        ),
+      ).rejects.toMatchObject({ code: 'QUOTE_NOT_LOCKED' });
+    });
+
+    it('ayni duruma gecis icin QUOTE_STATUS_UNCHANGED firlatir', async () => {
+      const prisma = createPrisma({
+        quoteRow: createQuoteRow({ status: 'APPROVED' }),
+        products: [],
+      });
+      await expect(
+        runInTenant(() =>
+          buildService(prisma).reopen(
+            'quote-1',
+            { status: 'APPROVED', note: 'x', warehouseId: 'warehouse-1' },
+            'manager-1',
+          ),
+        ),
+      ).rejects.toMatchObject({ code: 'QUOTE_STATUS_UNCHANGED' });
+    });
   });
 });

@@ -216,6 +216,32 @@ export const RejectQuoteSchema = z.object({
 });
 export type RejectQuoteDto = z.infer<typeof RejectQuoteSchema>;
 
+/** `POST /quotes/:id/reopen` - kilitli (APPROVED/REJECTED) bir teklifin durumunu
+ * degistirir (patron istegi, bkz. docs/VARSAYIMLAR.md). APPROVE izni ve gerekce
+ * (note) zorunlu. APPROVED'dan cikarken stok iadesi + satis siparisi iptali
+ * otomatik yapilir (bkz. QuotesService.reopen). Hedef APPROVED ise (sadece
+ * REJECTED'dan mumkun) depo, hedef REJECTED ise red sebebi zorunlu. */
+export const ReopenQuoteSchema = z
+  .object({
+    status: QuoteStatusSchema,
+    note: z
+      .string()
+      .trim()
+      .min(1, 'Gerekce zorunludur.')
+      .max(2000, 'Gerekce en fazla 2000 karakter olabilir.'),
+    warehouseId: z.string().uuid().optional(),
+    rejectionReason: z.string().trim().min(1).optional(),
+  })
+  .refine((dto) => dto.status !== 'APPROVED' || dto.warehouseId !== undefined, {
+    message: 'Onaylamak icin depo secimi gerekli.',
+    path: ['warehouseId'],
+  })
+  .refine(
+    (dto) => dto.status !== 'REJECTED' || dto.rejectionReason !== undefined,
+    { message: 'Red sebebi secimi gerekli.', path: ['rejectionReason'] },
+  );
+export type ReopenQuoteDto = z.infer<typeof ReopenQuoteSchema>;
+
 export const QuoteQuerySchema = ListQuerySchema.extend({
   accountId: z.string().uuid().optional(),
   status: QuoteStatusSchema.optional(),

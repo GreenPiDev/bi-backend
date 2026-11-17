@@ -54,6 +54,7 @@ import type {
   QuoteItemInputDto,
   QuoteQueryDto,
   RejectQuoteDto,
+  ReopenQuoteDto,
   UpdateQuoteDto,
 } from './dto/quote.dto';
 
@@ -396,6 +397,14 @@ export class QuotesService {
     let salesOrderId: string;
     if (existing) {
       salesOrderId = existing.id;
+      // Teklif onaydan cikarilinca (reopen) siparis CANCELLED yapilir; tekrar
+      // onaylanirsa ayni siparis (quoteId @unique) yeniden acilir.
+      if (existing.status === 'CANCELLED') {
+        await tx.salesOrder.update({
+          where: { id: existing.id },
+          data: { status: 'PENDING' },
+        });
+      }
     } else {
       const prefix = salesOrderNumberPrefix(new Date());
       const countToday = await tx.salesOrder.count({
@@ -441,10 +450,14 @@ export class QuotesService {
       items: { productId: string; quantity: Prisma.Decimal | number }[];
     },
   ): Promise<void> {
-    const alreadyApplied = await tx.stockMovement.findFirst({
-      where: { quoteId: params.quoteId },
-    });
-    if (alreadyApplied) {
+    // "Aktif" = henuz QUOTE_SALE_REVERSAL ile iade edilmemis satis. Teklif onaydan
+    // cikarilip (reopen) tekrar onaylanirsa iade edilmis eski satislar dusumu
+    // engellememeli.
+    const activeSales = await this.stockItems.findActiveQuoteSalesTx(
+      tx,
+      params.quoteId,
+    );
+    if (activeSales.length > 0) {
       return;
     }
     for (const item of params.items) {
@@ -1858,6 +1871,121 @@ export class QuotesService {
     });
     await this.audit.log({ action: 'REJECT', entity: 'Quote', entityId: id });
     await this.quotesCache.invalidate();
+    return this.getById(id);
+  }
+
+  /**
+   * Kilitli (APPROVED/REJECTED) bir teklifin durumunu degistirir - patron istegi
+   * (bkz. docs/VARSAYIMLAR.md "Onaylanmis teklifin durumunu degistirme"). Ayri uc
+   * (APPROVE izni) cunku update() UPDATE izniyle calisir ve kilitli teklifleri
+   * reddeder. APPROVED'dan cikarken: (1) teklifin aktif QUOTE_SALE hareketleri ayni
+   * depoya iade edilir (QUOTE_SALE_REVERSAL), (2) bagli SalesOrder hangi asamada
+   * olursa olsun CANCELLED yapilir (kullanici karari - sevk edilmis siparisler de
+   * dahil). PostSaleCase/FeedbackSurvey/PurchaseOrder kayitlarina dokunulmaz;
+   * iptal edilmis siparisin PostSaleCase'i icin S2 hatirlatmasi gonderilmez (bkz.
+   * CheckPostSaleFollowupProcessor). Hedef APPROVED ise normal onay akisi (stok
+   * dusumu + siparisin yeniden acilmasi) calisir.
+   */
+  async reopen(
+    id: string,
+    dto: ReopenQuoteDto,
+    actingUserId: string,
+  ): Promise<QuoteWithDetails> {
+    const existing = await this.getById(id);
+    if (existing.status !== 'APPROVED' && existing.status !== 'REJECTED') {
+      throw new AppException(
+        'QUOTE_NOT_LOCKED',
+        'Sadece onaylanmis veya reddedilmis tekliflerin durumu bu islemle degistirilebilir.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (dto.status === existing.status) {
+      throw new AppException(
+        'QUOTE_STATUS_UNCHANGED',
+        'Teklif zaten bu durumda.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const leavingApproval = existing.status === 'APPROVED';
+
+    const postSaleCase = await this.prisma.$transaction(async (tx) => {
+      if (leavingApproval) {
+        await this.stockItems.reverseQuoteSalesTx(tx, {
+          quoteId: id,
+          note: `Teklif ${existing.quoteNumber} onaydan cikarildi`,
+        });
+        const salesOrder = await tx.salesOrder.findFirst({
+          where: { quoteId: id },
+        });
+        if (salesOrder && salesOrder.status !== 'CANCELLED') {
+          await tx.salesOrder.update({
+            where: { id: salesOrder.id },
+            data: { status: 'CANCELLED' },
+          });
+        }
+      }
+
+      const isDecision = dto.status === 'APPROVED' || dto.status === 'REJECTED';
+      await tx.quote.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          approvedAt: isDecision ? new Date() : null,
+          approvedById: isDecision ? actingUserId : null,
+        },
+      });
+      await this.recordStatusHistory(tx, {
+        quoteId: id,
+        status: dto.status,
+        createdById: actingUserId,
+        reason: dto.status === 'REJECTED' ? dto.rejectionReason : null,
+        note: dto.note,
+      });
+
+      if (dto.status !== 'APPROVED') {
+        return null;
+      }
+      // dto.warehouseId burada dolu: ReopenQuoteSchema.refine bunu zorunlu kilar.
+      await this.ensureStockDecreaseForQuote(tx, {
+        quoteId: id,
+        quoteNumber: existing.quoteNumber,
+        warehouseId: dto.warehouseId as string,
+        items: existing.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+      });
+      // Daha once onaylanip satis sonrasi kaydi acilmis bir teklif tekrar
+      // onaylaniyorsa anket yeniden kuyruga atilmaz (musteriye mukerrer e-posta).
+      const hadPostSaleCase = await tx.postSaleCase.findFirst({
+        where: { quoteId: id },
+      });
+      const ensured = await this.ensureSalesOrder(tx, {
+        quoteId: id,
+        accountId: existing.accountId,
+        contactId: existing.contactId,
+        createdById: actingUserId,
+      });
+      return hadPostSaleCase ? null : ensured;
+    });
+
+    if (postSaleCase?.contactId) {
+      await this.surveyQueue.add(SEND_POST_SALE_SURVEY_JOB, {
+        postSaleCaseId: postSaleCase.id,
+      });
+    }
+    await this.audit.log({
+      action: 'UPDATE',
+      entity: 'Quote',
+      entityId: id,
+      meta: { reopenedFrom: existing.status, status: dto.status },
+    });
+    await this.quotesCache.invalidate();
+    if (leavingApproval || dto.status === 'APPROVED') {
+      await this.postSaleCasesCache.invalidate();
+      await this.salesOrdersCache.invalidate();
+      await this.productsCache.invalidate();
+    }
     return this.getById(id);
   }
 }

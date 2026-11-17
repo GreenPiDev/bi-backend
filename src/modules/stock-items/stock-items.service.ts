@@ -573,6 +573,87 @@ export class StockItemsService {
     });
   }
 
+  /**
+   * Bir teklif onaydan cikarildiginda (QuotesService.reopen) o teklifin henuz iade
+   * edilmemis her QUOTE_SALE hareketini ayni depoya, ayni miktarla geri koyar.
+   * Maliyeti DEGISTIRMEZ (QUOTE_SALE de degistirmemisti - simetrik). Her iade satiri
+   * relatedMovementId ile iade ettigi QUOTE_SALE'e baglanir; bu sayede teklif tekrar
+   * onaylanirsa ensureStockDecreaseForQuote "aktif (iade edilmemis) satis var mi"
+   * kontrolunu yapabilir. Doner: iade edilen hareket sayisi.
+   */
+  async reverseQuoteSalesTx(
+    tx: StockTx,
+    params: { quoteId: string; note: string },
+  ): Promise<number> {
+    const activeSales = await this.findActiveQuoteSalesTx(tx, params.quoteId);
+    const actingUserId = TenantContext.getOrThrow().userId;
+    for (const sale of activeSales) {
+      const product = await this.requireProduct(sale.productId, tx);
+      const existing = await tx.stockItem.findFirst({
+        where: { productId: sale.productId, warehouseId: sale.warehouseId },
+      });
+      const previousQuantity = new Prisma.Decimal(existing?.quantity ?? 0);
+      const newQuantity = previousQuantity.add(sale.quantity);
+      if (existing) {
+        await tx.stockItem.update({
+          where: { id: existing.id },
+          data: { quantity: newQuantity },
+        });
+      } else {
+        await tx.stockItem.create({
+          data: {
+            productId: sale.productId,
+            warehouseId: sale.warehouseId,
+            quantity: newQuantity,
+          } as never,
+        });
+      }
+      await tx.stockMovement.create({
+        data: {
+          productId: sale.productId,
+          warehouseId: sale.warehouseId,
+          type: 'QUOTE_SALE_REVERSAL',
+          quantity: sale.quantity,
+          unitCost: null,
+          previousAvgCost: product.avgCost,
+          newAvgCost: product.avgCost,
+          previousQuantity,
+          newQuantity,
+          quoteId: params.quoteId,
+          relatedMovementId: sale.id,
+          note: params.note,
+          createdById: actingUserId,
+        } as never,
+      });
+    }
+    return activeSales.length;
+  }
+
+  /** Bu teklife ait, henuz QUOTE_SALE_REVERSAL ile iade edilmemis QUOTE_SALE hareketleri. */
+  async findActiveQuoteSalesTx(
+    tx: StockTx,
+    quoteId: string,
+  ): Promise<
+    {
+      id: string;
+      productId: string;
+      warehouseId: string;
+      quantity: Prisma.Decimal;
+    }[]
+  > {
+    const [sales, reversals] = await Promise.all([
+      tx.stockMovement.findMany({
+        where: { quoteId, type: 'QUOTE_SALE' },
+        orderBy: { createdAt: 'asc' },
+      }),
+      tx.stockMovement.findMany({
+        where: { quoteId, type: 'QUOTE_SALE_REVERSAL' },
+      }),
+    ]);
+    const reversedIds = new Set(reversals.map((r) => r.relatedMovementId));
+    return sales.filter((sale) => !reversedIds.has(sale.id));
+  }
+
   async decreaseStock(
     productId: string,
     dto: DecreaseStockDto,
