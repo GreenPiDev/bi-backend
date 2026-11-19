@@ -338,6 +338,7 @@ model Tenant {
   chatConversations           ChatConversation[]
   kanbanBoards                KanbanBoard[]                @relation("KanbanBoardOwner")
   partnerKanbanBoards         KanbanBoard[]                @relation("KanbanBoardPartner")
+  shares                      Share[]
 
   @@map("tenants")
 }
@@ -394,6 +395,7 @@ model User {
   kanbanProgressNotes KanbanCardProgressNote[]
   supportTicketsCreated SupportTicket[]        @relation("SupportTicketCreatedBy")
   supportTicketMessages SupportTicketMessage[]
+  sharesCreated         Share[]                @relation("ShareCreatedBy")
 
   @@index([tenantId])
   @@map("users")
@@ -2765,4 +2767,45 @@ model SupportTicketMessage {
 
   @@index([ticketId, createdAt])
   @@map("support_ticket_messages")
+}
+
+/**
+ * Merkezi paylasim linki kaynak tipi (bkz. docs/VARSAYIMLAR.md V87). Yeni bir
+ * paylasilabilir kaynak eklenince buraya bir deger eklenir - SharesService'in
+ * kendisi tipten habersizdir.
+ */
+enum ShareResourceType {
+  QUOTE
+}
+
+/**
+ * Merkezi "paylasim linki" (bkz. docs/VARSAYIMLAR.md V87): sistemin kullanicisi
+ * olmayan birinin, kimlik dogrulamasi olmadan `/paylasim/:token` adresinden bir
+ * dosyayi (bugun: teklif PDF'i) gorebilmesi. Dosya link olusturulurken bir kez
+ * uretilip R2'ye yazilir (snapshot) - paylasilan icerik, sonradan kaynak kayit
+ * degisse bile paylasildigi andaki haliyle kalir. `token` globally unique
+ * oldugundan public uc tenant filtresine ihtiyac duymaz.
+ */
+model Share {
+  id           String            @id @default(uuid())
+  tenantId     String
+  token        String            @unique
+  resourceType ShareResourceType
+  resourceId   String
+  title        String
+  fileKey      String
+  fileName     String
+  contentType  String
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  viewCount    Int               @default(0)
+  lastViewedAt DateTime?
+  createdById  String
+  createdAt    DateTime          @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+  createdBy User   @relation("ShareCreatedBy", fields: [createdById], references: [id])
+
+  @@index([tenantId, resourceType, resourceId])
+  @@map("shares")
 }

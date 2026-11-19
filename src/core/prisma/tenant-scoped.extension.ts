@@ -61,6 +61,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'Note',
   'ChatConversation',
   'SupportTicket',
+  'Share',
 ]);
 
 /**

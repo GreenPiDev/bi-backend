@@ -121,6 +121,25 @@ export class ExportsService {
     );
   }
 
+  async assertQuoteExists(quoteId: string): Promise<void> {
+    await this.quotes.getById(quoteId);
+  }
+
+  /** Paylasim linki (bkz. docs/VARSAYIMLAR.md V87) icin teklif PDF'inin
+   * snapshot'i - indirme butonundaki PDF'le birebir ayni icerik. */
+  async buildQuoteShareFile(
+    quoteId: string,
+    user: RequestUser,
+  ): Promise<{ pdf: Buffer; fileName: string; title: string }> {
+    const quote = await this.quotes.getById(quoteId);
+    const pdf = await this.exportQuotePdf(quoteId, user);
+    return {
+      pdf,
+      fileName: buildQuotePdfFilename(quote.quoteNumber, quote.account.name),
+      title: `${QUOTE_PDF_COVER_TITLE} ${quote.quoteNumber} - ${quote.account.name}`,
+    };
+  }
+
   /** /teklifler/:id?tab=cost ekraninin kendi PDF export'u - ana teklif PDF'inden
    * (exportQuotePdf) bagimsiz, markali sablon kullanmaz. */
   async exportQuoteCostPdf(

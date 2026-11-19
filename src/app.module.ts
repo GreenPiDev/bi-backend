@@ -58,6 +58,7 @@ import { ProductListsModule } from './modules/product-lists/product-lists.module
 import { ProductsModule } from './modules/products/products.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { PublicSurveysModule } from './modules/public-surveys/public-surveys.module';
+import { SharesModule } from './modules/shares/shares.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { QueryModule } from './modules/query/query.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
@@ -138,6 +139,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     PostSaleCasesModule,
     SurveysModule,
     PublicSurveysModule,
+    SharesModule,
     ProjectsModule,
     PurchaseOrdersModule,
     SalesOrdersModule,
