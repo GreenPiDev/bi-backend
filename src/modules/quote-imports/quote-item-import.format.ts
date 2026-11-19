@@ -195,6 +195,8 @@ export interface QuoteItemImportLine {
   /** Dosyada bos birakildiysa null - frontend tenant varsayilan KDV'sini uygular. */
   vatPct: number | null;
   brand: string | null;
+  /** Sadece gruplu ice aktarmada dolu - satirin ait oldugu grubun adi. */
+  groupName: string | null;
 }
 
 export interface QuoteItemImportResult {
@@ -204,6 +206,9 @@ export interface QuoteItemImportResult {
   productList: { id: string; name: string } | null;
   matchedCount: number;
   createdProductCount: number;
+  /** Dosyanin basliklarindan algilanan sablon (bkz. docs/VARSAYIMLAR.md V86) - frontend
+   * satirlari buna gore gruplu ya da grupsuz yerlestirir. */
+  format: 'UNGROUPED' | 'GROUPED';
 }
 
 export interface QuoteItemImportRowError {

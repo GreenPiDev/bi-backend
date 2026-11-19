@@ -5,6 +5,7 @@ import {
   buildImportedProductListName,
   decodeUploadedFileName,
 } from './quote-item-import.format';
+import { QUOTE_GROUPED_ITEM_IMPORT_COLUMNS } from './quote-grouped-item-import.format';
 import { QuoteItemImportsService } from './quote-item-imports.service';
 
 function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
@@ -27,6 +28,8 @@ function createService(options: {
     name: string;
     sku: string | null;
     brand: string | null;
+    price?: string | null;
+    currency?: string;
   }[];
   units?: { label: string; isDefault: boolean }[];
 }) {
@@ -116,6 +119,7 @@ describe('QuoteItemImportsService.importItems', () => {
     );
     expect(result.matchedCount).toBe(1);
     expect(result.createdProductCount).toBe(1);
+    expect(result.format).toBe('UNGROUPED');
     expect(emitUpdated).toHaveBeenCalled();
   });
 
@@ -167,6 +171,96 @@ describe('QuoteItemImportsService.importItems', () => {
     await expect(
       runInTenant(() => service.importItems('/x', 'XLSX', 'a.xlsx')),
     ).rejects.toMatchObject({ code: 'IMPORT_EMPTY' });
+  });
+});
+
+const GROUPED_HEADERS = QUOTE_GROUPED_ITEM_IMPORT_COLUMNS.map((c) => c.header);
+
+describe('QuoteItemImportsService.importItems (gruplu sablon algilama)', () => {
+  it('grup satirlarini grup adi olarak okur, fiyati eslesen urunden (yoksa 0) alir', async () => {
+    const { service, productCreate } = createService({
+      headers: GROUPED_HEADERS,
+      products: [
+        {
+          id: 'p1',
+          name: 'Sigorta',
+          sku: '5SL6106',
+          brand: 'SIEMENS',
+          price: '150.50',
+          currency: 'EUR',
+        },
+      ],
+      rows: [
+        [
+          'AT-ZK-1 PANOSU',
+          'AT-ZK-1 PANOSU',
+          'AT-ZK-1 PANOSU',
+          'AT-ZK-1 PANOSU',
+          'AT-ZK-1 PANOSU',
+        ],
+        ['5SL6106', 'Sigorta 6A', 'SIEMENS', '3', 'ADET'],
+        ['YENI-1', 'Yeni Röle', 'ABB', '2', ''],
+        ['UT-ZK-1 PANOSU', '', '', '', ''],
+        ['5SL6106', 'Sigorta 6A', '', '1', 'adet'],
+      ],
+    });
+
+    const result = await runInTenant(() =>
+      service.importItems('/tmp/x.xlsx', 'XLSX', 'gruplu.xlsx'),
+    );
+
+    expect(result.format).toBe('GROUPED');
+    expect(result.items).toHaveLength(3);
+    expect(result.items[0]).toMatchObject({
+      productId: 'p1',
+      groupName: 'AT-ZK-1 PANOSU',
+      quantity: 3,
+      unit: 'adet',
+      unitPrice: 150.5,
+      currency: 'EUR',
+      discountPct: 0,
+      vatPct: null,
+    });
+    expect(result.items[1]).toMatchObject({
+      productId: 'new-1',
+      groupName: 'AT-ZK-1 PANOSU',
+      unitPrice: 0,
+    });
+    expect(result.items[2]).toMatchObject({
+      productId: 'p1',
+      groupName: 'UT-ZK-1 PANOSU',
+    });
+    expect(productCreate).toHaveBeenCalledTimes(1);
+    expect(productCreate.mock.calls[0][0].data.price).toBeUndefined();
+  });
+
+  it('grup satirindan once gelen urunu ve gecersiz miktari hata olarak doner', async () => {
+    const { service, productCreate } = createService({
+      headers: GROUPED_HEADERS,
+      rows: [
+        ['A-1', 'Ürün A', '', '1', ''],
+        ['GRUP', '', '', '', ''],
+        ['B-1', 'Ürün B', '', 'iki', ''],
+      ],
+    });
+
+    const error = await runInTenant(() =>
+      service.importItems('/tmp/x.xlsx', 'XLSX', 'g.xlsx'),
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AppException);
+    const details = (error as AppException).details as {
+      errors: { row: number }[];
+    };
+    expect(details.errors.map((e) => e.row)).toEqual([2, 4]);
+    expect(productCreate).not.toHaveBeenCalled();
+  });
+
+  it('iki sablona da uymayan basliklarda INVALID_TEMPLATE doner', async () => {
+    const { service } = createService({ headers: ['Kod', 'Ad'], rows: [] });
+    await expect(
+      runInTenant(() => service.importItems('/tmp/x.xlsx', 'XLSX', 'g.xlsx')),
+    ).rejects.toMatchObject({ code: 'INVALID_TEMPLATE' });
   });
 });
 

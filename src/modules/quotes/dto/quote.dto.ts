@@ -31,6 +31,9 @@ export const QuoteStatusSchema = z.enum([
   'UNSPECIFIED',
 ]);
 
+/** Teklif/siparis belgelerindeki azami kalem sayisi (bkz. docs/VARSAYIMLAR.md V86). */
+export const MAX_QUOTE_ITEMS = 2000;
+
 const QuoteItemInputSchema = z.object({
   productId: z.string().uuid(),
   /** 0 kabul edilir: is akisinda miktari sifir (ornegin sadece bilgi amacli) satir olabiliyor. */
@@ -78,10 +81,12 @@ export const CreateQuoteSchema = z.object({
   /** S3'un muhatap kisisi (bkz. docs/VARSAYIMLAR.md V28) - opsiyonel, verilirse
    * accountId'ye ait bir kisi olmalidir. */
   contactId: z.string().uuid().optional(),
+  /** Ust sinir 200'du - gruplu Excel ice aktarmada (V86) 17 grup / 314 kalemlik gercek
+   * bir pano teklifi bunu asti. 2000 + main.ts'teki 2mb JSON govde siniri birlikte. */
   items: z
     .array(QuoteItemInputSchema)
     .min(1, 'En az bir urun satiri eklenmelidir.')
-    .max(200),
+    .max(MAX_QUOTE_ITEMS),
   opportunity: QuoteOpportunityInputSchema.optional(),
   /** Kullanicinin elle girdigi teklif tarihi - quoteNumber'in gun-icinde-sayaci
    * icin kullandigi sistem tarihinden bagimsizdir. */
@@ -134,7 +139,7 @@ export type QuoteItemInputDto = z.infer<typeof QuoteItemInputSchema>;
 
 export const UpdateQuoteSchema = z
   .object({
-    items: z.array(QuoteItemInputSchema).min(1).max(200).optional(),
+    items: z.array(QuoteItemInputSchema).min(1).max(MAX_QUOTE_ITEMS).optional(),
     /** /teklifler listesindeki durum dropdown'undan gelen dogrudan durum degisikligi. */
     status: QuoteStatusSchema.optional(),
     /** Status 'APPROVED' ise zorunlu - hangi depodan otomatik dusulecegi (bkz.

@@ -29,6 +29,7 @@ import type {
   QuoteImportResult,
 } from './quote-imports.service';
 import { QuoteImportsService } from './quote-imports.service';
+import { buildQuoteGroupedItemImportTemplate } from './quote-grouped-item-import.format';
 import { buildQuoteItemImportTemplate } from './quote-item-import.format';
 import {
   QuoteItemImportsService,
@@ -111,7 +112,9 @@ export class QuoteImportsController {
       .send(buffer);
   }
 
-  /** Sabit sablonlu excel'deki kalemleri cozumleyip (eslesmeyenler icin yeni urun
+  /** Tek "Excel'den İçe Aktar" butonu: grupsuz ya da gruplu sablon basliklardan
+   * otomatik algilanir (yanitta `format`, bkz. docs/VARSAYIMLAR.md V86).
+   * Sabit sablonlu excel'deki kalemleri cozumleyip (eslesmeyenler icin yeni urun
    * listesi + urunler olusturarak) teklif formuna eklenecek satirlari doner - teklifin
    * kendisini OLUSTURMAZ, kullanici formu yine "Kaydet" ile gonderir. Yeni urun
    * olusturmasina ragmen izin 'quotes:CREATE' (formdaki hizli urun ekleme ile ayni
@@ -125,6 +128,24 @@ export class QuoteImportsController {
     return this.withUploadedFile(file, (filePath, type) =>
       this.quoteItemImports.importItems(filePath, type, file.originalname),
     );
+  }
+
+  /** "Örnek Excel (Gruplu)" butonu - gruplu sabit sablon (bkz.
+   * quote-grouped-item-import.format.ts, docs/VARSAYIMLAR.md V86). */
+  @Get('grouped-items/template')
+  @RequiresPermission('quotes', 'CREATE')
+  async downloadGroupedItemsTemplate(@Res() res: Response): Promise<void> {
+    const buffer = await buildQuoteGroupedItemImportTemplate();
+    res
+      .header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
+      .header(
+        'Content-Disposition',
+        'attachment; filename="teklif-gruplu-urun-listesi-ornek.xlsx"',
+      )
+      .send(buffer);
   }
 
   /**

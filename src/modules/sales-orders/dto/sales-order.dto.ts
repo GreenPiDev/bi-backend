@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 import { ExportColumnsQuerySchema } from '../../../core/xlsx/list-export.util';
+import { MAX_QUOTE_ITEMS } from '../../quotes/dto/quote.dto';
 
 export const SalesOrderStatusSchema = z.enum([
   'PENDING',
@@ -47,7 +48,7 @@ export const CreateSalesOrderSchema = z
     quoteId: z.string().uuid().optional(),
     accountId: z.string().uuid().optional(),
     contactId: z.string().uuid().optional(),
-    items: z.array(CreateSalesOrderItemSchema).max(200).optional(),
+    items: z.array(CreateSalesOrderItemSchema).max(MAX_QUOTE_ITEMS).optional(),
   })
   .refine((dto) => Boolean(dto.quoteId) !== Boolean(dto.accountId), {
     message: 'Ya bir teklif ya da bir firma secilmelidir (ikisi birden degil).',
