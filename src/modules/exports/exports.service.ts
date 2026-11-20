@@ -63,6 +63,7 @@ export class ExportsService {
       colors: {
         titleColor: theme.titleColor,
         textColor: theme.textColor,
+        headerBgColor: theme.headerBgColor,
         footerBgColor: theme.footerBgColor,
         footerTextColor: theme.footerTextColor,
         footerHeightMm: theme.footerHeightMm,

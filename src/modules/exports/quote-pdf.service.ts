@@ -37,6 +37,10 @@ const PDF_FOOTER_NOTICE_BOTTOM_MM = 3;
 // ust marj (bkz. buildHeaderTemplate) - eskiden body icinde tek seferlik render
 // edilen AppShell print header'inin yerini alir, artik her sayfada tekrar eder.
 const PDF_HEADER_MARGIN_TOP = '26mm';
+// Ust bilgi bandinin yuksekligi - sayfanin ust kenarina bitisik, renkli arka
+// plan (headerBgColor) bu yukseklik boyunca boyanir; 26mm marjin kalan 4mm'si
+// band ile teklif icerigi arasinda bosluk olarak kalir.
+const PDF_HEADER_BAND_HEIGHT_MM = 22;
 
 /** Playwright'in header/footer template frame'i, asil sayfanin auth cookie'sini
  * tasimaz - korumali bir `/files?key=...` URL'i oraya dogrudan verilirse logo
@@ -80,6 +84,7 @@ function escapeHtml(value: string): string {
 export interface QuotePdfChromeColors {
   titleColor: string;
   textColor: string;
+  headerBgColor: string;
   footerBgColor: string;
   footerTextColor: string;
   /** Sabit alt bilgi yuksekligi (mm), null = otomatik (icerik kadar). */
@@ -93,6 +98,7 @@ export interface QuotePdfChromeColors {
 const DEFAULT_CHROME_COLORS: QuotePdfChromeColors = {
   titleColor: '#8bc34a',
   textColor: '#16202e',
+  headerBgColor: '#ffffff',
   footerBgColor: '#e8f5e9',
   footerTextColor: '#16202e',
   footerHeightMm: null,
@@ -178,7 +184,7 @@ function buildHeaderTemplate(
   const logo = header.logoDataUri
     ? `<img src="${header.logoDataUri}" style="height:44px;width:auto;object-fit:contain;display:block;" />`
     : '';
-  return `<div style="width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:8px 10mm;font-family:Arial,Helvetica,sans-serif;">
+  return `<div style="width:100%;box-sizing:border-box;height:${PDF_HEADER_BAND_HEIGHT_MM}mm;background:${escapeHtml(colors.headerBgColor)};-webkit-print-color-adjust:exact;display:flex;align-items:center;justify-content:space-between;padding:8px 10mm;font-family:Arial,Helvetica,sans-serif;">
     <div style="display:flex;align-items:center;gap:12px;">
       ${logo}
       <span style="font-size:20px;font-weight:bold;color:${escapeHtml(colors.titleColor)};">${escapeHtml(header.title)}</span>

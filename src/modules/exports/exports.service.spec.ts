@@ -80,6 +80,7 @@ function createQuotes(
       rowOddBgColor: '#ffffff',
       rowEvenBgColor: '#e8f5e9',
       groupRowBgColor: '#e3f2fd',
+      headerBgColor: '#ddeeff',
       footerBgColor: '#445566',
       footerTextColor: '#16202e',
       footerShowAddress: true,
@@ -184,6 +185,7 @@ describe('ExportsService', () => {
         company: expect.objectContaining({ address: 'Adres 1', phone: null }),
         colors: expect.objectContaining({
           titleColor: '#112233',
+          headerBgColor: '#ddeeff',
           footerBgColor: '#445566',
           footerHeightMm: 20,
           footerShowLogo: true,

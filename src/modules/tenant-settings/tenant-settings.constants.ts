@@ -67,6 +67,9 @@ export const StandardQuotePdfThemeSchema = z.object({
   rowOddBgColor: HEX_COLOR,
   rowEvenBgColor: HEX_COLOR,
   groupRowBgColor: HEX_COLOR,
+  /** Ust bilgi (logo + "Fiyat Teklifi" + tarih/no bandi) arka plani - footer'dan
+   * bagimsiz. Varsayilan beyaz (eski gorunum). */
+  headerBgColor: HEX_COLOR,
   footerBgColor: HEX_COLOR,
   footerTextColor: HEX_COLOR,
   /** Alt bilgide (footer) sirket adresi/telefonu/e-postasi gosterilsin mi -
@@ -103,6 +106,7 @@ export const DEFAULT_STANDARD_QUOTE_PDF_THEME: StandardQuotePdfTheme = {
   rowOddBgColor: '#ffffff',
   rowEvenBgColor: '#e8f5e9',
   groupRowBgColor: '#e3f2fd',
+  headerBgColor: '#ffffff',
   footerBgColor: '#e8f5e9',
   footerTextColor: '#16202e',
   footerShowAddress: true,
