@@ -28,6 +28,11 @@ import {
 import { FileUrlService } from '../../core/storage/file-url.service';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import {
+  resolveStandardQuotePdfTheme,
+  STANDARD_QUOTE_PDF_THEME_KEY,
+  type StandardQuotePdfTheme,
+} from '../tenant-settings/tenant-settings.constants';
+import {
   POST_SALE_SURVEY_QUEUE,
   SEND_POST_SALE_SURVEY_JOB,
 } from '../../jobs/post-sale-survey-queue.constants';
@@ -123,6 +128,9 @@ export type QuotePrintData = Omit<QuoteWithDetails, 'template'> & {
   template: QuotePrintTemplateData | null;
   company: QuotePrintCompanyData;
   sender: QuotePrintSenderData | null;
+  /** Standart (sablonsuz) PDF'in renk temasi - bkz. docs/VARSAYIMLAR.md V89.
+   * Markali sablon rotasi bunu kullanmaz. */
+  standardTheme: StandardQuotePdfTheme;
 };
 
 /** Quote.ibanAccounts (JSON) icindeki her elemanin sekli - bkz. resolveIbanSnapshot.
@@ -1236,10 +1244,20 @@ export class QuotesService {
    * Quote.salesTerms, Quote.deliveryTerms), QUOTE_INCLUDE ile gelen
    * `quote.template` uzerinde ek sorguya gerek yok. templateId yoksa
    * `template: null` doner. */
+  /** Standart (sablonsuz) teklif PDF'inin renk temasi - hem yazdirma sayfasi
+   * (getPrintData) hem backend'in Playwright header/footer'i (ExportsService)
+   * buradan okur. Kayit yoksa/bozuksa eski sabit renkler doner. */
+  async getStandardPdfTheme(): Promise<StandardQuotePdfTheme> {
+    const row = await this.prisma.tenantSetting.findFirst({
+      where: { key: STANDARD_QUOTE_PDF_THEME_KEY },
+    });
+    return resolveStandardQuotePdfTheme(row?.value);
+  }
+
   async getPrintData(id: string): Promise<QuotePrintData> {
     const quote = await this.getById(id);
     const { tenantId } = TenantContext.getOrThrow();
-    const [tenant, sender] = await Promise.all([
+    const [tenant, sender, standardTheme] = await Promise.all([
       this.prisma.tenant.findUniqueOrThrow({
         where: { id: tenantId },
         select: { name: true, address: true, phone: true, email: true },
@@ -1248,6 +1266,7 @@ export class QuotesService {
         where: { id: quote.senderId ?? quote.createdById },
         select: { name: true, title: true, phone: true, email: true },
       }),
+      this.getStandardPdfTheme(),
     ]);
     const company: QuotePrintCompanyData = {
       name: tenant.name,
@@ -1257,12 +1276,13 @@ export class QuotesService {
     };
     const template = quote.template;
     if (!template) {
-      return { ...quote, template: null, company, sender };
+      return { ...quote, template: null, company, sender, standardTheme };
     }
     return {
       ...quote,
       company,
       sender,
+      standardTheme,
       template: {
         id: template.id,
         name: template.name,

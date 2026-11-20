@@ -12,3 +12,4 @@ export const SPREADSHEET_CELLS_UPDATED_EVENT = 'spreadsheets.cells.updated';
 export const SPREADSHEET_COLUMNS_UPDATED_EVENT = 'spreadsheets.columns.updated';
 export const MIN_COL_WIDTH = 30;
 export const MAX_COL_WIDTH = 1_000;
+export const SPREADSHEET_REPLACED_EVENT = 'spreadsheets.replaced';

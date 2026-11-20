@@ -12,7 +12,10 @@ import { buildCsv } from './csv';
 import { DashboardPdfService } from './dashboard-pdf.service';
 import { setPdfTitleMetadata } from './pdf-metadata';
 import { buildQuotePdfFilename } from './quote-pdf-filename';
-import { QuotePdfService } from './quote-pdf.service';
+import {
+  QuotePdfService,
+  type QuotePdfChromeColors,
+} from './quote-pdf.service';
 import { isKnownReportTab, ReportPdfService } from './report-pdf.service';
 
 const QUOTE_PDF_COVER_TITLE = 'Fiyat Teklifi';
@@ -49,12 +52,20 @@ export class ExportsService {
       phone: string | null;
       email: string | null;
     };
+    colors: QuotePdfChromeColors;
   }> {
-    const [quote, tenantProfile] = await Promise.all([
+    const [quote, tenantProfile, theme] = await Promise.all([
       this.quotes.getById(quoteId),
       this.tenants.getProfile(tenantId),
+      this.quotes.getStandardPdfTheme(),
     ]);
     return {
+      colors: {
+        titleColor: theme.titleColor,
+        textColor: theme.textColor,
+        footerBgColor: theme.footerBgColor,
+        footerTextColor: theme.footerTextColor,
+      },
       header: {
         logoUrl: tenantProfile.logoUrl,
         title: QUOTE_PDF_COVER_TITLE,
@@ -106,7 +117,7 @@ export class ExportsService {
       roleIds: user.roleIds,
       isPlatformAdmin: user.isPlatformAdmin,
     });
-    const { header, company } = await this.getQuotePdfBranding(
+    const { header, company, colors } = await this.getQuotePdfBranding(
       quoteId,
       user.tenantId,
     );
@@ -114,6 +125,7 @@ export class ExportsService {
       branded: quote.templateId !== null,
       header,
       company,
+      colors,
     });
     return setPdfTitleMetadata(
       pdf,

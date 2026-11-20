@@ -1,5 +1,10 @@
 import { AppException } from '../../core/errors/app.exception';
 import { TenantContext } from '../../core/tenant/tenant-context';
+import {
+  DEFAULT_STANDARD_QUOTE_PDF_THEME,
+  resolveStandardQuotePdfTheme,
+  STANDARD_QUOTE_PDF_THEME_KEY,
+} from '../tenant-settings/tenant-settings.constants';
 import { QuoteTemplatesService } from './quote-templates.service';
 
 const auditLog = vi.fn();
@@ -7,6 +12,10 @@ const fakeAudit = { log: auditLog } as never;
 const fakeRealtime = { emitToTenant: vi.fn(), emitToAll: vi.fn() };
 const fakeFileUrl = { build: vi.fn(() => null) } as never;
 const fakeStorage = { upload: vi.fn(), delete: vi.fn(), download: vi.fn() };
+const fakeTenantSettings = {
+  get: vi.fn(),
+  upsert: vi.fn(),
+};
 
 function runInTenant<T>(fn: () => Promise<T>): Promise<T> {
   return TenantContext.run({ tenantId: 't1', userId: 'u1', roleIds: [] }, fn);
@@ -49,6 +58,7 @@ function createService(prisma: ReturnType<typeof createPrisma>) {
     fakeRealtime as never,
     fakeStorage as never,
     fakeFileUrl,
+    fakeTenantSettings as never,
   );
 }
 
@@ -145,5 +155,51 @@ describe('QuoteTemplatesService', () => {
       where: { id: 'template-1' },
     });
     expect(auditLog).toHaveBeenCalled();
+  });
+
+  it('getStandardTheme: ayar yoksa eski sabit renklerle birebir ayni varsayilani doner', async () => {
+    fakeTenantSettings.get.mockResolvedValueOnce({
+      key: STANDARD_QUOTE_PDF_THEME_KEY,
+      value: DEFAULT_STANDARD_QUOTE_PDF_THEME,
+      isDefault: true,
+    });
+    const service = createService(createPrisma());
+    const theme = await runInTenant(() => service.getStandardTheme());
+    expect(theme.titleColor).toBe('#8bc34a');
+    expect(theme.headingColor).toBe('#2196f3');
+    expect(theme.rowEvenBgColor).toBe('#e8f5e9');
+    expect(theme.groupRowBgColor).toBe('#e3f2fd');
+  });
+
+  it('updateStandardTheme: TenantSetting deposuna dogru anahtarla yazar', async () => {
+    const next = { ...DEFAULT_STANDARD_QUOTE_PDF_THEME, titleColor: '#ff0000' };
+    fakeTenantSettings.upsert.mockResolvedValueOnce({
+      key: STANDARD_QUOTE_PDF_THEME_KEY,
+      value: next,
+      isDefault: false,
+    });
+    const service = createService(createPrisma());
+    const saved = await runInTenant(() => service.updateStandardTheme(next));
+    expect(fakeTenantSettings.upsert).toHaveBeenCalledWith(
+      STANDARD_QUOTE_PDF_THEME_KEY,
+      next,
+    );
+    expect(saved.titleColor).toBe('#ff0000');
+  });
+
+  it('resolveStandardQuotePdfTheme: eksik/gecersiz alanlar varsayilana duser', () => {
+    const theme = resolveStandardQuotePdfTheme({
+      titleColor: '#123456',
+      headingColor: 'red',
+      textColor: '#12345',
+    });
+    expect(theme.titleColor).toBe('#123456');
+    expect(theme.headingColor).toBe(
+      DEFAULT_STANDARD_QUOTE_PDF_THEME.headingColor,
+    );
+    expect(theme.textColor).toBe(DEFAULT_STANDARD_QUOTE_PDF_THEME.textColor);
+    expect(resolveStandardQuotePdfTheme(null)).toEqual(
+      DEFAULT_STANDARD_QUOTE_PDF_THEME,
+    );
   });
 });

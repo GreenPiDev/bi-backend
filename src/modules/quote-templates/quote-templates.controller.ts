@@ -32,6 +32,10 @@ import {
   type UpdateQuoteTemplateDto,
 } from './dto/quote-template.dto';
 import {
+  StandardQuotePdfThemeSchema,
+  type StandardQuotePdfTheme,
+} from '../tenant-settings/tenant-settings.constants';
+import {
   QuoteTemplatesService,
   type QuoteTemplateResponse,
 } from './quote-templates.service';
@@ -58,6 +62,23 @@ export class QuoteTemplatesController {
     query: QuoteTemplateQueryDto,
   ): Promise<PagedResult<QuoteTemplateResponse>> {
     return this.quoteTemplates.list(query);
+  }
+
+  /** Standart (sablonsuz) PDF'in renk temasi - `:id` route'undan ONCE
+   * tanimlanmali, aksi halde "standard" bir sablon id'si gibi yakalanir. */
+  @Get('standard')
+  @RequiresPermission('quote-templates', 'VIEW')
+  getStandardTheme(): Promise<StandardQuotePdfTheme> {
+    return this.quoteTemplates.getStandardTheme();
+  }
+
+  @Patch('standard')
+  @RequiresPermission('quote-templates', 'UPDATE')
+  updateStandardTheme(
+    @Body(new ZodValidationPipe(StandardQuotePdfThemeSchema))
+    dto: StandardQuotePdfTheme,
+  ): Promise<StandardQuotePdfTheme> {
+    return this.quoteTemplates.updateStandardTheme(dto);
   }
 
   @Get(':id')

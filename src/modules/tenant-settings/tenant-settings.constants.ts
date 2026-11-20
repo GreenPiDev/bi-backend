@@ -42,6 +42,62 @@ export const DEFAULT_STOCK_HOLDING_COST: StockHoldingCostSetting = {
 };
 
 /**
+ * Ad-hoc (bkz. docs/VARSAYIMLAR.md V89): standart (sablonsuz) teklif PDF'inin
+ * renk temasi - /teklif-sablonlari/duzenle/standart ekranindan yonetilir.
+ * Varsayilan degerler, bu ozellik gelmeden once kodda sabit duran renklerin
+ * birebir aynisidir (yesil #8bc34a, mavi #2196f3, acik yesil zebra #e8f5e9,
+ * acik mavi grup satiri #e3f2fd) - ayar hic kaydedilmemis tenant'larin PDF'i
+ * degismez.
+ */
+export const STANDARD_QUOTE_PDF_THEME_KEY = 'crm.standardQuotePdfTheme';
+const HEX_COLOR = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Renk #RRGGBB formatinda olmalidir.');
+export const StandardQuotePdfThemeSchema = z.object({
+  titleColor: HEX_COLOR,
+  headingColor: HEX_COLOR,
+  textColor: HEX_COLOR,
+  accentColor: HEX_COLOR,
+  tableHeaderBgColor: HEX_COLOR,
+  tableHeaderTextColor: HEX_COLOR,
+  rowOddBgColor: HEX_COLOR,
+  rowEvenBgColor: HEX_COLOR,
+  groupRowBgColor: HEX_COLOR,
+  footerBgColor: HEX_COLOR,
+  footerTextColor: HEX_COLOR,
+});
+export type StandardQuotePdfTheme = z.infer<typeof StandardQuotePdfThemeSchema>;
+export const DEFAULT_STANDARD_QUOTE_PDF_THEME: StandardQuotePdfTheme = {
+  titleColor: '#8bc34a',
+  headingColor: '#2196f3',
+  textColor: '#16202e',
+  accentColor: '#8bc34a',
+  tableHeaderBgColor: '#ffffff',
+  tableHeaderTextColor: '#2196f3',
+  rowOddBgColor: '#ffffff',
+  rowEvenBgColor: '#e8f5e9',
+  groupRowBgColor: '#e3f2fd',
+  footerBgColor: '#e8f5e9',
+  footerTextColor: '#16202e',
+};
+
+/** DB'deki ham degeri (eski surumde kaydedilmis, sonradan yeni alan eklenmis
+ * olabilir) varsayilanlarla birlestirir - gecersiz tekil alanlar sessizce
+ * varsayilana duser, PDF export'u asla bu yuzden patlamaz. */
+export function resolveStandardQuotePdfTheme(
+  raw: unknown,
+): StandardQuotePdfTheme {
+  const result: StandardQuotePdfTheme = { ...DEFAULT_STANDARD_QUOTE_PDF_THEME };
+  if (!raw || typeof raw !== 'object') return result;
+  const record = raw as Record<string, unknown>;
+  for (const key of Object.keys(result) as (keyof StandardQuotePdfTheme)[]) {
+    const parsed = HEX_COLOR.safeParse(record[key]);
+    if (parsed.success) result[key] = parsed.data;
+  }
+  return result;
+}
+
+/**
  * Tenant'in ayarlayabilecegi bilinen anahtarlarin tek kaynagi. Yeni bir ayar
  * eklerken buraya bir satir eklemek yeterli; bilinmeyen anahtara PATCH 400 doner.
  */
@@ -80,6 +136,10 @@ export const KNOWN_TENANT_SETTINGS = {
       monthlyRatePct: z.number().min(0).max(100),
     }),
     default: DEFAULT_STOCK_HOLDING_COST,
+  },
+  [STANDARD_QUOTE_PDF_THEME_KEY]: {
+    schema: StandardQuotePdfThemeSchema,
+    default: DEFAULT_STANDARD_QUOTE_PDF_THEME,
   },
 } as const;
 

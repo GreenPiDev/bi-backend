@@ -9,11 +9,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import * as fsPromises from 'node:fs/promises';
 import * as os from 'node:os';
@@ -86,6 +89,21 @@ export class SpreadsheetsController {
     return this.spreadsheets.getById(id);
   }
 
+  @Get(':id/export')
+  @RequiresPermission('spreadsheets', 'VIEW')
+  async exportXlsx(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { buffer, fileName } = await this.spreadsheets.exportXlsx(id);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="export.xlsx"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    });
+    res.send(buffer);
+  }
+
   @Get(':id/sheets/:sheetId/cells')
   @RequiresPermission('spreadsheets', 'VIEW')
   getCells(
@@ -129,6 +147,35 @@ export class SpreadsheetsController {
         originalName,
         name,
       );
+    } finally {
+      await fsPromises.unlink(file.path).catch(() => undefined);
+    }
+  }
+
+  @Put(':id/file')
+  @RequiresPermission('spreadsheets', 'UPDATE')
+  @UseInterceptors(UPLOAD_INTERCEPTOR)
+  async replaceFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ): Promise<SpreadsheetDetailView> {
+    if (!file) {
+      throw new AppException(
+        'FILE_REQUIRED',
+        'Dosya yuklenmedi.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const originalName = Buffer.from(file.originalname, 'latin1').toString(
+        'utf8',
+      );
+      const type = await detectDataSourceType(
+        originalName,
+        file.mimetype,
+        file.path,
+      );
+      return await this.spreadsheets.replace(id, file.path, type, originalName);
     } finally {
       await fsPromises.unlink(file.path).catch(() => undefined);
     }

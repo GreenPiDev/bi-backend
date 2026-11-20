@@ -13,6 +13,12 @@ import { R2StorageService } from '../../core/storage/r2-storage.service';
 import { detectImageExtension } from '../../core/validators/image-upload-validation';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
+import {
+  resolveStandardQuotePdfTheme,
+  STANDARD_QUOTE_PDF_THEME_KEY,
+  type StandardQuotePdfTheme,
+} from '../tenant-settings/tenant-settings.constants';
+import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import type {
   CreateQuoteTemplateDto,
   QuoteTemplateQueryDto,
@@ -50,7 +56,26 @@ export class QuoteTemplatesService {
     private readonly realtime: RealtimeService,
     private readonly storage: R2StorageService,
     private readonly fileUrl: FileUrlService,
+    private readonly tenantSettings: TenantSettingsService,
   ) {}
+
+  /** Standart (sablonsuz) teklif PDF'inin renk temasi - bkz.
+   * STANDARD_QUOTE_PDF_THEME_KEY doc comment'i. Ayri bir tablo degil, mevcut
+   * TenantSetting deposunda tek bir JSON anahtari olarak tutulur. */
+  async getStandardTheme(): Promise<StandardQuotePdfTheme> {
+    const setting = await this.tenantSettings.get(STANDARD_QUOTE_PDF_THEME_KEY);
+    return resolveStandardQuotePdfTheme(setting.value);
+  }
+
+  async updateStandardTheme(
+    theme: StandardQuotePdfTheme,
+  ): Promise<StandardQuotePdfTheme> {
+    const saved = await this.tenantSettings.upsert(
+      STANDARD_QUOTE_PDF_THEME_KEY,
+      theme,
+    );
+    return resolveStandardQuotePdfTheme(saved.value);
+  }
 
   private async emitUpdated(): Promise<void> {
     const { tenantId } = TenantContext.getOrThrow();

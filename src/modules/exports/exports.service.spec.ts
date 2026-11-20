@@ -70,6 +70,19 @@ function createQuotes(
       quoteNumber: 'TEK-2026-09-23-001',
       account: { name: '3AB Enerji ve Sanayi Tesisleri Ticaret A.Ş.' },
     }),
+    getStandardPdfTheme: vi.fn().mockResolvedValue({
+      titleColor: '#112233',
+      headingColor: '#2196f3',
+      textColor: '#16202e',
+      accentColor: '#8bc34a',
+      tableHeaderBgColor: '#ffffff',
+      tableHeaderTextColor: '#2196f3',
+      rowOddBgColor: '#ffffff',
+      rowEvenBgColor: '#e8f5e9',
+      groupRowBgColor: '#e3f2fd',
+      footerBgColor: '#445566',
+      footerTextColor: '#16202e',
+    }),
   };
 }
 
@@ -163,6 +176,10 @@ describe('ExportsService', () => {
           quoteNumber: 'TEK-2026-09-23-001',
         }),
         company: expect.objectContaining({ address: 'Adres 1' }),
+        colors: expect.objectContaining({
+          titleColor: '#112233',
+          footerBgColor: '#445566',
+        }),
       }),
     );
     expect(setPdfTitleMetadata).toHaveBeenCalledWith(

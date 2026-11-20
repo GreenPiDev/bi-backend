@@ -68,11 +68,31 @@ function escapeHtml(value: string): string {
  * (`/teklifler/:id`) kullanilir. Atif satirindaki link PDF'e export edilince de
  * tiklanabilir kalir (Chromium, print-to-pdf sirasinda header/footer frame'indeki
  * <a> etiketlerini de PDF link annotation'ina cevirir). */
-function buildFooterTemplate(company: {
-  address: string | null;
-  phone: string | null;
-  email: string | null;
-}): string {
+/** Standart PDF temasinin (bkz. docs/VARSAYIMLAR.md V89) header/footer'da
+ * kullanilan alt kumesi - degerler backend'de HEX regex'iyle dogrulanmis
+ * gelir, yine de HTML'e basmadan once escapeHtml'den gecirilir. */
+export interface QuotePdfChromeColors {
+  titleColor: string;
+  textColor: string;
+  footerBgColor: string;
+  footerTextColor: string;
+}
+
+const DEFAULT_CHROME_COLORS: QuotePdfChromeColors = {
+  titleColor: '#8bc34a',
+  textColor: '#16202e',
+  footerBgColor: '#e8f5e9',
+  footerTextColor: '#16202e',
+};
+
+function buildFooterTemplate(
+  company: {
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+  },
+  colors: QuotePdfChromeColors,
+): string {
   const cells: string[] = [];
   if (company.address) {
     cells.push(
@@ -94,7 +114,7 @@ function buildFooterTemplate(company: {
       ? `<div style="width:100%;display:flex;align-items:center;justify-content:center;gap:24px;">${cells.join('')}</div>`
       : '';
   const noticeRow = `<div style="color:#2196f3;">Bu teklif, Pilens CRM platformu üzerinden hazırlanmıştır. <a href="https://www.pilens.com.tr" style="color:inherit;text-decoration:none;">www.pilens.com.tr</a></div>`;
-  return `<div style="width:100%;box-sizing:border-box;background:#e8f5e9;padding:8px 10mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:#16202e;font-family:Arial,Helvetica,sans-serif;line-height:1.3;">${infoRow}${noticeRow}</div>`;
+  return `<div style="width:100%;box-sizing:border-box;background:${escapeHtml(colors.footerBgColor)};padding:8px 10mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:${escapeHtml(colors.footerTextColor)};font-family:Arial,Helvetica,sans-serif;line-height:1.3;">${infoRow}${noticeRow}</div>`;
 }
 
 /** AppShell print header'inin (app-shell.tsx) her sayfada tekrar eden esdegeri -
@@ -105,21 +125,24 @@ function buildFooterTemplate(company: {
  * header/footer template frame'i sayfanin auth cookie'sini tasimadigindan,
  * `/files?key=...` gibi korumali bir URL buraya dogrudan verilirse logo
  * yuklenemez/kirik resim ikonu cikar). */
-function buildHeaderTemplate(header: {
-  logoDataUri: string | null;
-  title: string;
-  quoteDate: string;
-  quoteNumber: string;
-}): string {
+function buildHeaderTemplate(
+  header: {
+    logoDataUri: string | null;
+    title: string;
+    quoteDate: string;
+    quoteNumber: string;
+  },
+  colors: QuotePdfChromeColors,
+): string {
   const logo = header.logoDataUri
     ? `<img src="${header.logoDataUri}" style="height:44px;width:auto;object-fit:contain;display:block;" />`
     : '';
   return `<div style="width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:8px 10mm;font-family:Arial,Helvetica,sans-serif;">
     <div style="display:flex;align-items:center;gap:12px;">
       ${logo}
-      <span style="font-size:20px;font-weight:bold;color:#8bc34a;">${escapeHtml(header.title)}</span>
+      <span style="font-size:20px;font-weight:bold;color:${escapeHtml(colors.titleColor)};">${escapeHtml(header.title)}</span>
     </div>
-    <div style="text-align:right;font-size:11px;font-weight:bold;color:#16202e;line-height:1.5;">
+    <div style="text-align:right;font-size:11px;font-weight:bold;color:${escapeHtml(colors.textColor)};line-height:1.5;">
       <div>${escapeHtml(header.quoteDate)}</div>
       <div># ${escapeHtml(header.quoteNumber)}</div>
     </div>
@@ -155,8 +178,12 @@ export class QuotePdfService {
         quoteDate: string;
         quoteNumber: string;
       };
+      /** Standart PDF temasi (header basligi/footer renkleri) - verilmezse
+       * eski sabit renkler kullanilir. */
+      colors?: QuotePdfChromeColors;
     },
   ): Promise<Buffer> {
+    const colors = options?.colors ?? DEFAULT_CHROME_COLORS;
     const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
     // Auth cookie'si backend tarafindan domain belirtilmeden set edilir (bkz.
     // set-auth-cookies.ts), yani gercek tarayicida API'nin kendi origin'ine
@@ -213,17 +240,17 @@ export class QuotePdfService {
       // sablonun kendi tasarimi var.
       const footerTemplate =
         !isBrandedPath && options?.company
-          ? buildFooterTemplate(options.company)
+          ? buildFooterTemplate(options.company, colors)
           : '<div></div>';
       let headerTemplate = '<div></div>';
       if (!isBrandedPath && options?.header) {
         const logoDataUri = options.header.logoUrl
           ? await fetchAsDataUri(context.request, options.header.logoUrl)
           : null;
-        headerTemplate = buildHeaderTemplate({
-          ...options.header,
-          logoDataUri,
-        });
+        headerTemplate = buildHeaderTemplate(
+          { ...options.header, logoDataUri },
+          colors,
+        );
       }
       const pdf = await page.pdf({
         format: 'A4',

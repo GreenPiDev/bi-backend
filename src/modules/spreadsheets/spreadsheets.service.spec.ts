@@ -48,7 +48,11 @@ function setup() {
     },
   };
   const audit = { log: vi.fn() };
-  const service = new SpreadsheetsService(prisma as never, audit as never);
+  const service = new SpreadsheetsService(
+    prisma as never,
+    audit as never,
+    { emitToTenant: () => undefined } as never,
+  );
   return { service, prisma, audit };
 }
 

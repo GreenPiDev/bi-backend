@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { DataSourceType } from '@prisma/client';
+import * as ExcelJS from 'exceljs';
 import * as path from 'node:path';
 import { findIdsByTurkishSearch } from '../../core/db/turkish-search';
 import type { PagedResult } from '../../core/dto/list-query.dto';
@@ -8,6 +9,7 @@ import {
   TENANT_PRISMA,
   type TenantPrismaClient,
 } from '../../core/prisma/tenant-prisma.token';
+import { RealtimeService } from '../../core/realtime/realtime.service';
 import { TenantContext } from '../../core/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import type {
@@ -24,6 +26,7 @@ import type {
 import {
   CELL_INSERT_CHUNK_SIZE,
   SPREADSHEET_AUDIT_ENTITY,
+  SPREADSHEET_REPLACED_EVENT,
 } from './spreadsheets.constants';
 
 const SORTABLE_FIELDS = new Set(['name', 'createdAt', 'updatedAt']);
@@ -46,6 +49,7 @@ export class SpreadsheetsService {
   constructor(
     @Inject(TENANT_PRISMA) private readonly prisma: TenantPrismaClient,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async list(
@@ -159,6 +163,59 @@ export class SpreadsheetsService {
     ]);
   }
 
+  /** Tablonun guncel (kayitli) halini renkler ve sutun genislikleriyle XLSX'e cevirir. */
+  async exportXlsx(id: string): Promise<{ buffer: Buffer; fileName: string }> {
+    const spreadsheet = await this.prisma.spreadsheet.findFirst({
+      where: { id },
+      include: { sheets: { orderBy: { ordinal: 'asc' } } },
+    });
+    if (!spreadsheet) throw notFound();
+
+    const workbook = new ExcelJS.Workbook();
+    const usedNames = new Set<string>();
+    for (const sheet of spreadsheet.sheets) {
+      let sheetName =
+        sheet.name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Sayfa';
+      while (usedNames.has(sheetName.toLowerCase())) {
+        sheetName = `${sheetName.slice(0, 28)}_${usedNames.size}`;
+      }
+      usedNames.add(sheetName.toLowerCase());
+      const ws = workbook.addWorksheet(sheetName);
+      for (const [col, px] of Object.entries(parseColWidths(sheet.colWidths))) {
+        ws.getColumn(Number(col) + 1).width = Math.max(1, px / 7);
+      }
+      const cells = await this.prisma.spreadsheetCell.findMany({
+        where: { sheetId: sheet.id },
+        select: {
+          row: true,
+          col: true,
+          value: true,
+          bgColor: true,
+          fontColor: true,
+        },
+      });
+      for (const c of cells) {
+        const cell = ws.getCell(c.row + 1, c.col + 1);
+        if (c.value) cell.value = c.value;
+        if (c.bgColor && /^#[0-9A-Fa-f]{6}$/.test(c.bgColor)) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: `FF${c.bgColor.slice(1).toUpperCase()}` },
+          };
+        }
+        if (c.fontColor && /^#[0-9A-Fa-f]{6}$/.test(c.fontColor)) {
+          cell.font = {
+            color: { argb: `FF${c.fontColor.slice(1).toUpperCase()}` },
+          };
+        }
+      }
+    }
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const safeName = spreadsheet.name.replace(/[\\/:*?"<>|]/g, '_').trim();
+    return { buffer, fileName: `${safeName || 'tablo'}.xlsx` };
+  }
+
   /** Tenant izolasyonu: once tenant-scoped Spreadsheet dogrulanir (baska tenant'in
    * id'si 404), sonra sheet'in o tabloya ait oldugu kontrol edilir. */
   async assertSheet(
@@ -197,31 +254,7 @@ export class SpreadsheetsService {
             createdById: userId,
           } as never,
         });
-        for (const [ordinal, sheet] of sheets.entries()) {
-          const created = await tx.spreadsheetSheet.create({
-            data: {
-              spreadsheetId: spreadsheet.id,
-              name: sheet.name,
-              ordinal,
-              rowCount: sheet.rowCount,
-              colCount: sheet.colCount,
-              ...(Object.keys(sheet.colWidths).length > 0
-                ? { colWidths: sheet.colWidths }
-                : {}),
-            },
-          });
-          for (let i = 0; i < sheet.cells.length; i += CELL_INSERT_CHUNK_SIZE) {
-            await tx.spreadsheetCell.createMany({
-              data: sheet.cells
-                .slice(i, i + CELL_INSERT_CHUNK_SIZE)
-                .map((c) => ({
-                  ...c,
-                  sheetId: created.id,
-                  updatedById: userId,
-                })),
-            });
-          }
-        }
+        await this.insertSheets(tx, spreadsheet.id, sheets, userId);
         return spreadsheet.id;
       },
       { timeout: 120_000 },
@@ -238,6 +271,82 @@ export class SpreadsheetsService {
       },
     });
     return this.getById(spreadsheetId);
+  }
+
+  private async insertSheets(
+    tx: Pick<TenantPrismaClient, 'spreadsheetSheet' | 'spreadsheetCell'>,
+    spreadsheetId: string,
+    sheets: Awaited<ReturnType<typeof parseSpreadsheetFile>>,
+    userId: string,
+  ): Promise<void> {
+    for (const [ordinal, sheet] of sheets.entries()) {
+      const created = await tx.spreadsheetSheet.create({
+        data: {
+          spreadsheetId,
+          name: sheet.name,
+          ordinal,
+          rowCount: sheet.rowCount,
+          colCount: sheet.colCount,
+          ...(Object.keys(sheet.colWidths).length > 0
+            ? { colWidths: sheet.colWidths }
+            : {}),
+        },
+      });
+      for (let i = 0; i < sheet.cells.length; i += CELL_INSERT_CHUNK_SIZE) {
+        await tx.spreadsheetCell.createMany({
+          data: sheet.cells.slice(i, i + CELL_INSERT_CHUNK_SIZE).map((c) => ({
+            ...c,
+            sheetId: created.id,
+            updatedById: userId,
+          })),
+        });
+      }
+    }
+  }
+
+  /** Yuklenen dosya mevcut tablonun TUM icerigini (sayfalar, hucreler, renkler,
+   * sutun genislikleri) degistirir; tablo kimligi, adi ve paylasim linkleri ayni kalir. */
+  async replace(
+    id: string,
+    filePath: string,
+    type: DataSourceType,
+    originalFileName: string,
+  ): Promise<SpreadsheetDetailView> {
+    const existing = await this.prisma.spreadsheet.findFirst({ where: { id } });
+    if (!existing) throw notFound();
+    const sheets = await parseSpreadsheetFile(filePath, type);
+    const { userId, tenantId } = TenantContext.getOrThrow();
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.spreadsheetSheet.deleteMany({ where: { spreadsheetId: id } });
+        await this.insertSheets(tx, id, sheets, userId);
+        await tx.spreadsheet.update({
+          where: { id },
+          data: { originalFileName, updatedById: userId },
+        });
+      },
+      { timeout: 120_000 },
+    );
+
+    await this.audit.log({
+      action: 'SPREADSHEET_REPLACED',
+      entity: SPREADSHEET_AUDIT_ENTITY,
+      entityId: id,
+      meta: {
+        spreadsheetName: existing.name,
+        fileName: originalFileName,
+        previousFileName: existing.originalFileName,
+        sheetCount: sheets.length,
+      },
+    });
+    const names = await this.userNames([userId]);
+    this.realtime.emitToTenant(tenantId, SPREADSHEET_REPLACED_EVENT, {
+      spreadsheetId: id,
+      updatedById: userId,
+      updatedByName: names.get(userId) ?? '—',
+    });
+    return this.getById(id);
   }
 
   async rename(
