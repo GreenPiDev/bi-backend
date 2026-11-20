@@ -82,6 +82,12 @@ function createQuotes(
       groupRowBgColor: '#e3f2fd',
       footerBgColor: '#445566',
       footerTextColor: '#16202e',
+      footerShowAddress: true,
+      footerShowPhone: false,
+      footerShowEmail: true,
+      footerHeightMm: 20,
+      footerShowLogo: true,
+      footerLogoHeightMm: 12,
     }),
   };
 }
@@ -175,10 +181,13 @@ describe('ExportsService', () => {
           logoUrl: 'https://cdn.example.com/logo.png',
           quoteNumber: 'TEK-2026-09-23-001',
         }),
-        company: expect.objectContaining({ address: 'Adres 1' }),
+        company: expect.objectContaining({ address: 'Adres 1', phone: null }),
         colors: expect.objectContaining({
           titleColor: '#112233',
           footerBgColor: '#445566',
+          footerHeightMm: 20,
+          footerShowLogo: true,
+          footerLogoHeightMm: 12,
         }),
       }),
     );

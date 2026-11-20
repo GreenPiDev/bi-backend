@@ -26,7 +26,13 @@ const PDF_VIEWPORT_HEIGHT_PX = 1200;
 // e-postasi + Pilens atif satiri) icin ayrilan alt marj - Playwright'in
 // displayHeaderFooter alani bu marjin icine sigar. 3 satira kadar sarabilen
 // adres + telefon/e-posta satiri + Pilens atif satiri icin yeterli.
-const PDF_FOOTER_MARGIN_BOTTOM = '28mm';
+const PDF_FOOTER_MARGIN_BOTTOM_MM = 28;
+// Otomatik yukseklikte footer'in ortasina logo eklenince (bkz. footerShowLogo)
+// logo yuksekligine ek olarak ayrilan bosluk (flex gap 4px ~= 1mm + pay).
+const PDF_FOOTER_LOGO_GAP_MM = 2;
+// Pilens atif satirinin sayfanin alt kenarindan uzakligi - footer yuksekliginden
+// bagimsiz sabit (bkz. buildFooterTemplate).
+const PDF_FOOTER_NOTICE_BOTTOM_MM = 3;
 // Logo + "Fiyat Teklifi" basligi + tarih/teklif no satirinin sigmasi icin ayrilan
 // ust marj (bkz. buildHeaderTemplate) - eskiden body icinde tek seferlik render
 // edilen AppShell print header'inin yerini alir, artik her sayfada tekrar eder.
@@ -76,6 +82,12 @@ export interface QuotePdfChromeColors {
   textColor: string;
   footerBgColor: string;
   footerTextColor: string;
+  /** Sabit alt bilgi yuksekligi (mm), null = otomatik (icerik kadar). */
+  footerHeightMm: number | null;
+  /** Sirket logosu alt bilginin ortasinda (ust satir) gosterilsin mi. */
+  footerShowLogo: boolean;
+  /** Alt bilgideki logonun yuksekligi (mm). */
+  footerLogoHeightMm: number;
 }
 
 const DEFAULT_CHROME_COLORS: QuotePdfChromeColors = {
@@ -83,7 +95,23 @@ const DEFAULT_CHROME_COLORS: QuotePdfChromeColors = {
   textColor: '#16202e',
   footerBgColor: '#e8f5e9',
   footerTextColor: '#16202e',
+  footerHeightMm: null,
+  footerShowLogo: false,
+  footerLogoHeightMm: 7,
 };
+
+/** PDF'in alt marji footer'in tamamini tasimali - sabit yukseklikte birebir o
+ * deger, otomatikte eski 28mm (+ logo varsa ek pay). */
+export function resolveFooterMarginMm(
+  chrome: Pick<QuotePdfChromeColors, 'footerHeightMm' | 'footerLogoHeightMm'>,
+  hasLogo: boolean,
+): number {
+  if (chrome.footerHeightMm !== null) return chrome.footerHeightMm;
+  return (
+    PDF_FOOTER_MARGIN_BOTTOM_MM +
+    (hasLogo ? chrome.footerLogoHeightMm + PDF_FOOTER_LOGO_GAP_MM : 0)
+  );
+}
 
 function buildFooterTemplate(
   company: {
@@ -92,7 +120,15 @@ function buildFooterTemplate(
     email: string | null;
   },
   colors: QuotePdfChromeColors,
+  logoDataUri: string | null,
 ): string {
+  const logoRow = logoDataUri
+    ? `<img src="${logoDataUri}" style="height:${colors.footerLogoHeightMm}mm;width:auto;object-fit:contain;display:block;" />`
+    : '';
+  const heightStyle =
+    colors.footerHeightMm !== null
+      ? `height:${colors.footerHeightMm}mm;overflow:hidden;`
+      : '';
   const cells: string[] = [];
   if (company.address) {
     cells.push(
@@ -111,10 +147,15 @@ function buildFooterTemplate(
   }
   const infoRow =
     cells.length > 0
-      ? `<div style="width:100%;display:flex;align-items:center;justify-content:center;gap:24px;">${cells.join('')}</div>`
+      ? `<div style="flex-shrink:0;width:100%;display:flex;align-items:center;justify-content:center;gap:24px;">${cells.join('')}</div>`
       : '';
-  const noticeRow = `<div style="color:#2196f3;">Bu teklif, Pilens CRM platformu üzerinden hazırlanmıştır. <a href="https://www.pilens.com.tr" style="color:inherit;text-decoration:none;">www.pilens.com.tr</a></div>`;
-  return `<div style="width:100%;box-sizing:border-box;background:${escapeHtml(colors.footerBgColor)};padding:8px 10mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:${escapeHtml(colors.footerTextColor)};font-family:Arial,Helvetica,sans-serif;line-height:1.3;">${infoRow}${noticeRow}</div>`;
+  // Pilens atif satiri her zaman footer'in (= sayfanin) en altinda, sabit bir
+  // bosluk birakilarak durur; sirket bilgisi satiri (adres/telefon/e-posta) onun
+  // hemen ustunde sabittir - footer yuksekligi artinca ikisi de yukari kaymaz.
+  // Logo ustte kalan esnek alanda dikey ortalanir, sigmazsa sadece o kirpilir.
+  const contentBlock = `<div style="flex:1 1 auto;min-height:0;overflow:hidden;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">${logoRow}</div>`;
+  const noticeRow = `<div style="flex-shrink:0;color:#2196f3;">Bu teklif, Pilens CRM platformu üzerinden hazırlanmıştır. <a href="https://www.pilens.com.tr" style="color:inherit;text-decoration:none;">www.pilens.com.tr</a></div>`;
+  return `<div style="width:100%;box-sizing:border-box;${heightStyle}background:${escapeHtml(colors.footerBgColor)};padding:8px 10mm ${PDF_FOOTER_NOTICE_BOTTOM_MM}mm;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:${escapeHtml(colors.footerTextColor)};font-family:Arial,Helvetica,sans-serif;line-height:1.3;">${contentBlock}${infoRow}${noticeRow}</div>`;
 }
 
 /** AppShell print header'inin (app-shell.tsx) her sayfada tekrar eden esdegeri -
@@ -238,15 +279,17 @@ export class QuotePdfService {
       // Footer/header sadece sablonsuz/varsayilan rotada basilir (bkz.
       // buildFooterTemplate/buildHeaderTemplate doc comment'leri) - markali
       // sablonun kendi tasarimi var.
+      const logoDataUri =
+        !isBrandedPath && options?.header?.logoUrl
+          ? await fetchAsDataUri(context.request, options.header.logoUrl)
+          : null;
+      const footerLogoDataUri = colors.footerShowLogo ? logoDataUri : null;
       const footerTemplate =
         !isBrandedPath && options?.company
-          ? buildFooterTemplate(options.company, colors)
+          ? buildFooterTemplate(options.company, colors, footerLogoDataUri)
           : '<div></div>';
       let headerTemplate = '<div></div>';
       if (!isBrandedPath && options?.header) {
-        const logoDataUri = options.header.logoUrl
-          ? await fetchAsDataUri(context.request, options.header.logoUrl)
-          : null;
         headerTemplate = buildHeaderTemplate(
           { ...options.header, logoDataUri },
           colors,
@@ -266,7 +309,7 @@ export class QuotePdfService {
           bottom:
             footerTemplate === '<div></div>'
               ? '12mm'
-              : PDF_FOOTER_MARGIN_BOTTOM,
+              : `${resolveFooterMarginMm(colors, Boolean(footerLogoDataUri))}mm`,
           left: '10mm',
           right: '10mm',
         },

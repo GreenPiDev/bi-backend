@@ -65,6 +65,9 @@ export class ExportsService {
         textColor: theme.textColor,
         footerBgColor: theme.footerBgColor,
         footerTextColor: theme.footerTextColor,
+        footerHeightMm: theme.footerHeightMm,
+        footerShowLogo: theme.footerShowLogo,
+        footerLogoHeightMm: theme.footerLogoHeightMm,
       },
       header: {
         logoUrl: tenantProfile.logoUrl,
@@ -72,10 +75,12 @@ export class ExportsService {
         quoteDate: quotePdfDateFormatter.format(new Date(quote.quoteDate)),
         quoteNumber: quote.quoteNumber,
       },
+      // Standart sablon ayarindan kapatilan alanlar footer'a hic basilmaz
+      // (bkz. docs/VARSAYIMLAR.md V89).
       company: {
-        address: tenantProfile.address,
-        phone: tenantProfile.phone,
-        email: tenantProfile.email,
+        address: theme.footerShowAddress ? tenantProfile.address : null,
+        phone: theme.footerShowPhone ? tenantProfile.phone : null,
+        email: theme.footerShowEmail ? tenantProfile.email : null,
       },
     };
   }

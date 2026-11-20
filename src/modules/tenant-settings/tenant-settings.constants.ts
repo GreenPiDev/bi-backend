@@ -53,6 +53,10 @@ export const STANDARD_QUOTE_PDF_THEME_KEY = 'crm.standardQuotePdfTheme';
 const HEX_COLOR = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'Renk #RRGGBB formatinda olmalidir.');
+export const FOOTER_HEIGHT_MIN_MM = 10;
+export const FOOTER_HEIGHT_MAX_MM = 60;
+export const FOOTER_LOGO_HEIGHT_MIN_MM = 4;
+export const FOOTER_LOGO_HEIGHT_MAX_MM = 30;
 export const StandardQuotePdfThemeSchema = z.object({
   titleColor: HEX_COLOR,
   headingColor: HEX_COLOR,
@@ -65,6 +69,28 @@ export const StandardQuotePdfThemeSchema = z.object({
   groupRowBgColor: HEX_COLOR,
   footerBgColor: HEX_COLOR,
   footerTextColor: HEX_COLOR,
+  /** Alt bilgide (footer) sirket adresi/telefonu/e-postasi gosterilsin mi -
+   * varsayilan true (eski davranis). */
+  footerShowAddress: z.boolean(),
+  footerShowPhone: z.boolean(),
+  footerShowEmail: z.boolean(),
+  /** Alt bilgi arkaplaninin sabit yuksekligi (mm) - null = otomatik (icerik
+   * kadar, eski davranis). */
+  footerHeightMm: z
+    .number()
+    .int()
+    .min(FOOTER_HEIGHT_MIN_MM)
+    .max(FOOTER_HEIGHT_MAX_MM)
+    .nullable(),
+  /** Sirket logosu alt bilginin ortasinda gosterilsin mi - varsayilan false
+   * (eski PDF'ler degismesin diye). */
+  footerShowLogo: z.boolean(),
+  /** Alt bilgideki logonun yuksekligi (mm). */
+  footerLogoHeightMm: z
+    .number()
+    .int()
+    .min(FOOTER_LOGO_HEIGHT_MIN_MM)
+    .max(FOOTER_LOGO_HEIGHT_MAX_MM),
 });
 export type StandardQuotePdfTheme = z.infer<typeof StandardQuotePdfThemeSchema>;
 export const DEFAULT_STANDARD_QUOTE_PDF_THEME: StandardQuotePdfTheme = {
@@ -79,6 +105,12 @@ export const DEFAULT_STANDARD_QUOTE_PDF_THEME: StandardQuotePdfTheme = {
   groupRowBgColor: '#e3f2fd',
   footerBgColor: '#e8f5e9',
   footerTextColor: '#16202e',
+  footerShowAddress: true,
+  footerShowPhone: true,
+  footerShowEmail: true,
+  footerHeightMm: null,
+  footerShowLogo: false,
+  footerLogoHeightMm: 7,
 };
 
 /** DB'deki ham degeri (eski surumde kaydedilmis, sonradan yeni alan eklenmis
@@ -90,9 +122,14 @@ export function resolveStandardQuotePdfTheme(
   const result: StandardQuotePdfTheme = { ...DEFAULT_STANDARD_QUOTE_PDF_THEME };
   if (!raw || typeof raw !== 'object') return result;
   const record = raw as Record<string, unknown>;
-  for (const key of Object.keys(result) as (keyof StandardQuotePdfTheme)[]) {
-    const parsed = HEX_COLOR.safeParse(record[key]);
-    if (parsed.success) result[key] = parsed.data;
+  const writable = result as Record<string, unknown>;
+  // Her alan kendi semasiyla tek tek dogrulanir - gecersiz olan varsayilanda kalir.
+  for (const [key, fieldSchema] of Object.entries(
+    StandardQuotePdfThemeSchema.shape,
+  )) {
+    if (!(key in record)) continue;
+    const parsed = fieldSchema.safeParse(record[key]);
+    if (parsed.success) writable[key] = parsed.data;
   }
   return result;
 }

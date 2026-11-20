@@ -198,6 +198,24 @@ describe('QuoteTemplatesService', () => {
       DEFAULT_STANDARD_QUOTE_PDF_THEME.headingColor,
     );
     expect(theme.textColor).toBe(DEFAULT_STANDARD_QUOTE_PDF_THEME.textColor);
+    expect(theme.footerShowAddress).toBe(true);
+    expect(
+      resolveStandardQuotePdfTheme({
+        footerShowPhone: false,
+        footerShowEmail: 'x',
+      }),
+    ).toMatchObject({ footerShowPhone: false, footerShowEmail: true });
+    expect(
+      resolveStandardQuotePdfTheme({ footerHeightMm: 25 }).footerHeightMm,
+    ).toBe(25);
+    expect(
+      resolveStandardQuotePdfTheme({ footerLogoHeightMm: 99 })
+        .footerLogoHeightMm,
+    ).toBe(7);
+    // Aralik disi -> otomatik (null)
+    expect(
+      resolveStandardQuotePdfTheme({ footerHeightMm: 500 }).footerHeightMm,
+    ).toBeNull();
     expect(resolveStandardQuotePdfTheme(null)).toEqual(
       DEFAULT_STANDARD_QUOTE_PDF_THEME,
     );
