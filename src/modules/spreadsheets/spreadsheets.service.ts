@@ -14,6 +14,7 @@ import type {
   SpreadsheetQueryDto,
   UpdateSpreadsheetDto,
 } from './dto/spreadsheet.dto';
+import { parseColWidths } from './spreadsheet-col-widths';
 import { parseSpreadsheetFile } from './spreadsheet-file-parser';
 import type {
   CompactCell,
@@ -128,6 +129,7 @@ export class SpreadsheetsService {
         ordinal: s.ordinal,
         rowCount: s.rowCount,
         colCount: s.colCount,
+        colWidths: parseColWidths(s.colWidths),
       })),
     };
   }
@@ -203,6 +205,9 @@ export class SpreadsheetsService {
               ordinal,
               rowCount: sheet.rowCount,
               colCount: sheet.colCount,
+              ...(Object.keys(sheet.colWidths).length > 0
+                ? { colWidths: sheet.colWidths }
+                : {}),
             },
           });
           for (let i = 0; i < sheet.cells.length; i += CELL_INSERT_CHUNK_SIZE) {

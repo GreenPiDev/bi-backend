@@ -9,8 +9,10 @@ import {
   isDateNumFmt,
 } from '../datasources/file-parser.service';
 import {
+  MAX_COL_WIDTH,
   MAX_COLS_PER_SHEET,
   MAX_ROWS_PER_SHEET,
+  MIN_COL_WIDTH,
   MAX_TOTAL_CELLS,
 } from './spreadsheets.constants';
 
@@ -26,6 +28,8 @@ export interface ParsedSheet {
   name: string;
   rowCount: number;
   colCount: number;
+  /** Excel'de elle ayarlanmis sutun genislikleri (px). */
+  colWidths: Record<string, number>;
   cells: ParsedCell[];
 }
 
@@ -115,6 +119,26 @@ function emptyFileError(): AppException {
   );
 }
 
+/** Excel sutun genisligi karakter birimindedir (varsayilan font'ta '0' genisligi);
+ * yaklasik piksel karsiligi: genislik * 7 + 5. */
+function readColWidths(
+  worksheet: ExcelJS.Worksheet,
+  colCount: number,
+): Record<string, number> {
+  const widths: Record<string, number> = {};
+  for (let col = 1; col <= colCount; col++) {
+    const chars = worksheet.getColumn(col).width;
+    if (typeof chars !== 'number' || !Number.isFinite(chars) || chars <= 0)
+      continue;
+    const px = Math.round(chars * 7 + 5);
+    widths[String(col - 1)] = Math.min(
+      MAX_COL_WIDTH,
+      Math.max(MIN_COL_WIDTH, px),
+    );
+  }
+  return widths;
+}
+
 function readWorksheet(worksheet: ExcelJS.Worksheet): ParsedSheet {
   const cells: ParsedCell[] = [];
   let rowCount = 0;
@@ -140,7 +164,13 @@ function readWorksheet(worksheet: ExcelJS.Worksheet): ParsedSheet {
       colCount = Math.max(colCount, colNumber);
     });
   });
-  return { name: worksheet.name, rowCount, colCount, cells };
+  return {
+    name: worksheet.name,
+    rowCount,
+    colCount,
+    colWidths: readColWidths(worksheet, colCount),
+    cells,
+  };
 }
 
 /**
@@ -188,7 +218,7 @@ async function parseCsv(filePath: string): Promise<ParsedSheet[]> {
       colCount = Math.max(colCount, colIndex + 1);
     });
   });
-  return [{ name: 'Sayfa1', rowCount, colCount, cells }];
+  return [{ name: 'Sayfa1', rowCount, colCount, colWidths: {}, cells }];
 }
 
 export async function parseSpreadsheetFile(

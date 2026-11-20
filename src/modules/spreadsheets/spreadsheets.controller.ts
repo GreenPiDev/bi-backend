@@ -29,18 +29,22 @@ import {
   SaveSpreadsheetChangesSchema,
   SpreadsheetNameSchema,
   SpreadsheetQuerySchema,
+  UpdateColumnWidthsSchema,
   UpdateSpreadsheetSchema,
   type SaveSpreadsheetChangesDto,
+  type UpdateColumnWidthsDto,
   type SpreadsheetQueryDto,
   type UpdateSpreadsheetDto,
 } from './dto/spreadsheet.dto';
 import { SpreadsheetChangesService } from './spreadsheet-changes.service';
+import { SpreadsheetLayoutService } from './spreadsheet-layout.service';
 import { MAX_SPREADSHEET_UPLOAD_BYTES } from './spreadsheets.constants';
 import type {
   CompactCell,
   SaveSpreadsheetChangesResult,
   SpreadsheetDetailView,
   SpreadsheetSummaryView,
+  UpdateColumnWidthsResult,
 } from './spreadsheet.types';
 import { SpreadsheetsService } from './spreadsheets.service';
 
@@ -62,6 +66,7 @@ export class SpreadsheetsController {
   constructor(
     private readonly spreadsheets: SpreadsheetsService,
     private readonly changes: SpreadsheetChangesService,
+    private readonly layout: SpreadsheetLayoutService,
   ) {}
 
   @Get()
@@ -148,6 +153,17 @@ export class SpreadsheetsController {
     dto: SaveSpreadsheetChangesDto,
   ): Promise<SaveSpreadsheetChangesResult> {
     return this.changes.save(id, sheetId, dto);
+  }
+
+  @Patch(':id/sheets/:sheetId/column-widths')
+  @RequiresPermission('spreadsheets', 'UPDATE')
+  updateColumnWidths(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sheetId', ParseUUIDPipe) sheetId: string,
+    @Body(new ZodValidationPipe(UpdateColumnWidthsSchema))
+    dto: UpdateColumnWidthsDto,
+  ): Promise<UpdateColumnWidthsResult> {
+    return this.layout.updateColumnWidths(id, sheetId, dto);
   }
 
   @Delete(':id')

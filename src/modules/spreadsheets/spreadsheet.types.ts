@@ -4,6 +4,8 @@ export interface SpreadsheetSheetView {
   ordinal: number;
   rowCount: number;
   colCount: number;
+  /** { "<col>": px } - tanimsiz sutun varsayilan genislikte. */
+  colWidths: Record<string, number>;
 }
 
 export interface SpreadsheetSummaryView {
@@ -57,4 +59,8 @@ export interface SpreadsheetConflict {
 export interface SaveSpreadsheetChangesResult {
   savedCount: number;
   cells: CompactCell[];
+}
+
+export interface UpdateColumnWidthsResult {
+  colWidths: Record<string, number>;
 }

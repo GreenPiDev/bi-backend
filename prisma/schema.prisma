@@ -2843,6 +2843,9 @@ model SpreadsheetSheet {
   ordinal       Int
   rowCount      Int
   colCount      Int
+  /// Sutun genislikleri (px), { "<col>": genislik } - yoksa varsayilan genislik.
+  /// Tum kullanicilar icin ortak (kisisel degil).
+  colWidths     Json?
 
   spreadsheet Spreadsheet       @relation(fields: [spreadsheetId], references: [id], onDelete: Cascade)
   cells       SpreadsheetCell[]

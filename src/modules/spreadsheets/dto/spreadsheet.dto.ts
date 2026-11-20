@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { ListQuerySchema } from '../../../core/dto/list-query.dto';
 import {
   MAX_CHANGES_PER_SAVE,
+  MAX_COL_WIDTH,
   MAX_COLS_PER_SHEET,
+  MIN_COL_WIDTH,
   MAX_ROWS_PER_SHEET,
 } from '../spreadsheets.constants';
 
@@ -61,3 +63,26 @@ export const SaveSpreadsheetChangesSchema = z.object({
 export type SaveSpreadsheetChangesDto = z.infer<
   typeof SaveSpreadsheetChangesSchema
 >;
+
+/** width null -> sutun varsayilan genislige doner. */
+export const UpdateColumnWidthsSchema = z.object({
+  widths: z
+    .array(
+      z.object({
+        col: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_COLS_PER_SHEET - 1),
+        width: z
+          .number()
+          .int()
+          .min(MIN_COL_WIDTH)
+          .max(MAX_COL_WIDTH)
+          .nullable(),
+      }),
+    )
+    .min(1)
+    .max(MAX_COLS_PER_SHEET),
+});
+export type UpdateColumnWidthsDto = z.infer<typeof UpdateColumnWidthsSchema>;

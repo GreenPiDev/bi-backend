@@ -37,6 +37,7 @@ describe('spreadsheet-file-parser', () => {
     };
     stok.getCell('A2').font = { color: { argb: 'FFff0000' } };
     stok.getCell('C3').value = new Date(Date.UTC(2026, 2, 1));
+    stok.getColumn(1).width = 30;
     const other = workbook.addWorksheet('Depo');
     other.getCell('A1').value = 'İstanbul';
     const filePath = path.join(tmpDir, 'stok.xlsx');
@@ -47,6 +48,8 @@ describe('spreadsheet-file-parser', () => {
     expect(sheets.map((s) => s.name)).toEqual(['Stok', 'Depo']);
     expect(sheets[0].rowCount).toBe(3);
     expect(sheets[0].colCount).toBe(3);
+    // 30 karakter * 7 + 5 = 215 px; genisligi ayarlanmamis sutunlar haritada yok.
+    expect(sheets[0].colWidths).toEqual({ '0': 215 });
     const byAddress = new Map(
       sheets[0].cells.map((c) => [cellAddress(c.row, c.col), c]),
     );
