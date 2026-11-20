@@ -62,6 +62,7 @@ const TENANT_SCOPED_MODELS = new Set<Prisma.ModelName>([
   'ChatConversation',
   'SupportTicket',
   'Share',
+  'Spreadsheet',
 ]);
 
 /**
@@ -82,6 +83,7 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   'Drawing',
   'Survey',
   'Note',
+  'Spreadsheet',
 ]);
 
 const READ_OPERATIONS = new Set([

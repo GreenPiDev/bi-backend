@@ -339,6 +339,7 @@ model Tenant {
   kanbanBoards                KanbanBoard[]                @relation("KanbanBoardOwner")
   partnerKanbanBoards         KanbanBoard[]                @relation("KanbanBoardPartner")
   shares                      Share[]
+  spreadsheets                Spreadsheet[]
 
   @@map("tenants")
 }
@@ -2808,4 +2809,63 @@ model Share {
 
   @@index([tenantId, resourceType, resourceId])
   @@map("shares")
+}
+
+/**
+ * Ad-hoc (2026-11-20) - "E-Tablolar": yuklenen Excel/CSV dosyalarinin tenant icinde ortak
+ * duzenlenebilen kopyasi. Analitik veri degil, dokuman icerigi - hucre bazli seyrek
+ * saklama (SpreadsheetCell) eszamanli farkli hucre duzenlemelerinin dogal birlesmesi ve
+ * `version` ile catisma yakalama icin secildi (bkz. docs/VARSAYIMLAR.md V88).
+ */
+model Spreadsheet {
+  id               String    @id @default(uuid())
+  tenantId         String
+  name             String
+  originalFileName String
+  createdById      String
+  updatedById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id])
+  sheets SpreadsheetSheet[]
+
+  @@index([tenantId, deletedAt])
+  @@map("spreadsheets")
+}
+
+/** tenantId tasimaz - erisim her zaman tenant-scoped Spreadsheet uzerinden dogrulanir. */
+model SpreadsheetSheet {
+  id            String @id @default(uuid())
+  spreadsheetId String
+  name          String
+  ordinal       Int
+  rowCount      Int
+  colCount      Int
+
+  spreadsheet Spreadsheet       @relation(fields: [spreadsheetId], references: [id], onDelete: Cascade)
+  cells       SpreadsheetCell[]
+
+  @@index([spreadsheetId])
+  @@map("spreadsheet_sheets")
+}
+
+/** row/col 0-based. Bos hucre (deger + renk yok) satiri silinir, tablo seyrek kalir. */
+model SpreadsheetCell {
+  id          String   @id @default(uuid())
+  sheetId     String
+  row         Int
+  col         Int
+  value       String?
+  bgColor     String?
+  fontColor   String?
+  version     Int      @default(1)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  sheet SpreadsheetSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+
+  @@unique([sheetId, row, col])
+  @@map("spreadsheet_cells")
 }

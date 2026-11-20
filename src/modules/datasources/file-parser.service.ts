@@ -23,7 +23,7 @@ function emptyFileError(): AppException {
 /** exceljs'in kendi utils.isDateFmt'iyle ayni desen (bkz. node_modules/exceljs/lib/
  * utils/utils.js) - tirnak/koseli parantez icini atip kalan karakterlerde tarih
  * bicimi harflerini arar. */
-function isDateNumFmt(fmt: string | undefined): boolean {
+export function isDateNumFmt(fmt: string | undefined): boolean {
   if (!fmt) {
     return false;
   }
@@ -33,7 +33,7 @@ function isDateNumFmt(fmt: string | undefined): boolean {
 
 /** exceljs'in kendi utils.excelToDate'iyle ayni formul (1900 tarih sistemi) -
  * exceljs bu fonksiyonu disariya acmiyor, kucuk oldugu icin burada tekrarlaniyor. */
-function excelSerialToDate(serial: number): Date {
+export function excelSerialToDate(serial: number): Date {
   return new Date(Math.round((serial - 25569) * 24 * 3600 * 1000));
 }
 

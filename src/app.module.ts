@@ -69,6 +69,7 @@ import { SalesOrdersModule } from './modules/sales-orders/sales-orders.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SectorOptionsModule } from './modules/sector-options/sector-options.module';
+import { SpreadsheetsModule } from './modules/spreadsheets/spreadsheets.module';
 import { SurveysModule } from './modules/surveys/surveys.module';
 import { StockItemsModule } from './modules/stock-items/stock-items.module';
 import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
@@ -145,6 +146,7 @@ import { WidgetsModule } from './modules/widgets/widgets.module';
     SalesOrdersModule,
     StockItemsModule,
     WarehousesModule,
+    SpreadsheetsModule,
     MessagesModule,
     NotificationsModule,
     NotesModule,

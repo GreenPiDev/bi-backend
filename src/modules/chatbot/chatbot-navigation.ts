@@ -223,8 +223,10 @@ export async function resolveNavigation(
   }
 
   if (intent === 'dataset_view') {
+    // /datasets sayfasi artik E-Tablolar sekmesini de iceriyor - veri kumesi detayi
+    // icin sadece 'datasets' izni yeterli sayilir.
     const accessible = await isEntryAccessible(
-      findChatbotPage('datasets')!,
+      { ...findChatbotPage('datasets')!, pageKeys: ['datasets'] },
       deps,
     );
     if (!accessible) {

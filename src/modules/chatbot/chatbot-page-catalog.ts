@@ -226,7 +226,11 @@ export const CHATBOT_PAGE_CATALOG: readonly ChatbotPageEntry[] = [
     key: 'datasets',
     label: 'Veri Kumeleri',
     path: '/datasets',
-    pageKeys: ['datasets'],
+    pageKeys: ['datasets', 'spreadsheets'],
+    tabs: [
+      { key: 'datasets', label: 'Veri Kumeleri', pageKeys: ['datasets'] },
+      { key: 'spreadsheets', label: 'E-Tablolar', pageKeys: ['spreadsheets'] },
+    ],
   },
   {
     key: 'dashboards',

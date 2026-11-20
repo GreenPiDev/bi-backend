@@ -84,10 +84,12 @@ export class AuditService {
   /** `/settings?tab=audit` icin 25'li sayfalama - LIST_LIMIT'e tabi diger dahili
    * cagiranlardan (stok/urun gecmisi) ayri tutuldu, onlar tum listeyi tek seferde ister. */
   async listPaged(query: AuditLogQueryDto): Promise<PagedResult<AuditLogView>> {
-    const { page, pageSize, userId, entity, action, from, to } = query;
+    const { page, pageSize, userId, entity, entityId, action, from, to } =
+      query;
     const where = {
       ...(userId ? { userId } : {}),
       ...(entity ? { entity } : {}),
+      ...(entityId ? { entityId } : {}),
       ...(action ? { action } : {}),
       ...(from || to
         ? {

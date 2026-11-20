@@ -38,6 +38,11 @@ export const PAGE_REGISTRY: readonly PageDefinition[] = [
     supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
   },
   {
+    key: 'spreadsheets',
+    label: 'E-Tablolar',
+    supportedActions: ['CREATE', 'UPDATE', 'DELETE'],
+  },
+  {
     key: 'accounts',
     label: 'Firmalar',
     supportedActions: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT', 'EXPORT'],
